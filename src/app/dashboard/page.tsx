@@ -48,7 +48,7 @@ export default function DashboardPage() {
         <p className="mt-2 text-sm text-gray-500">Role: {profile.role}</p>
 
         <div className="mt-6 flex flex-col gap-3">
-          {profile.role === 'ADMIN' && (
+          {profile.role === 'SUPER_ADMIN' && (
             <a
               href="/admin"
               className="rounded-lg bg-blue-600 px-4 py-2 text-center text-sm font-medium text-white transition hover:bg-blue-700"

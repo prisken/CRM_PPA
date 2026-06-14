@@ -14,10 +14,14 @@ datasource db {
 // --- ENUMS for dropdown/status fields ---
 
 enum UserRole {
-  ADMIN
+  SUPER_ADMIN
+  STANDARD_USER
+}
+
+enum AssignmentRole {
   RELATIONSHIP
   DOCTOR
-  SERVICE
+  ACCOUNT_SERVICE
 }
 
 enum ClientStatus {
@@ -54,101 +58,99 @@ enum StrategyStatus {
 // --- CORE MODELS ---
 
 model User {
-  id                            String        @id @default(cuid())
-  name                          String?
-  email                         String        @unique
-  role                          UserRole
-  createdAt                     DateTime      @default(now())
-  updatedAt                     DateTime      @updatedAt
+  id                 String             @id @default(cuid())
+  name               String?
+  email              String             @unique
+  role               UserRole
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
 
   // Relations
-  authoredStrategies            Strategy[]    @relation("StrategyAuthor")
-  assignedAdminClients          Client[]      @relation("AdminAssignment")
-  assignedRelationshipClients   Client[]      @relation("RelationshipAssignment")
-  assignedDoctorClients         Client[]      @relation("DoctorAssignment")
-  assignedServiceClients        Client[]      @relation("ServiceAssignment")
-  loggedInteractions            Interaction[]
+  authoredStrategies Strategy[]         @relation("StrategyAuthor")
+  clientAssignments  ClientAssignment[]
+  loggedInteractions Interaction[]
 }
 
 model Client {
-  id                      String        @id @default(cuid())
-  name                    String
-  company                 String?
-  contactInfo             String?
-  status                  ClientStatus  @default(NEW_LEAD)
-  pendingNotifications    Boolean       @default(false)
-  createdAt               DateTime      @default(now())
-  lastModified            DateTime      @updatedAt
+  id                   String             @id @default(cuid())
+  name                 String
+  company              String?
+  contactInfo          String?
+  status               ClientStatus       @default(NEW_LEAD)
+  pendingNotifications Boolean            @default(false)
+  createdAt            DateTime           @default(now())
+  lastModified         DateTime           @updatedAt
 
-  // Relational fields for assigned users
-  assignedAdminId           String?
-  assignedRelationshipId    String?
-  assignedDoctorId          String?
-  assignedServiceId         String?
+  // Relations
+  clientAssignments    ClientAssignment[]
+  interactions         Interaction[]
+  deals                Deal[]
+}
 
-  // Relations to User model
-  assignedAdmin             User?         @relation("AdminAssignment", fields: [assignedAdminId], references: [id], onDelete: SetNull)
-  assignedRelationship      User?         @relation("RelationshipAssignment", fields: [assignedRelationshipId], references: [id], onDelete: SetNull)
-  assignedDoctor            User?         @relation("DoctorAssignment", fields: [assignedDoctorId], references: [id], onDelete: SetNull)
-  assignedService           User?         @relation("ServiceAssignment", fields: [assignedServiceId], references: [id], onDelete: SetNull)
+model ClientAssignment {
+  assignmentId String         @id @default(cuid()) @map("assignment_id")
+  clientId     String         @map("client_id")
+  userId       String         @map("user_id")
+  role         AssignmentRole
 
-  // Relations to other models
-  interactions              Interaction[]
-  deals                     Deal[]
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("client_assignments")
 }
 
 model Interaction {
-  id          String          @id @default(cuid())
-  type        InteractionType
-  content     String          @db.Text
-  date        DateTime        @default(now())
-  
+  id       String          @id @default(cuid())
+  type     InteractionType
+  content  String          @db.Text
+  date     DateTime        @default(now())
+
   // Relation to Client
-  clientId    String
-  client      Client          @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  clientId String
+  client   Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
 
   // Relation to User who logged it
-  userId      String
-  user        User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model Deal {
-  id          String      @id @default(cuid())
+  id          String     @id @default(cuid())
   name        String
-  dealValue   Decimal     @db.Decimal(12, 2)
-  grossProfit Decimal     @db.Decimal(12, 2)
-  status      DealStatus  @default(PROPOSED)
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
+  dealValue   Decimal    @db.Decimal(12, 2)
+  grossProfit Decimal    @db.Decimal(12, 2)
+  status      DealStatus @default(PROPOSED)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
 
   // Relation to Client
-  clientId    String
-  client      Client      @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  clientId String
+  client   Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
 }
 
 model Strategy {
-  id            String          @id @default(cuid())
-  name          String
-  description   String          @db.Text
-  status        StrategyStatus  @default(DRAFT)
-  createdAt     DateTime        @default(now())
-  updatedAt     DateTime        @updatedAt
+  id          String         @id @default(cuid())
+  name        String
+  description String         @db.Text
+  status      StrategyStatus @default(DRAFT)
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
 
   // Relation to User (Author)
-  authorId      String
-  author        User            @relation("StrategyAuthor", fields: [authorId], references: [id])
+  authorId String
+  author   User   @relation("StrategyAuthor", fields: [authorId], references: [id])
 
   // Relation to Documents
-  documents     Document[]
+  documents Document[]
 }
 
 model Document {
-  id          String    @id @default(cuid())
-  name        String
-  url         String    // URL from a storage provider like Supabase Storage
-  uploadedAt  DateTime  @default(now())
+  id         String   @id @default(cuid())
+  name       String
+  url        String // URL from a storage provider like Supabase Storage
+  uploadedAt DateTime @default(now())
 
   // Relation to Strategy
-  strategyId  String
-  strategy    Strategy  @relation(fields: [strategyId], references: [id], onDelete: Cascade)
+  strategyId String
+  strategy   Strategy @relation(fields: [strategyId], references: [id], onDelete: Cascade)
 }
