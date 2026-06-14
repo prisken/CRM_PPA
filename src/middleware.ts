@@ -35,6 +35,11 @@ export async function middleware(request: NextRequest) {
 
   const { pathname } = request.nextUrl;
 
+  if (pathname === '/') {
+    const destination = session ? '/dashboard' : '/login';
+    return NextResponse.redirect(new URL(destination, request.url));
+  }
+
   if (!session && pathname === '/dashboard') {
     return NextResponse.redirect(new URL('/login', request.url));
   }
@@ -47,5 +52,5 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/dashboard', '/login'],
+  matcher: ['/', '/dashboard', '/login'],
 };
