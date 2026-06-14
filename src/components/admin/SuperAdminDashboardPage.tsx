@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import AddClientModal from '@/components/admin/AddClientModal';
+import AuthRequiredMessage from '@/components/auth/AuthRequiredMessage';
 import ConversionFunnelChart from '@/components/admin/ConversionFunnelChart';
 import KpiBar from '@/components/admin/KpiBar';
 import Leaderboards from '@/components/admin/Leaderboards';
@@ -96,9 +97,12 @@ export default function SuperAdminDashboardPage() {
 
   if (profileError || !profile) {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-gray-100 px-4">
-        <p className="text-red-600">{profileError ?? 'Unable to load profile'}</p>
-      </main>
+      <AuthRequiredMessage
+        message={
+          profileError ??
+          'Please log in to view the admin dashboard.'
+        }
+      />
     );
   }
 

@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import CollapsibleActivityWidget from '@/components/dashboard/CollapsibleActivityWidget';
+import AuthRequiredMessage from '@/components/auth/AuthRequiredMessage';
 import MyClientsWidget from '@/components/dashboard/MyClientsWidget';
 import MyTasksWidget from '@/components/dashboard/MyTasksWidget';
 import PerformanceSnapshotWidget from '@/components/dashboard/PerformanceSnapshotWidget';
@@ -97,9 +98,7 @@ export default function StandardUserDashboardPage() {
 
   if (!profile) {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-gray-100 px-4">
-        <p className="text-red-600">Please log in to view your dashboard.</p>
-      </main>
+      <AuthRequiredMessage message="Please log in to view your dashboard." />
     );
   }
 
