@@ -1,0 +1,93 @@
+'use client';
+
+import { useEffect, useState } from 'react';
+
+type KpiData = {
+  totalRevenueYTD: number;
+  totalGrossProfitYTD: number;
+  pipelineVelocity: number;
+  activeDeals: number;
+};
+
+const KPI_CARDS = [
+  { key: 'totalRevenueYTD' as const, title: 'Total Revenue YTD', format: 'currency' },
+  { key: 'totalGrossProfitYTD' as const, title: 'Gross Profit YTD', format: 'currency' },
+  { key: 'pipelineVelocity' as const, title: 'Pipeline Velocity', format: 'days' },
+  { key: 'activeDeals' as const, title: 'Active Deals', format: 'number' },
+];
+
+function formatValue(value: number, format: string) {
+  if (format === 'currency') {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD',
+      maximumFractionDigits: 0,
+    }).format(value);
+  }
+  if (format === 'days') {
+    return `${value} days`;
+  }
+  return value.toLocaleString();
+}
+
+export default function KpiBar() {
+  const [data, setData] = useState<KpiData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    async function fetchKpis() {
+      try {
+        const res = await fetch('/api/admin/dashboard-kpis');
+        if (!res.ok) {
+          throw new Error('Failed to load KPIs');
+        }
+        const json = await res.json();
+        setData(json);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to load KPIs');
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    fetchKpis();
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        {KPI_CARDS.map((card) => (
+          <div
+            key={card.key}
+            className="h-28 animate-pulse rounded-xl border border-gray-200 bg-white"
+          />
+        ))}
+      </div>
+    );
+  }
+
+  if (error || !data) {
+    return (
+      <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+        {error ?? 'Unable to load KPI data'}
+      </div>
+    );
+  }
+
+  return (
+    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      {KPI_CARDS.map((card) => (
+        <div
+          key={card.key}
+          className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm"
+        >
+          <p className="text-sm font-medium text-gray-500">{card.title}</p>
+          <p className="mt-2 text-3xl font-bold text-gray-900">
+            {formatValue(data[card.key], card.format)}
+          </p>
+        </div>
+      ))}
+    </div>
+  );
+}
