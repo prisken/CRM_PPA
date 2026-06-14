@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import Logo from '@/components/Logo';
 import { supabase } from '@/lib/supabaseClient';
 
 export default function LoginPage() {
@@ -40,6 +41,8 @@ export default function LoginPage() {
   return (
     <main className="flex min-h-screen items-center justify-center bg-gray-50 px-4">
       <div className="w-full max-w-md rounded-2xl border border-gray-200 bg-white p-8 shadow-sm">
+        <Logo className="mx-auto mb-6 h-10 w-auto" />
+
         <div className="mb-8 text-center">
           <h1 className="text-2xl font-semibold text-gray-900">Welcome back</h1>
           <p className="mt-2 text-sm text-gray-500">Sign in to your CRM account</p>

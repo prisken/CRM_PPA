@@ -6,6 +6,7 @@ import ClientDetailsWidget from '@/components/clients/ClientDetailsWidget';
 import AssignedTeamWidget from '@/components/clients/AssignedTeamWidget';
 import DealInfoWidget from '@/components/clients/DealInfoWidget';
 import WorkspacePanel from '@/components/clients/WorkspacePanel';
+import Logo from '@/components/Logo';
 import { useUserProfile } from '@/hooks/useUserProfile';
 import { formatClientStage, getStatusBadgeStyles, CLIENT_STAGES } from '@/lib/clientStages';
 
@@ -205,12 +206,17 @@ export default function Client360Page({ clientId }: { clientId: string }) {
     <main className="min-h-screen bg-gray-100">
       <header className="border-b border-gray-200 bg-white">
         <div className="mx-auto max-w-7xl px-4 py-5 sm:px-6 lg:px-8">
-          <Link
-            href="/admin#master-pipeline"
-            className="text-sm text-blue-600 hover:underline"
-          >
-            ← Back to list
-          </Link>
+          <div className="flex items-center justify-between gap-4">
+            <Link href="/" aria-label="Go to homepage">
+              <Logo className="h-8 w-auto" />
+            </Link>
+            <Link
+              href="/admin#master-pipeline"
+              className="text-sm text-blue-600 hover:underline"
+            >
+              ← Back to list
+            </Link>
+          </div>
 
           <div className="mt-3 flex flex-wrap items-center gap-3">
             <h1 className="text-2xl font-bold text-gray-900">{client.name}</h1>
