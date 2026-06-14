@@ -1,27 +1,73 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import AddClientModal from '@/components/admin/AddClientModal';
 import ConversionFunnelChart from '@/components/admin/ConversionFunnelChart';
 import KpiBar from '@/components/admin/KpiBar';
 import Leaderboards from '@/components/admin/Leaderboards';
 import MasterPipelineView from '@/components/admin/MasterPipelineView';
 import RevenueTrackerChart from '@/components/admin/RevenueTrackerChart';
+import CollapsibleActivityWidget from '@/components/dashboard/CollapsibleActivityWidget';
 import { useUserProfile } from '@/hooks/useUserProfile';
+import type { SuperAdminDashboardData } from '@/lib/dashboardTypes';
 import { supabase } from '@/lib/supabaseClient';
 
-export default function SuperAdminDashboard() {
+export default function SuperAdminDashboardPage() {
   const router = useRouter();
-  const { profile, loading, error } = useUserProfile();
+  const { profile, loading: profileLoading, error: profileError } = useUserProfile();
+  const [dashboardData, setDashboardData] = useState<SuperAdminDashboardData | null>(
+    null
+  );
+  const [dashboardLoading, setDashboardLoading] = useState(true);
+  const [dashboardError, setDashboardError] = useState<string | null>(null);
   const [showAddClient, setShowAddClient] = useState(false);
   const [pipelineRefreshKey, setPipelineRefreshKey] = useState(0);
 
+  const loadDashboard = useCallback(async () => {
+    setDashboardLoading(true);
+    setDashboardError(null);
+
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch('/api/dashboard/superadmin', {
+        credentials: 'same-origin',
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      });
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(
+          typeof data.error === 'string'
+            ? data.error
+            : 'Failed to load admin activity feed'
+        );
+      }
+
+      const data = await res.json();
+      setDashboardData(data);
+    } catch (err) {
+      setDashboardError(
+        err instanceof Error ? err.message : 'Failed to load admin activity feed'
+      );
+    } finally {
+      setDashboardLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
-    if (!loading && profile && profile.role !== 'SUPER_ADMIN') {
+    if (!profileLoading && profile && profile.role !== 'SUPER_ADMIN') {
       router.replace('/dashboard');
     }
-  }, [loading, profile, router]);
+  }, [profileLoading, profile, router]);
+
+  useEffect(() => {
+    if (profileLoading || !profile || profile.role !== 'SUPER_ADMIN') {
+      return;
+    }
+
+    loadDashboard();
+  }, [profile, profileLoading, loadDashboard]);
 
   useEffect(() => {
     if (typeof window === 'undefined' || window.location.hash !== '#master-pipeline') {
@@ -30,14 +76,15 @@ export default function SuperAdminDashboard() {
 
     const element = document.getElementById('master-pipeline');
     element?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  }, [loading, profile]);
+  }, [profileLoading, profile]);
 
   async function handleSignOut() {
     await supabase.auth.signOut();
+    localStorage.removeItem('token');
     router.push('/login');
   }
 
-  if (loading) {
+  if (profileLoading || (dashboardLoading && profile?.role === 'SUPER_ADMIN')) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-gray-100">
         <p className="text-gray-600">Loading admin dashboard...</p>
@@ -45,10 +92,10 @@ export default function SuperAdminDashboard() {
     );
   }
 
-  if (error || !profile) {
+  if (profileError || !profile) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-gray-100 px-4">
-        <p className="text-red-600">{error ?? 'Unable to load profile'}</p>
+        <p className="text-red-600">{profileError ?? 'Unable to load profile'}</p>
       </main>
     );
   }
@@ -101,6 +148,18 @@ export default function SuperAdminDashboard() {
         </div>
 
         <Leaderboards />
+
+        {dashboardError ? (
+          <section className="rounded-xl border border-red-200 bg-red-50 p-6 text-sm text-red-700">
+            {dashboardError}
+          </section>
+        ) : (
+          <CollapsibleActivityWidget
+            recentActivity={dashboardData?.recentActivity ?? []}
+            title="Recent Activity (All Clients)"
+          />
+        )}
+
         <MasterPipelineView
           refreshKey={pipelineRefreshKey}
           onAddClick={() => setShowAddClient(true)}

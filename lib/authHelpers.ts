@@ -59,6 +59,63 @@ export async function getAuthenticatedUser() {
   return { user: dbUser };
 }
 
+export async function getAuthenticatedUserFromRequest(request: Request) {
+  const authHeader = request.headers.get('authorization');
+  if (authHeader?.startsWith('Bearer ')) {
+    const token = authHeader.slice(7);
+
+    try {
+      const { verifyAuthToken } = await import('@/lib/jwt');
+      const payload = await verifyAuthToken(token);
+
+      const dbUser = await prisma.user.findUnique({
+        where: { id: payload.id },
+        select: { id: true, role: true, name: true, email: true },
+      });
+
+      if (dbUser) {
+        return { user: dbUser };
+      }
+    } catch {
+      return { error: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }) };
+    }
+  }
+
+  return getAuthenticatedUser();
+}
+
+export async function requireSuperAdminFromRequest(request?: Request) {
+  const auth = request
+    ? await getAuthenticatedUserFromRequest(request)
+    : await getAuthenticatedUser();
+
+  if (auth.error) {
+    return auth;
+  }
+
+  if (auth.user.role !== UserRole.SUPER_ADMIN) {
+    return { error: NextResponse.json({ error: 'Forbidden' }, { status: 403 }) };
+  }
+
+  return auth;
+}
+
+export async function requireStandardUser(request?: Request) {
+  const auth = request
+    ? await getAuthenticatedUserFromRequest(request)
+    : await getAuthenticatedUser();
+
+  if (auth.error) {
+    return auth;
+  }
+
+  if (auth.user.role !== UserRole.STANDARD_USER) {
+    return { error: NextResponse.json({ error: 'Forbidden' }, { status: 403 }) };
+  }
+
+  return auth;
+}
+
 export async function getClientOr404(clientId: string) {
   const client = await prisma.client.findUnique({
     where: { id: clientId },

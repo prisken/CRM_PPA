@@ -88,6 +88,13 @@ export default function LoginPage() {
         {error && (
           <p className="mt-4 text-center text-sm text-red-600">{error}</p>
         )}
+
+        <p className="mt-6 text-center text-sm text-gray-500">
+          Don&apos;t have an account?{' '}
+          <a href="/signup" className="font-medium text-blue-600 hover:underline">
+            Sign up
+          </a>
+        </p>
       </div>
     </main>
   );

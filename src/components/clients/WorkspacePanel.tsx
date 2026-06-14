@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import ActivityLog, { type ActivityLogEntry } from '@/components/clients/ActivityLog';
 import StrategyAndTasks, {
   type StrategyCurrentUser,
@@ -39,8 +39,22 @@ export default function WorkspacePanel({
 }: WorkspacePanelProps) {
   const [activeTab, setActiveTab] = useState<TabId>('strategy-tasks');
 
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    if (window.location.hash === '#activity-notes') {
+      setActiveTab('activity-notes');
+      document.getElementById('workspace-panel')?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'start',
+      });
+    }
+  }, []);
+
   return (
-    <section className="rounded-xl border border-gray-200 bg-white shadow-sm">
+    <section id="workspace-panel" className="rounded-xl border border-gray-200 bg-white shadow-sm">
       <div className="border-b border-gray-200 px-6 pt-5">
         <h2 className="text-lg font-semibold text-gray-900">Workspace</h2>
         <nav className="mt-4 flex gap-6" aria-label="Workspace tabs">

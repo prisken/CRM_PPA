@@ -76,6 +76,7 @@ model User {
   id                 String             @id @default(cuid())
   name               String?
   email              String             @unique
+  passwordHash       String?            @map("password_hash")
   role               UserRole
   createdAt          DateTime           @default(now())
   updatedAt          DateTime           @updatedAt
@@ -86,6 +87,7 @@ model User {
   loggedInteractions    Interaction[]
   assignedTasks         Task[]             @relation("TaskAssignee")
   loggedActivityEvents  ClientActivityLog[] @relation("ActivityLogAuthor")
+  activityReadStatuses  ActivityReadStatus[]
   receivedNotifications Notification[]     @relation("ReceivedNotifications")
   sentNotifications     Notification[]     @relation("SentNotifications")
 }
@@ -248,4 +250,15 @@ model ClientActivityLog {
   user   User?   @relation("ActivityLogAuthor", fields: [userId], references: [id], onDelete: SetNull)
 
   @@map("client_activity_logs")
+}
+
+model ActivityReadStatus {
+  activityLogId String   @map("activity_log_id")
+  userId        String   @map("user_id")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([activityLogId, userId])
+  @@map("activity_read_status")
 }
