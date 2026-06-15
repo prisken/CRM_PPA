@@ -103,6 +103,31 @@ export async function requireSuperAdminFromRequest(request?: Request) {
   return auth;
 }
 
+export async function authorizeClientDetailsEdit(request: Request, clientId: string) {
+  const auth = await getAuthenticatedUserFromRequest(request);
+  if (auth.error) {
+    return auth;
+  }
+
+  if (auth.user.role === UserRole.SUPER_ADMIN) {
+    return auth;
+  }
+
+  if (auth.user.role === UserRole.STANDARD_USER) {
+    const assignment = await hasClientAssignment(
+      auth.user.id,
+      clientId,
+      [AssignmentRole.RELATIONSHIP]
+    );
+
+    if (assignment) {
+      return { ...auth, assignment };
+    }
+  }
+
+  return { error: NextResponse.json({ error: 'Forbidden' }, { status: 403 }) };
+}
+
 export async function requireStandardUser(request?: Request) {
   const auth = request
     ? await getAuthenticatedUserFromRequest(request)

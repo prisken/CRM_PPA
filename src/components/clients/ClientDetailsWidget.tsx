@@ -19,7 +19,8 @@ type ClientDetailsWidgetProps = {
   employeeCount: number | null;
   expectations: string | null;
   importantDates: ImportantDate[];
-  canEdit?: boolean;
+  isSuperAdmin?: boolean;
+  isRelationshipSpecialist?: boolean;
   onSaved?: () => void;
 };
 
@@ -71,18 +72,20 @@ export default function ClientDetailsWidget({
   employeeCount,
   expectations,
   importantDates,
-  canEdit = false,
+  isSuperAdmin = false,
+  isRelationshipSpecialist = false,
   onSaved,
 }: ClientDetailsWidgetProps) {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const displayDates = normalizeImportantDates(importantDates);
+  const canEditDetails = isSuperAdmin || isRelationshipSpecialist;
 
   return (
     <>
       <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
         <div className="mb-4 flex items-center justify-between gap-3">
           <h3 className="text-base font-semibold text-gray-900">Client Details</h3>
-          {canEdit && (
+          {canEditDetails && (
             <button
               type="button"
               onClick={() => setIsEditModalOpen(true)}

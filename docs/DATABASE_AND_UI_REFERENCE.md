@@ -1,6 +1,6 @@
 # Profit Pulse Ally CRM — Database & UI Reference
 
-**Last updated:** June 15, 2026  
+**Last updated:** June 15, 2026 (post mobile + RELATIONSHIP details edit)  
 **Repository:** [CRM_PPA](https://github.com/prisken/CRM_PPA)  
 **Deployment branch:** `deploy`  
 **Production URL:** `https://crm-ppa-nine.vercel.app`
@@ -19,6 +19,8 @@ This document describes the PostgreSQL database schema, API surface, and fronten
 | Company hierarchy | ✅ Colleagues by company, add employee as lead |
 | Role-based pipeline advances | ✅ Standard users; super admin full control |
 | Standard user lead creation | ✅ Add Lead on dashboard with auto-assignment |
+| RELATIONSHIP client details edit | ✅ API + Edit button on Client 360 |
+| Mobile-responsive UI | ✅ Dashboards, Client 360, pipeline, modals, workspace tabs |
 | Auth UX | ✅ Stale-session sign-out before login redirect |
 | Vercel deploy | ✅ `prisma generate` + `migrate deploy` on build |
 
@@ -40,6 +42,8 @@ This document describes the PostgreSQL database schema, API surface, and fronten
 12. [Key User Flows](#12-key-user-flows)
 13. [Environment Variables](#13-environment-variables)
 14. [Local Development](#14-local-development)
+15. [Mobile & Responsive Design](#15-mobile--responsive-design)
+16. [Auth Helper Reference](#16-auth-helper-reference)
 
 ---
 
@@ -77,7 +81,7 @@ docs/             # Documentation (this file)
 1. **Sign up** — `POST /api/auth/register` creates a Supabase Auth user + `User` row in Postgres (`STANDARD_USER` by default). Returns a JWT stored in `localStorage` as `token`.
 2. **Sign in** — Supabase `signInWithPassword` sets session cookies.
 3. **API access** — Session cookies (server) or `Authorization: Bearer <token>` (client fetch).
-4. **Middleware** (`src/middleware.ts`) protects routes at the edge.
+4. **Middleware** (`src/middleware.ts`) protects routes at the edge (session check only; **no role check** on `/admin` — role enforced client-side and via API 403s).
 
 ### Route protection (middleware)
 
@@ -96,13 +100,39 @@ docs/             # Documentation (this file)
 
 ### Assignment roles (per client)
 
-| Role | Enum value | Typical permissions |
-|------|------------|---------------------|
-| Relationship | `RELATIONSHIP` | Strategy, tasks, deal info, notes |
-| Doctor | `DOCTOR` | Strategy, tasks, deal info, notes |
-| Account Service | `ACCOUNT_SERVICE` | Strategy, tasks, deal info, notes |
+| Role | Enum value | Primary responsibilities |
+|------|------------|--------------------------|
+| Relationship | `RELATIONSHIP` | Client details, deal info, notes, early pipeline stages, lead creation |
+| Doctor | `DOCTOR` | Strategy text, tasks, notes, strategy-session pipeline stage |
+| Account Service | `ACCOUNT_SERVICE` | Notes, active-client pipeline stage |
 
-Super Admins bypass assignment checks on Client 360 APIs.
+Super Admins bypass assignment checks on most Client 360 APIs.
+
+### Per-role Client 360 permissions
+
+| Action | Super Admin | RELATIONSHIP | DOCTOR | ACCOUNT_SERVICE |
+|--------|-------------|--------------|--------|-----------------|
+| Edit client details (`PUT .../details`) | ✅ | ✅ | ❌ | ❌ |
+| Edit deal (`PUT .../deal`) | ✅ | ✅ | ❌ | ❌ |
+| Edit strategy / create tasks | ✅ | ❌ | ✅ | ❌ |
+| Post notes | ✅ | ✅ (if assigned) | ✅ | ✅ |
+| Upload documents | ✅ | ✅ (if assigned) | ✅ | ✅ |
+| Delete documents | ✅ | ❌ | ❌ | ❌ |
+| Advance pipeline stage | ✅ (any stage) | Early stages | Strategy session | Active client |
+| Manage team assignments | ✅ | ❌ | ❌ | ❌ |
+| View company hierarchy | ✅ | ✅ | ✅ | ✅ |
+| Add employee lead | ✅ | ✅ | ✅ | ✅ |
+
+### Client details edit authorization (`PUT /api/clients/[id]/details`)
+
+Handled by `authorizeClientDetailsEdit(request, clientId)` in `lib/authHelpers.ts`:
+
+1. Authenticate via session cookie or `Authorization: Bearer <token>`
+2. **`SUPER_ADMIN`** → allowed
+3. **`STANDARD_USER`** with `RELATIONSHIP` assignment on the client → allowed
+4. All other cases → `403 Forbidden`
+
+UI: `ClientDetailsWidget` shows **Edit** when `isSuperAdmin || isRelationshipSpecialist`.
 
 ### Pipeline stage change authorization (`PATCH /api/clients/[id]`)
 
@@ -125,6 +155,15 @@ Standard users advance one stage at a time via **Move to Next Stage** + confirma
 |------|----------|
 | `SUPER_ADMIN` | Creates client only |
 | `STANDARD_USER` | Creates client **and** a `ClientAssignment` linking themselves with `RELATIONSHIP` role |
+
+### API authentication modes
+
+| Mode | How it works | Used by |
+|------|--------------|---------|
+| Session cookie | Supabase session via `getAuthenticatedUser()` | Most Client 360 sub-routes (notes, strategy, tasks, deal, assignments) |
+| Bearer or session | JWT in `Authorization` header **or** session via `getAuthenticatedUserFromRequest()` | Dashboard APIs, `PUT .../details`, employees endpoints, `POST /api/clients` |
+
+**Note:** Client-side fetches that only send Bearer tokens will fail on session-only routes unless cookies are also sent (`credentials: 'same-origin'`).
 
 ---
 
@@ -411,6 +450,8 @@ Merges two sources, sorted by date descending:
 
 Grouped by client for dashboard widgets. `isUnread` = no row in `activity_read_status` for `(activityId, userId)`.
 
+**Feed limits:** Standard dashboard — ~15 recent items; super admin dashboard — ~100 items.
+
 ### Activity ID note
 
 `activity_log_id` in `activity_read_status` is polymorphic — it may reference either an `Interaction.id` or `ClientActivityLog.id`.
@@ -436,7 +477,7 @@ Stored as JSONB array on `Client.important_dates`:
 ]
 ```
 
-Edited via `PUT /api/clients/[id]/details`; displayed read-only on `ClientDetailsWidget`.
+Edited via `PUT /api/clients/[id]/details` by super admins or `RELATIONSHIP` assignees; displayed on `ClientDetailsWidget`.
 
 ---
 
@@ -453,34 +494,34 @@ Edited via `PUT /api/clients/[id]/details`; displayed read-only on `ClientDetail
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
-| GET | `/api/dashboard/standard` | Standard user | Assigned clients, open tasks, grouped recent activity, performance metrics |
-| GET | `/api/dashboard/superadmin` | Super admin | System-wide grouped recent activity (last ~100 items) |
-| POST | `/api/activity/mark-read` | Any authenticated | Body: `{ activityLogIds: string[] }` — upsert read status |
+| GET | `/api/dashboard/standard` | Standard user (Bearer or session) | Assigned clients, open tasks, grouped recent activity, performance metrics |
+| GET | `/api/dashboard/superadmin` | Super admin (Bearer or session) | System-wide grouped recent activity (last ~100 items) |
+| POST | `/api/activity/mark-read` | Bearer or session | Body: `{ activityLogIds: string[] }` — upsert read status |
 
 ### Tasks
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
-| PUT | `/api/tasks/[taskId]/complete` | Assignee or super admin | Mark task completed |
+| PUT | `/api/tasks/[taskId]/complete` | Session | Mark task completed; assignee, super admin, or **any** client assignment |
 
 ### Clients (Client 360 & leads)
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
-| POST | `/api/clients` | Super admin or standard user | Create lead/client. Standard users are auto-assigned `RELATIONSHIP`. Body: `name`, `company`, `email`, `phone`, `contactInfo`, `status` |
-| GET | `/api/clients/[id]` | Authenticated | Full Client 360 payload |
-| PATCH | `/api/clients/[id]` | Super admin (any fields) or standard user (`status` only, role-based) | Update client; pipeline stage changes log a system activity |
-| PUT | `/api/clients/[id]/details` | Super admin | Update name, company, email, phone, lead source, `roleInCompany`, `employeeCount`, `expectations`, `importantDates`. Uses `requireSuperAdminFromRequest` (session cookie or Bearer token) |
-| PUT | `/api/clients/[id]/deal` | Super admin or assignment role | Deal value, gross profit, equity |
-| PUT | `/api/clients/[id]/strategy` | Super admin or assignment role | `strategyText` |
-| POST | `/api/clients/[id]/tasks` | Super admin or assignment role | Create task |
-| POST | `/api/clients/[id]/notes` | Super admin or client access | Add interaction (note) |
-| GET | `/api/clients/[id]/employees` | Authenticated | Company hierarchy: `employeeCount`, colleagues with same `company` |
-| POST | `/api/clients/[id]/employees` | Authenticated | Create employee as new lead from employer client. Body: `fullName`, `roleInCompany` |
-| POST | `/api/clients/[id]/assignments` | Super admin | Assign user to client |
-| DELETE | `/api/clients/[id]/assignments/[assignmentId]` | Super admin | Remove assignment |
-| POST | `/api/clients/[id]/documents` | Super admin or client access | Upload document |
-| DELETE | `/api/clients/[id]/documents/[documentId]` | Super admin | Delete document |
+| POST | `/api/clients` | Bearer or session | Create lead/client. Standard users auto-assigned `RELATIONSHIP`. Body: `name`, `company`, `email`, `phone`, `contactInfo`, `status` |
+| GET | `/api/clients/[id]` | Session | Full Client 360 payload (**any authenticated user**) |
+| PATCH | `/api/clients/[id]` | Session | Super admin: any field; standard user: `status` only (role-based). Stage changes log system activity |
+| PUT | `/api/clients/[id]/details` | Super admin or `RELATIONSHIP` assignee (Bearer or session) | Name, company, email, phone, lead source, `roleInCompany`, `employeeCount`, `expectations`, `importantDates` |
+| PUT | `/api/clients/[id]/deal` | Super admin or `RELATIONSHIP` assignment (session) | Deal value + gross profit on primary `Deal` |
+| PUT | `/api/clients/[id]/strategy` | Super admin or `DOCTOR` assignment (session) | `strategyText` |
+| POST | `/api/clients/[id]/tasks` | Super admin or `DOCTOR` assignment (session) | Create task |
+| POST | `/api/clients/[id]/notes` | Super admin or any assignment (session) | Add interaction (note) |
+| GET | `/api/clients/[id]/employees` | Bearer or session | Company hierarchy: `employeeCount`, colleagues with same `company` |
+| POST | `/api/clients/[id]/employees` | Bearer or session | Create employee as new lead. Body: `fullName`, `roleInCompany`. Auto-assigns creator as `RELATIONSHIP` |
+| POST | `/api/clients/[id]/assignments` | Super admin (session) | Assign user to client |
+| DELETE | `/api/clients/[id]/assignments/[assignmentId]` | Super admin (session) | Remove assignment |
+| POST | `/api/clients/[id]/documents` | Super admin or any assignment (session) | Upload document (Supabase Storage, 10MB, MIME whitelist) |
+| DELETE | `/api/clients/[id]/documents/[documentId]` | Super admin (session) | Delete document |
 
 ### Admin analytics
 
@@ -488,26 +529,26 @@ Edited via `PUT /api/clients/[id]/details`; displayed read-only on `ClientDetail
 |--------|------|------|-------------|
 | GET | `/api/admin/dashboard-kpis` | Super admin | KPI summary |
 | GET | `/api/admin/funnel-data` | Super admin | Conversion funnel chart data |
-| GET | `/api/admin/revenue-tracker` | Super admin | Revenue over time |
+| GET | `/api/admin/revenue-tracker` | Super admin | Revenue over time; requires `?groupBy=month\|quarter\|year` |
 | GET | `/api/admin/leaderboards` | Super admin | Commission & deals leaderboards |
 | GET | `/api/admin/pipeline` | Super admin | All clients for master pipeline |
 | GET | `/api/admin/users` | Super admin | User list |
 
-### Reports (alternate endpoints)
+### Reports (alternate endpoints — require `?format=pdf|csv`)
 
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/api/reports/funnel` | Funnel data |
-| GET | `/api/reports/revenue` | Revenue data |
-| GET | `/api/reports/leaderboards` | Leaderboard data |
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| GET | `/api/reports/funnel` | Super admin | Funnel export (`format` required) |
+| GET | `/api/reports/revenue` | Super admin | Revenue export (`format` + optional `groupBy`) |
+| GET | `/api/reports/leaderboards` | Super admin | Leaderboard export (`format` required) |
 
 ### Notifications
 
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/api/notifications` | List for current user |
-| POST | `/api/notifications` | Create notification |
-| PUT | `/api/notifications/[id]/read` | Mark read |
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| GET | `/api/notifications` | Session | List for current user |
+| POST | `/api/notifications` | Super admin | Bulk create (`recipient_ids`, `message`, optional `client_id`) |
+| PUT | `/api/notifications/[id]/read` | Session (recipient only) | Mark read |
 
 ### Legacy
 
@@ -648,6 +689,7 @@ Edited via `PUT /api/clients/[id]/details`; displayed read-only on `ClientDetail
 
 - **Logo component:** `src/components/Logo.tsx` → `/assets/logo-full.png`
 - **Favicon:** `/assets/favicon.ico` (configured in `src/app/layout.tsx` metadata)
+- **Viewport:** `<meta name="viewport" content="width=device-width, initial-scale=1" />` in root layout `<head>`
 - Logo appears in: dashboard headers, Client 360 header, login, signup
 
 ---
@@ -679,7 +721,7 @@ Edited via `PUT /api/clients/[id]/details`; displayed read-only on `ClientDetail
 
 **Modals:** `AddLeadModal` — simplified lead form (name, company, email, phone) → `POST /api/clients`
 
-**Widgets (2-column grid):**
+**Widgets (responsive grid: `grid-cols-1 md:grid-cols-2`):**
 
 | Widget | Component | Data source |
 |--------|-----------|-------------|
@@ -698,24 +740,27 @@ Edited via `PUT /api/clients/[id]/details`; displayed read-only on `ClientDetail
 
 **Header:** Logo, title, Add Lead/Client, User Dashboard link, Sign Out
 
-**Sections (top to bottom):**
+**Header:** Responsive — stacks on mobile (`flex-col`), horizontal from `sm` up; action buttons wrap.
+
+**Sections (vertical stack, `flex flex-col gap-6`):**
 
 | Section | Component | API |
 |---------|-----------|-----|
 | KPI bar | `KpiBar` | `/api/admin/dashboard-kpis` |
 | Conversion funnel | `ConversionFunnelChart` | `/api/admin/funnel-data` |
-| Revenue tracker | `RevenueTrackerChart` | `/api/admin/revenue-tracker` |
+| Revenue tracker | `RevenueTrackerChart` | `/api/admin/revenue-tracker` (`groupBy` param) |
 | Leaderboards | `Leaderboards` | `/api/admin/leaderboards` |
 | Recent Activity (all clients) | `CollapsibleActivityWidget` | `/api/dashboard/superadmin` |
-| Master pipeline | `MasterPipelineView` | `/api/admin/pipeline` |
+| Master pipeline | `MasterPipelineView` | `/api/admin/pipeline` — Kanban on `lg+`, grouped list on mobile |
 
-**Modals:** `AddClientModal` — create new client
+**Modals:** `AddClientModal` — scroll-safe centered overlay (`max-w-lg`)
 
 ---
 
 ### Page: Client 360 (`/clients/[id]`)
 
-**File:** `src/components/clients/Client360Page.tsx`
+**File:** `src/components/clients/Client360Page.tsx`  
+**Route:** `dynamic = 'force-dynamic'`
 
 **Header:** Logo, back to pipeline link, client name, pipeline stage control:
 
@@ -726,14 +771,16 @@ Edited via `PUT /api/clients/[id]/details`; displayed read-only on `ClientDetail
 
 **Pipeline advance modal:** `PipelineStageAdvanceModal` — confirmation message + non-interactive checklist reminders; **Confirm** calls `PATCH /api/clients/[id]`.
 
-**Layout:** Two columns
+**Layout:** Responsive — stacks on mobile (`flex-col`), side-by-side from `md` up (`md:flex-row`, 2:1 ratio)
 
 **Left — Workspace (`WorkspacePanel`):**
 
 | Tab | Component | Features |
 |-----|-----------|----------|
-| Strategy & Tasks | `StrategyAndTasks` | Edit strategy text, create tasks |
+| Strategy & Tasks | `StrategyAndTasks` | Edit strategy text, create tasks (super admin or `DOCTOR`) |
 | Activity & Notes | `ActivityLog` | View merged activity, add notes |
+
+**Tab navigation:** Horizontal tabs on `md+` (`hidden md:flex`); Headless UI dropdown on mobile (`block md:hidden`).
 
 Deep link: `#activity-notes` opens Activity tab and scrolls into view.
 
@@ -741,8 +788,8 @@ Deep link: `#activity-notes` opens Activity tab and scrolls into view.
 
 | Widget | Component | Who can edit |
 |--------|-----------|--------------|
-| Client Details | `ClientDetailsWidget` + `ClientDetailsEditModal` | Super admin — includes role, employee count, expectations, important dates |
-| Deal Info | `DealInfoWidget` | Super admin / relationship role |
+| Client Details | `ClientDetailsWidget` + `ClientDetailsEditModal` | Super admin **or** `RELATIONSHIP` assignee |
+| Deal Info | `DealInfoWidget` | Edit button shown for super admin / `RELATIONSHIP`; **no edit modal wired yet** |
 | Assigned Team | `AssignedTeamWidget` | Super admin manages assignments |
 | Company Hierarchy | `CompanyHierarchyWidget` | All authenticated — view colleagues, add employee leads |
 
@@ -756,7 +803,10 @@ Deep link: `#activity-notes` opens Activity tab and scrolls into view.
 |-----------|------|---------|
 | `Logo` | `src/components/Logo.tsx` | Branded logo image |
 | `AuthRequiredMessage` | `src/components/auth/AuthRequiredMessage.tsx` | Unauthenticated fallback with sign-in CTA |
-| `Providers` | `src/components/Providers.tsx` | App-level providers wrapper |
+| `SignUpPage` | `src/components/auth/SignUpPage.tsx` | Registration form |
+| `Providers` | `src/components/Providers.tsx` | App-level providers wrapper (NextAuth `SessionProvider`) |
+
+**Hook:** `useUserProfile` (`src/hooks/useUserProfile.ts`) — loads current user from Supabase `User` table.
 
 ### Dashboard (standard user)
 
@@ -802,17 +852,20 @@ Deep link: `#activity-notes` opens Activity tab and scrolls into view.
 | Module | Purpose |
 |--------|---------|
 | `prisma.ts` | Prisma client singleton |
-| `authHelpers.ts` | Auth guards, pipeline authorization, client access checks, system event logging |
+| `authHelpers.ts` | Auth guards (`authorizeClientDetailsEdit`, `authorizePipelineStatusChange`, etc.), client access checks, system event logging |
 | `client360.ts` | Client 360 query includes + response builder |
-| `pipelinePermissions.ts` | Pipeline stage advance rules (shared by API + UI) |
-| `standardDashboard.ts` | Standard user dashboard data |
-| `superAdminDashboard.ts` | Super admin activity feed data |
+| `pipelinePermissions.ts` | Pipeline stage advance rules + advance checklists (shared by API + UI) |
+| `standardDashboard.ts` | Standard user dashboard data (15 activity items) |
+| `superAdminDashboard.ts` | Super admin activity feed data (~100 items) |
 | `activityFeed.ts` | Grouped activity + mark-as-read |
 | `dashboardTypes.ts` | TypeScript types for dashboard payloads |
 | `clientStages.ts` | Pipeline stage labels and badge styles |
 | `commissionRates.ts` | Role-based commission constants |
-| `jwt.ts` | JWT sign/verify for Bearer auth |
-| `supabaseClient.ts` / `supabaseServer.ts` / `supabaseAdmin.ts` | Supabase clients |
+| `clientDeals.ts` | Primary deal upsert helpers |
+| `leadSources.ts` | Lead source combobox suggestions |
+| `reports.ts` | CSV/PDF export helpers for admin widgets |
+| `jwt.ts` | JWT sign/verify for Bearer auth (7-day expiry) |
+| `supabaseClient.ts` / `supabaseServer.ts` / `supabaseAdmin.ts` | Supabase clients; storage bucket via `SUPABASE_CLIENT_DOCUMENTS_BUCKET` |
 
 ---
 
@@ -832,8 +885,17 @@ Deep link: `#activity-notes` opens Activity tab and scrolls into view.
           → Add Lead → POST /api/clients (auto-assigned RELATIONSHIP)
           → click client → /clients/[id]
           → add note / update strategy / complete tasks
+          → Edit Client Details (if RELATIONSHIP) → PUT /api/clients/[id]/details
           → Move to Next Stage (if role permits) → confirmation modal → PATCH status
           → expand activity group → POST /api/activity/mark-read
+```
+
+### Standard user — edit client details (RELATIONSHIP)
+
+```
+/clients/[id] → Client Details widget → Edit (if RELATIONSHIP assignee)
+             → ClientDetailsEditModal → PUT /api/clients/[id]/details
+             → authorizeClientDetailsEdit allows super admin or RELATIONSHIP
 ```
 
 ### Standard user — company hierarchy
@@ -872,7 +934,9 @@ Deep link: `#activity-notes` opens Activity tab and scrolls into view.
 | `NEXT_PUBLIC_SUPABASE_URL` | Supabase project URL |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase anon key (client + middleware) |
 | `SUPABASE_SECRET_KEY` | Service role (registration, uploads) |
-| `NEXTAUTH_SECRET` | JWT signing secret |
+| `NEXTAUTH_SECRET` | JWT signing secret (`lib/jwt.ts`) |
+| `SUPABASE_CLIENT_DOCUMENTS_BUCKET` | Supabase Storage bucket for client uploads (default: `client-documents`) |
+| `TEST_BASE_URL` | Optional override for `scripts/test-activity-apis.ts` (default: `http://localhost:3000`) |
 
 ---
 
@@ -895,6 +959,56 @@ npx tsx scripts/test-activity-apis.ts
 ```bash
 npm run build        # prisma generate && prisma migrate deploy && next build
 ```
+
+---
+
+## 15. Mobile & Responsive Design
+
+Tailwind breakpoints used throughout the app (`sm` 640px, `md` 768px, `lg` 1024px).
+
+| Area | Mobile behavior | Desktop behavior |
+|------|-----------------|------------------|
+| **Root layout** | Viewport meta tag in `<head>` | Same |
+| **Standard dashboard** | Single-column widget grid; header stacks vertically | `md:grid-cols-2`; header horizontal |
+| **Super admin dashboard** | Sections stack vertically; charts single column | Charts `lg:grid-cols-2`; header horizontal |
+| **Master pipeline** | Grouped list by status (`block lg:hidden`) | Horizontal Kanban columns (`hidden lg:block`) |
+| **Client 360 layout** | Workspace above widgets (`flex-col`) | Side-by-side `md:flex-row` (2:1 ratio) |
+| **Workspace tabs** | Headless UI dropdown (`block md:hidden`) | Horizontal tab bar (`hidden md:flex`) |
+| **Modals** | Full width within `p-4` padding; stacked action buttons | `max-w-md` / `max-w-lg`; buttons row-aligned |
+
+**Modal pattern (all four modals):**
+
+```
+fixed inset-0 overflow-y-auto p-4
+  └─ flex min-h-full items-center justify-center
+       └─ w-full max-w-{md|lg} rounded-xl (scrollable if tall)
+```
+
+Affected modals: `AddLeadModal`, `AddClientModal`, `ClientDetailsEditModal`, `PipelineStageAdvanceModal`.
+
+---
+
+## 16. Auth Helper Reference
+
+All exported functions in `lib/authHelpers.ts`:
+
+| Function | Purpose |
+|----------|---------|
+| `requireSuperAdmin()` | Session → must be `SUPER_ADMIN` |
+| `getAuthenticatedUser()` | Session → returns user profile |
+| `getAuthenticatedUserFromRequest(request)` | Bearer JWT **or** session fallback |
+| `requireSuperAdminFromRequest(request?)` | Bearer or session → must be `SUPER_ADMIN` |
+| `authorizeClientDetailsEdit(request, clientId)` | Super admin **or** `RELATIONSHIP` assignee |
+| `requireStandardUser(request?)` | Bearer or session → must be `STANDARD_USER` |
+| `getClientOr404(clientId)` | Client existence check (no auth) |
+| `hasClientAssignment(userId, clientId, roles?)` | Lookup assignment; optional role filter |
+| `requireSuperAdminOrClientRole(clientId, roles[])` | Session → super admin or matching assignment role |
+| `requireSuperAdminOrClientAccess(clientId)` | Session → super admin or any assignment |
+| `logClientSystemEvent(clientId, content, userId?)` | Write `ClientActivityLog` with `type: SYSTEM` |
+| `authorizePipelineStatusChange(...)` | Role-based pipeline stage advance check |
+| `canAssignmentRoleChangePipelineStatus` | Re-export from `lib/pipelinePermissions.ts` |
+
+Related: `lib/pipelinePermissions.ts` exports `getNextPipelineStage`, `canUserAdvancePipelineStage`, `getPipelineAdvanceChecklist`, and `PIPELINE_ADVANCE_CHECKLIST`.
 
 ---
 
@@ -922,11 +1036,11 @@ npm run build        # prisma generate && prisma migrate deploy && next build
 ├─────────────────────────────────────────────────────────────┤
 │  Recent Activity (All Clients) — CollapsibleActivityWidget  │
 ├─────────────────────────────────────────────────────────────┤
-│  Master Pipeline (kanban-style columns by stage)            │
+│  Master Pipeline (desktop: kanban / mobile: grouped list)   │
 └─────────────────────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────────────────────┐
-│  [Logo]                              ← Back to list         │  Client 360
+│  [Logo]                              ← Back to list         │  Client 360 (desktop)
 │  {Client Name}  [Stage badge ▼ or Move to Next Stage]       │
 ├──────────────────────────────┬──────────────────────────────┤
 │  WORKSPACE                   │  Client Details              │
@@ -934,6 +1048,19 @@ npm run build        # prisma generate && prisma migrate deploy && next build
 │  ...                         │  Assigned Team               │
 │                              │  Company Hierarchy           │
 └──────────────────────────────┴──────────────────────────────┘
+
+┌─────────────────────────────┐
+│  [Logo]          ← Back     │  Client 360 (mobile — stacked)
+│  {Client Name}  [Stage]     │
+├─────────────────────────────┤
+│  WORKSPACE [tab dropdown ▼] │
+│  ...                        │
+├─────────────────────────────┤
+│  Client Details  [Edit]     │
+│  Deal Info                  │
+│  Assigned Team              │
+│  Company Hierarchy          │
+└─────────────────────────────┘
 ```
 
 ---
@@ -944,6 +1071,15 @@ npm run build        # prisma generate && prisma migrate deploy && next build
 
 | Item | Notes |
 |------|-------|
-| Client details editing | Super admin only via `PUT /api/clients/[id]/details`; assigned standard users are read-only |
-| Client 360 access | `GET /api/clients/[id]` allows any authenticated user (not restricted to assignees) |
-| Pipeline checklist in modal | Display-only reminders; not persisted or validated server-side |
+| Client 360 read access | `GET /api/clients/[id]` allows any authenticated user (not restricted to assignees) |
+| Company hierarchy APIs | `GET/POST .../employees` — any authenticated user, no assignment check |
+| Bearer vs session split | Dashboard/details/employees accept Bearer+session; notes, strategy, tasks, deal use session-only helpers |
+| Deal edit UI | `DealInfoWidget` shows Edit for super admin / `RELATIONSHIP` but **no modal/handler is wired** |
+| Pipeline checklist in modal | Display-only reminders in `PipelineStageAdvanceModal`; not persisted or server-validated |
+| Admin route protection | `/admin` middleware checks session only; role enforced client-side + API 403 |
+| Duplicate auth in admin routes | Several `/api/admin/*` routes inline their own `requireSuperAdmin()` instead of shared helper |
+| NextAuth legacy route | `/api/auth/[...nextauth]` exists with placeholder credentials; primary auth is Supabase |
+| Activity read IDs | Polymorphic: `activity_read_status.activity_log_id` may reference `Interaction.id` or `ClientActivityLog.id` |
+| ARCHIVED pipeline stage | In enum but excluded from funnel charts and advance logic |
+| Legacy models | `Strategy` + `Document` coexist with `Client.strategyText`; Client 360 uses `strategyText` |
+| Legacy endpoint | `GET /api/get-dashboard-data` still present |

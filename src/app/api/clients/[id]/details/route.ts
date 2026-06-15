@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server';
 import {
+  authorizeClientDetailsEdit,
   getClientOr404,
   logClientSystemEvent,
-  requireSuperAdminFromRequest,
 } from '@/lib/authHelpers';
 import { prisma } from '@/lib/prisma';
 
@@ -12,7 +12,7 @@ export async function PUT(
 ) {
   try {
     const { id: clientId } = await params;
-    const auth = await requireSuperAdminFromRequest(request);
+    const auth = await authorizeClientDetailsEdit(request, clientId);
     if (auth.error) {
       return auth.error;
     }

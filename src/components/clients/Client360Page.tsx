@@ -358,7 +358,8 @@ export default function Client360Page({ clientId }: { clientId: string }) {
             employeeCount={client.employeeCount}
             expectations={client.expectations}
             importantDates={client.importantDates}
-            canEdit={isSuperAdmin}
+            isSuperAdmin={isSuperAdmin}
+            isRelationshipSpecialist={isRelationshipSpecialist}
             onSaved={handleClientDetailsSaved}
           />
           <DealInfoWidget
