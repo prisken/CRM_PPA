@@ -53,8 +53,9 @@ export default function AddClientModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
-      <div className="w-full max-w-lg rounded-xl bg-white p-6 shadow-xl">
+    <div className="fixed inset-0 z-50 overflow-y-auto bg-black/40 p-4">
+      <div className="flex min-h-full items-center justify-center">
+        <div className="w-full max-w-lg rounded-xl bg-white p-4 shadow-xl sm:p-6">
         <h3 className="text-lg font-semibold text-gray-900">Add Lead / Client</h3>
         <p className="mt-1 text-sm text-gray-500">
           Create a new lead and assign their pipeline stage.
@@ -120,7 +121,7 @@ export default function AddClientModal({
 
           {error && <p className="text-sm text-red-600">{error}</p>}
 
-          <div className="flex justify-end gap-3 pt-2">
+          <div className="flex flex-col-reverse gap-3 pt-2 sm:flex-row sm:justify-end">
             <button
               type="button"
               onClick={onClose}
@@ -137,6 +138,7 @@ export default function AddClientModal({
             </button>
           </div>
         </form>
+        </div>
       </div>
     </div>
   );

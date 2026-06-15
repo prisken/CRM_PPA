@@ -23,6 +23,25 @@ const STATUS_COLUMNS = CLIENT_STAGES.map((stage) => ({
 
 const STATUS_OPTIONS = [{ key: 'ALL', label: 'All Statuses' }, ...STATUS_COLUMNS];
 
+function PipelineClientCard({ client }: { client: PipelineClient }) {
+  return (
+    <Link
+      href={`/clients/${client.client_id}`}
+      className="block cursor-pointer rounded-lg border border-gray-200 bg-white p-3 shadow-sm transition hover:border-blue-400 hover:bg-blue-50 hover:shadow-md"
+    >
+      <p className="text-sm font-medium text-gray-900">{client.name}</p>
+      {client.company && (
+        <p className="mt-1 text-xs text-gray-500">{client.company}</p>
+      )}
+      {client.assignedUsers.length > 0 && (
+        <p className="mt-2 text-xs text-gray-400">
+          {client.assignedUsers.map((u) => u.userName).join(', ')}
+        </p>
+      )}
+    </Link>
+  );
+}
+
 export default function MasterPipelineView({
   refreshKey = 0,
   onAddClick,
@@ -135,46 +154,63 @@ export default function MasterPipelineView({
         </div>
       </div>
 
-      <div className="flex gap-4 overflow-x-auto pb-2">
+      <div className="hidden lg:block">
+        <div className="flex gap-4 overflow-x-auto pb-2">
+          {STATUS_COLUMNS.map((column) => {
+            const columnClients = filteredClients.filter(
+              (client) => client.status === column.key
+            );
+
+            return (
+              <div
+                key={column.key}
+                className="min-w-[220px] flex-1 rounded-lg bg-gray-50 p-3"
+              >
+                <div className="mb-3 flex items-center justify-between">
+                  <h3 className="text-sm font-semibold text-gray-800">{column.label}</h3>
+                  <span className="rounded-full bg-gray-200 px-2 py-0.5 text-xs text-gray-600">
+                    {columnClients.length}
+                  </span>
+                </div>
+                <div className="space-y-2">
+                  {columnClients.map((client) => (
+                    <PipelineClientCard key={client.client_id} client={client} />
+                  ))}
+                  {columnClients.length === 0 && (
+                    <p className="text-xs text-gray-400">No clients</p>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="block space-y-6 lg:hidden">
         {STATUS_COLUMNS.map((column) => {
           const columnClients = filteredClients.filter(
             (client) => client.status === column.key
           );
 
           return (
-            <div
-              key={column.key}
-              className="min-w-[220px] flex-1 rounded-lg bg-gray-50 p-3"
-            >
-              <div className="mb-3 flex items-center justify-between">
+            <section key={column.key}>
+              <div className="mb-3 flex items-center justify-between border-b border-gray-200 pb-2">
                 <h3 className="text-sm font-semibold text-gray-800">{column.label}</h3>
                 <span className="rounded-full bg-gray-200 px-2 py-0.5 text-xs text-gray-600">
                   {columnClients.length}
                 </span>
               </div>
-              <div className="space-y-2">
+              <ul className="space-y-2">
                 {columnClients.map((client) => (
-                  <Link
-                    key={client.client_id}
-                    href={`/clients/${client.client_id}`}
-                    className="block cursor-pointer rounded-lg border border-gray-200 bg-white p-3 shadow-sm transition hover:border-blue-400 hover:bg-blue-50 hover:shadow-md"
-                  >
-                    <p className="text-sm font-medium text-gray-900">{client.name}</p>
-                    {client.company && (
-                      <p className="mt-1 text-xs text-gray-500">{client.company}</p>
-                    )}
-                    {client.assignedUsers.length > 0 && (
-                      <p className="mt-2 text-xs text-gray-400">
-                        {client.assignedUsers.map((u) => u.userName).join(', ')}
-                      </p>
-                    )}
-                  </Link>
+                  <li key={client.client_id}>
+                    <PipelineClientCard client={client} />
+                  </li>
                 ))}
                 {columnClients.length === 0 && (
-                  <p className="text-xs text-gray-400">No clients</p>
+                  <li className="text-xs text-gray-400">No clients</li>
                 )}
-              </div>
-            </div>
+              </ul>
+            </section>
           );
         })}
       </div>

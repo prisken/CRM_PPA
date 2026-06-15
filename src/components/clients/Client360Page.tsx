@@ -322,29 +322,31 @@ export default function Client360Page({ clientId }: { clientId: string }) {
         </div>
       </header>
 
-      <div className="mx-auto grid max-w-7xl gap-6 px-4 py-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)] sm:px-6 lg:px-8">
-        <WorkspacePanel
-          clientId={clientId}
-          strategyText={client.strategyText}
-          tasks={client.tasks}
-          activityLog={client.activityLog}
-          currentUser={
-            profile
-              ? {
-                  id: profile.id,
-                  name: profile.name,
-                  email: profile.email,
-                  role: profile.role,
-                }
-              : null
-          }
-          assignedUsers={client.assignedUsers}
-          canPostNote={hasClientAccess}
-          onNotePosted={handleNotePosted}
-          onStrategyTasksUpdated={handleStrategyTasksUpdated}
-        />
+      <div className="mx-auto flex max-w-7xl flex-col gap-6 px-4 py-6 sm:px-6 md:flex-row md:items-start lg:px-8">
+        <div className="min-w-0 md:flex-[2]">
+          <WorkspacePanel
+            clientId={clientId}
+            strategyText={client.strategyText}
+            tasks={client.tasks}
+            activityLog={client.activityLog}
+            currentUser={
+              profile
+                ? {
+                    id: profile.id,
+                    name: profile.name,
+                    email: profile.email,
+                    role: profile.role,
+                  }
+                : null
+            }
+            assignedUsers={client.assignedUsers}
+            canPostNote={hasClientAccess}
+            onNotePosted={handleNotePosted}
+            onStrategyTasksUpdated={handleStrategyTasksUpdated}
+          />
+        </div>
 
-        <aside className="space-y-4">
+        <aside className="min-w-0 w-full space-y-4 md:flex-1">
           <ClientDetailsWidget
             clientId={clientId}
             name={client.name}

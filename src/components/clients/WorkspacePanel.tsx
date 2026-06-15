@@ -1,5 +1,7 @@
 'use client';
 
+import { Menu, MenuButton, MenuItem, MenuItems } from '@headlessui/react';
+import { ChevronDown } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import ActivityLog, { type ActivityLogEntry } from '@/components/clients/ActivityLog';
 import StrategyAndTasks, {
@@ -53,11 +55,15 @@ export default function WorkspacePanel({
     }
   }, []);
 
+  const activeTabLabel =
+    TABS.find((tab) => tab.id === activeTab)?.label ?? TABS[0].label;
+
   return (
     <section id="workspace-panel" className="rounded-xl border border-gray-200 bg-white shadow-sm">
       <div className="border-b border-gray-200 px-6 pt-5">
         <h2 className="text-lg font-semibold text-gray-900">Workspace</h2>
-        <nav className="mt-4 flex gap-6" aria-label="Workspace tabs">
+
+        <nav className="mt-4 hidden gap-6 md:flex" aria-label="Workspace tabs">
           {TABS.map((tab) => (
             <button
               key={tab.id}
@@ -73,6 +79,38 @@ export default function WorkspacePanel({
             </button>
           ))}
         </nav>
+
+        <div className="mt-4 block md:hidden">
+          <Menu as="div" className="relative">
+            <MenuButton
+              className="flex w-full items-center justify-between rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-left text-sm font-medium text-gray-900"
+              aria-label="Select workspace tab"
+            >
+              <span>{activeTabLabel}</span>
+              <ChevronDown className="h-4 w-4 shrink-0 text-gray-500" aria-hidden="true" />
+            </MenuButton>
+            <MenuItems
+              anchor="bottom start"
+              className="z-10 w-[var(--button-width)] rounded-lg border border-gray-200 bg-white py-1 shadow-lg [--anchor-gap:4px]"
+            >
+              {TABS.map((tab) => (
+                <MenuItem key={tab.id}>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab(tab.id)}
+                    className={`block w-full px-3 py-2 text-left text-sm data-focus:bg-gray-100 ${
+                      activeTab === tab.id
+                        ? 'font-semibold text-blue-600'
+                        : 'text-gray-700'
+                    }`}
+                  >
+                    {tab.label}
+                  </button>
+                </MenuItem>
+              ))}
+            </MenuItems>
+          </Menu>
+        </div>
       </div>
 
       <div className="p-6">

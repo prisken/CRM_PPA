@@ -1,11 +1,26 @@
 # Profit Pulse Ally CRM — Database & UI Reference
 
-**Last updated:** June 2026  
+**Last updated:** June 15, 2026  
 **Repository:** [CRM_PPA](https://github.com/prisken/CRM_PPA)  
 **Deployment branch:** `deploy`  
 **Production URL:** `https://crm-ppa-nine.vercel.app`
 
 This document describes the PostgreSQL database schema, API surface, and frontend UI structure for handoff to developers, designers, and stakeholders.
+
+### Shipped features (as of June 15, 2026)
+
+| Area | Status |
+|------|--------|
+| Standard & super admin dashboards | ✅ KPIs, funnel, revenue, leaderboards, master pipeline |
+| Recent Activity feed (grouped, unread, mark-read) | ✅ Standard + super admin dashboards |
+| Branding (logo, favicon) | ✅ Login, signup, dashboards, Client 360 |
+| Client 360 workspace | ✅ Strategy, tasks, notes, documents, deal info, team |
+| Client details expansion | ✅ Role in company, employee count, expectations, important dates |
+| Company hierarchy | ✅ Colleagues by company, add employee as lead |
+| Role-based pipeline advances | ✅ Standard users; super admin full control |
+| Standard user lead creation | ✅ Add Lead on dashboard with auto-assignment |
+| Auth UX | ✅ Stale-session sign-out before login redirect |
+| Vercel deploy | ✅ `prisma generate` + `migrate deploy` on build |
 
 ---
 
@@ -76,8 +91,8 @@ docs/             # Documentation (this file)
 
 | Role | Enum value | Access |
 |------|------------|--------|
-| Super Admin | `SUPER_ADMIN` | Full system: admin dashboard, all clients, assignments, pipeline stage changes |
-| Standard User | `STANDARD_USER` | Own dashboard, assigned clients only, limited Client 360 edits by assignment role |
+| Super Admin | `SUPER_ADMIN` | Full system: admin dashboard, all clients, assignments, unrestricted pipeline stage changes |
+| Standard User | `STANDARD_USER` | Own dashboard, assigned clients, create leads (auto-assigned as Relationship), role-based pipeline advances |
 
 ### Assignment roles (per client)
 
@@ -88,6 +103,28 @@ docs/             # Documentation (this file)
 | Account Service | `ACCOUNT_SERVICE` | Strategy, tasks, deal info, notes |
 
 Super Admins bypass assignment checks on Client 360 APIs.
+
+### Pipeline stage change authorization (`PATCH /api/clients/[id]`)
+
+| User | Can update |
+|------|------------|
+| `SUPER_ADMIN` | Any field including `status` (full dropdown in UI) |
+| `STANDARD_USER` | **`status` only**, and only when assignment role matches **current** stage |
+
+| Assignment role | Allowed current statuses before advancing |
+|-----------------|------------------------------------------|
+| `RELATIONSHIP` | `NEW_LEAD`, `CONTACTED`, `NURTURING` |
+| `DOCTOR` | `STRATEGY_SESSION` |
+| `ACCOUNT_SERVICE` | `ACTIVE_CLIENT` |
+
+Standard users advance one stage at a time via **Move to Next Stage** + confirmation modal. Logic is shared between API (`lib/authHelpers.ts` → `authorizePipelineStatusChange`) and UI (`lib/pipelinePermissions.ts`).
+
+### Lead creation auto-assignment (`POST /api/clients`)
+
+| User | Behavior |
+|------|----------|
+| `SUPER_ADMIN` | Creates client only |
+| `STANDARD_USER` | Creates client **and** a `ClientAssignment` linking themselves with `RELATIONSHIP` role |
 
 ---
 
@@ -163,6 +200,10 @@ Super Admins bypass assignment checks on Client 360 APIs.
 | `deal_value` | DECIMAL(12,2) | Client-level deal value (overrides sum of deals when set) |
 | `equity` | DECIMAL(12,2) | Equity stake |
 | `strategy_text` | TEXT | Free-form strategy on Client 360 |
+| `role_in_company` | TEXT | Contact's role/title at their company |
+| `employee_count` | INTEGER | Reported company headcount |
+| `expectations` | TEXT | Client expectations for the engagement |
+| `important_dates` | JSONB | Array of `{ label, date }` objects; default `[]` |
 | `status` | ClientStatus | Pipeline stage |
 | `pendingNotifications` | BOOLEAN | Flag for notification workflows |
 | `createdAt`, `lastModified` | TIMESTAMP | |
@@ -332,8 +373,9 @@ erDiagram
 | `20260615050000_client_360_fields` | Client contact/deal fields, `tasks`, `client_documents`, `client_activity_logs`, `strategyText` |
 | `20260615060000_add_user_password_hash` | `password_hash` on User |
 | `20260615070000_add_activity_read_status` | `activity_read_status` for dashboard unread tracking |
+| `20260615024217_add_client_360_fields` | `role_in_company`, `employee_count`, `expectations`, `important_dates` on Client |
 
-**Deploy note:** `package.json` runs `prisma generate` on `postinstall` and `build` so Vercel has an up-to-date Prisma client.
+**Deploy note:** `package.json` runs `prisma generate` on `postinstall` and `prisma generate && prisma migrate deploy && next build` on production build so Vercel applies migrations and has an up-to-date Prisma client.
 
 ---
 
@@ -373,6 +415,29 @@ Grouped by client for dashboard widgets. `isUnread` = no row in `activity_read_s
 
 `activity_log_id` in `activity_read_status` is polymorphic — it may reference either an `Interaction.id` or `ClientActivityLog.id`.
 
+### Company hierarchy
+
+Clients sharing the same `company` name are treated as colleagues. The **Company Hierarchy** widget (`CompanyHierarchyWidget`) displays:
+
+- Current client's `employeeCount`
+- Other clients with matching `company` (excluding self)
+- A form to add an **employee as a new lead** via `POST /api/clients/[id]/employees`
+
+The employees endpoint copies the employer's `company`, sets `status` to `NEW_LEAD`, and auto-assigns the creator as `RELATIONSHIP`.
+
+### Important dates format
+
+Stored as JSONB array on `Client.important_dates`:
+
+```json
+[
+  { "label": "Contract renewal", "date": "2026-12-01" },
+  { "label": "Onboarding", "date": "2026-06-17" }
+]
+```
+
+Edited via `PUT /api/clients/[id]/details`; displayed read-only on `ClientDetailsWidget`.
+
 ---
 
 ## 9. API Reference
@@ -398,18 +463,20 @@ Grouped by client for dashboard widgets. `isUnread` = no row in `activity_read_s
 |--------|------|------|-------------|
 | PUT | `/api/tasks/[taskId]/complete` | Assignee or super admin | Mark task completed |
 
-### Clients (Client 360)
+### Clients (Client 360 & leads)
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
-| POST | `/api/clients` | Super admin | Create lead/client |
-| GET | `/api/clients/[id]` | Super admin or assigned | Full Client 360 payload |
-| PATCH | `/api/clients/[id]` | Super admin | Update pipeline `status` |
-| PUT | `/api/clients/[id]/details` | Super admin | Update name, company, email, phone, lead source |
+| POST | `/api/clients` | Super admin or standard user | Create lead/client. Standard users are auto-assigned `RELATIONSHIP`. Body: `name`, `company`, `email`, `phone`, `contactInfo`, `status` |
+| GET | `/api/clients/[id]` | Authenticated | Full Client 360 payload |
+| PATCH | `/api/clients/[id]` | Super admin (any fields) or standard user (`status` only, role-based) | Update client; pipeline stage changes log a system activity |
+| PUT | `/api/clients/[id]/details` | Super admin | Update name, company, email, phone, lead source, `roleInCompany`, `employeeCount`, `expectations`, `importantDates`. Uses `requireSuperAdminFromRequest` (session cookie or Bearer token) |
 | PUT | `/api/clients/[id]/deal` | Super admin or assignment role | Deal value, gross profit, equity |
 | PUT | `/api/clients/[id]/strategy` | Super admin or assignment role | `strategyText` |
 | POST | `/api/clients/[id]/tasks` | Super admin or assignment role | Create task |
 | POST | `/api/clients/[id]/notes` | Super admin or client access | Add interaction (note) |
+| GET | `/api/clients/[id]/employees` | Authenticated | Company hierarchy: `employeeCount`, colleagues with same `company` |
+| POST | `/api/clients/[id]/employees` | Authenticated | Create employee as new lead from employer client. Body: `fullName`, `roleInCompany` |
 | POST | `/api/clients/[id]/assignments` | Super admin | Assign user to client |
 | DELETE | `/api/clients/[id]/assignments/[assignmentId]` | Super admin | Remove assignment |
 | POST | `/api/clients/[id]/documents` | Super admin or client access | Upload document |
@@ -504,6 +571,12 @@ Grouped by client for dashboard widgets. `isUnread` = no row in `activity_read_s
   "email": "...",
   "phone": "...",
   "lead_source": "...",
+  "roleInCompany": "CEO",
+  "employeeCount": 120,
+  "expectations": "Quarterly strategy reviews",
+  "importantDates": [
+    { "label": "Contract renewal", "date": "2026-12-01" }
+  ],
   "deal_value": 50000,
   "gross_profit": 20000,
   "equity": 0,
@@ -513,6 +586,39 @@ Grouped by client for dashboard widgets. `isUnread` = no row in `activity_read_s
   "documents": [{ "id": "...", "fileName": "...", "downloadUrl": "...", "uploadedAt": "..." }],
   "tasks": [{ "id": "...", "title": "...", "status": "PENDING", "dueDate": null, "assignee": null }],
   "activityLog": [{ "id": "...", "type": "NOTE", "content": "...", "date": "...", "source": "manual", "userName": "..." }]
+}
+```
+
+### Company hierarchy response (`GET /api/clients/[id]/employees`)
+
+```json
+{
+  "client_id": "...",
+  "company": "Acme Inc.",
+  "employeeCount": 120,
+  "colleagues": [
+    {
+      "client_id": "...",
+      "name": "Jane Smith",
+      "roleInCompany": "Operations Manager",
+      "status": "NEW_LEAD"
+    }
+  ]
+}
+```
+
+### Employee lead creation response (`POST /api/clients/[id]/employees`)
+
+```json
+{
+  "client_id": "...",
+  "name": "Jane Smith",
+  "company": "Acme Inc.",
+  "roleInCompany": "Operations Manager",
+  "status": "NEW_LEAD",
+  "employer_client_id": "...",
+  "assignment_id": "...",
+  "createdAt": "..."
 }
 ```
 
@@ -569,7 +675,9 @@ Grouped by client for dashboard widgets. `isUnread` = no row in `activity_read_s
 
 **File:** `src/components/dashboard/StandardUserDashboardPage.tsx`
 
-**Header:** Logo (links home), welcome message, Sign Out
+**Header:** Logo (links home), welcome message, **Add Lead**, Sign Out
+
+**Modals:** `AddLeadModal` — simplified lead form (name, company, email, phone) → `POST /api/clients`
 
 **Widgets (2-column grid):**
 
@@ -609,7 +717,14 @@ Grouped by client for dashboard widgets. `isUnread` = no row in `activity_read_s
 
 **File:** `src/components/clients/Client360Page.tsx`
 
-**Header:** Logo, back to pipeline link, client name, pipeline stage badge/dropdown (super admin)
+**Header:** Logo, back to pipeline link, client name, pipeline stage control:
+
+| Role | UI control |
+|------|------------|
+| Super Admin | Dropdown — any stage, immediate `PATCH` |
+| Standard User | Read-only badge + **Move to Next Stage** button (when role permits) |
+
+**Pipeline advance modal:** `PipelineStageAdvanceModal` — confirmation message + non-interactive checklist reminders; **Confirm** calls `PATCH /api/clients/[id]`.
 
 **Layout:** Two columns
 
@@ -626,9 +741,10 @@ Deep link: `#activity-notes` opens Activity tab and scrolls into view.
 
 | Widget | Component | Who can edit |
 |--------|-----------|--------------|
-| Client Details | `ClientDetailsWidget` + `ClientDetailsEditModal` | Super admin |
+| Client Details | `ClientDetailsWidget` + `ClientDetailsEditModal` | Super admin — includes role, employee count, expectations, important dates |
 | Deal Info | `DealInfoWidget` | Super admin / relationship role |
 | Assigned Team | `AssignedTeamWidget` | Super admin manages assignments |
+| Company Hierarchy | `CompanyHierarchyWidget` | All authenticated — view colleagues, add employee leads |
 
 ---
 
@@ -651,6 +767,7 @@ Deep link: `#activity-notes` opens Activity tab and scrolls into view.
 | `MyTasksWidget` | `src/components/dashboard/MyTasksWidget.tsx` |
 | `CollapsibleActivityWidget` | `src/components/dashboard/CollapsibleActivityWidget.tsx` |
 | `PerformanceSnapshotWidget` | `src/components/dashboard/PerformanceSnapshotWidget.tsx` |
+| `AddLeadModal` | `src/components/dashboard/AddLeadModal.tsx` |
 
 ### Admin
 
@@ -677,14 +794,17 @@ Deep link: `#activity-notes` opens Activity tab and scrolls into view.
 | `ClientDetailsEditModal` | `src/components/clients/ClientDetailsEditModal.tsx` |
 | `DealInfoWidget` | `src/components/clients/DealInfoWidget.tsx` |
 | `AssignedTeamWidget` | `src/components/clients/AssignedTeamWidget.tsx` |
+| `CompanyHierarchyWidget` | `src/components/clients/CompanyHierarchyWidget.tsx` |
+| `PipelineStageAdvanceModal` | `src/components/clients/PipelineStageAdvanceModal.tsx` |
 
 ### Server-side libraries (`lib/`)
 
 | Module | Purpose |
 |--------|---------|
 | `prisma.ts` | Prisma client singleton |
-| `authHelpers.ts` | Auth guards, client access checks, system event logging |
+| `authHelpers.ts` | Auth guards, pipeline authorization, client access checks, system event logging |
 | `client360.ts` | Client 360 query includes + response builder |
+| `pipelinePermissions.ts` | Pipeline stage advance rules (shared by API + UI) |
 | `standardDashboard.ts` | Standard user dashboard data |
 | `superAdminDashboard.ts` | Super admin activity feed data |
 | `activityFeed.ts` | Grouped activity + mark-as-read |
@@ -709,9 +829,20 @@ Deep link: `#activity-notes` opens Activity tab and scrolls into view.
 
 ```
 /dashboard → view assigned clients, tasks, activity
+          → Add Lead → POST /api/clients (auto-assigned RELATIONSHIP)
           → click client → /clients/[id]
           → add note / update strategy / complete tasks
+          → Move to Next Stage (if role permits) → confirmation modal → PATCH status
           → expand activity group → POST /api/activity/mark-read
+```
+
+### Standard user — company hierarchy
+
+```
+/clients/[id] → Company Hierarchy widget
+             → view colleagues at same company
+             → Add Employee Lead → POST /api/clients/[id]/employees
+             → new lead created with shared company + RELATIONSHIP assignment
 ```
 
 ### Super admin workflow
@@ -762,7 +893,7 @@ npx tsx scripts/test-activity-apis.ts
 **Build (matches Vercel):**
 
 ```bash
-npm run build        # prisma generate && next build
+npm run build        # prisma generate && prisma migrate deploy && next build
 ```
 
 ---
@@ -771,7 +902,7 @@ npm run build        # prisma generate && next build
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│  [Logo]  Welcome back, {name}                    [Sign Out] │  Standard Dashboard
+│  [Logo]  Welcome back, {name}        [Add Lead] [Sign Out]  │  Standard Dashboard
 ├──────────────────────────┬──────────────────────────────────┤
 │  My Assigned Clients     │  My Open Tasks                     │
 ├──────────────────────────┼──────────────────────────────────┤
@@ -796,14 +927,23 @@ npm run build        # prisma generate && next build
 
 ┌─────────────────────────────────────────────────────────────┐
 │  [Logo]                              ← Back to list         │  Client 360
-│  {Client Name}  [Pipeline Stage ▼]                          │
+│  {Client Name}  [Stage badge ▼ or Move to Next Stage]       │
 ├──────────────────────────────┬──────────────────────────────┤
 │  WORKSPACE                   │  Client Details              │
 │  [Strategy & Tasks] [Activity]│  Deal Info                  │
 │  ...                         │  Assigned Team               │
+│                              │  Company Hierarchy           │
 └──────────────────────────────┴──────────────────────────────┘
 ```
 
 ---
 
 *For schema changes, always add a Prisma migration under `prisma/migrations/` and run `prisma migrate deploy` in each environment.*
+
+### Known limitations (future work)
+
+| Item | Notes |
+|------|-------|
+| Client details editing | Super admin only via `PUT /api/clients/[id]/details`; assigned standard users are read-only |
+| Client 360 access | `GET /api/clients/[id]` allows any authenticated user (not restricted to assignees) |
+| Pipeline checklist in modal | Display-only reminders; not persisted or validated server-side |

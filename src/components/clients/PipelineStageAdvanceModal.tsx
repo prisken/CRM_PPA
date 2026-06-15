@@ -28,8 +28,9 @@ export default function PipelineStageAdvanceModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
-      <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
+    <div className="fixed inset-0 z-50 overflow-y-auto bg-black/40 p-4">
+      <div className="flex min-h-full items-center justify-center">
+        <div className="w-full max-w-md rounded-xl bg-white p-4 shadow-xl sm:p-6">
         <h3 className="text-lg font-semibold text-gray-900">Move to Next Stage</h3>
         <p className="mt-2 text-sm text-gray-600">
           You are about to move this client from{' '}
@@ -56,7 +57,7 @@ export default function PipelineStageAdvanceModal({
 
         {error && <p className="mt-4 text-sm text-red-600">{error}</p>}
 
-        <div className="mt-6 flex justify-end gap-3">
+        <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
           <button
             type="button"
             onClick={onClose}
@@ -73,6 +74,7 @@ export default function PipelineStageAdvanceModal({
           >
             {isSubmitting ? 'Updating...' : 'Confirm'}
           </button>
+        </div>
         </div>
       </div>
     </div>
