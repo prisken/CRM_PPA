@@ -3,6 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
+import AddLeadModal from '@/components/dashboard/AddLeadModal';
 import CollapsibleActivityWidget from '@/components/dashboard/CollapsibleActivityWidget';
 import AuthRequiredMessage from '@/components/auth/AuthRequiredMessage';
 import MyClientsWidget from '@/components/dashboard/MyClientsWidget';
@@ -21,6 +22,7 @@ export default function StandardUserDashboardPage() {
   );
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [showAddLead, setShowAddLead] = useState(false);
 
   const loadDashboard = useCallback(async () => {
     setLoading(true);
@@ -131,13 +133,22 @@ export default function StandardUserDashboardPage() {
               <p className="mt-1 text-sm text-gray-500">Your personalized CRM dashboard</p>
             </div>
           </div>
-          <button
-            type="button"
-            onClick={handleSignOut}
-            className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-          >
-            Sign Out
-          </button>
+          <div className="flex gap-3">
+            <button
+              type="button"
+              onClick={() => setShowAddLead(true)}
+              className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+            >
+              Add Lead
+            </button>
+            <button
+              type="button"
+              onClick={handleSignOut}
+              className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+            >
+              Sign Out
+            </button>
+          </div>
         </div>
       </header>
 
@@ -157,6 +168,13 @@ export default function StandardUserDashboardPage() {
           />
         </div>
       </div>
+
+      {showAddLead && (
+        <AddLeadModal
+          onClose={() => setShowAddLead(false)}
+          onCreated={loadDashboard}
+        />
+      )}
     </main>
   );
 }

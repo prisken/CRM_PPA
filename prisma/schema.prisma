@@ -103,6 +103,10 @@ model Client {
   dealValue            Decimal?           @db.Decimal(12, 2) @map("deal_value")
   equity               Decimal?           @db.Decimal(12, 2)
   strategyText         String?            @db.Text @map("strategy_text")
+  roleInCompany        String?            @map("role_in_company")
+  employeeCount        Int?               @map("employee_count")
+  expectations         String?            @db.Text
+  importantDates       Json?              @default("[]") @db.JsonB @map("important_dates")
   status               ClientStatus       @default(NEW_LEAD)
   pendingNotifications Boolean            @default(false)
   createdAt            DateTime           @default(now())

@@ -4,11 +4,23 @@ import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import ClientDetailsWidget from '@/components/clients/ClientDetailsWidget';
 import AssignedTeamWidget from '@/components/clients/AssignedTeamWidget';
+import CompanyHierarchyWidget from '@/components/clients/CompanyHierarchyWidget';
 import DealInfoWidget from '@/components/clients/DealInfoWidget';
+import PipelineStageAdvanceModal from '@/components/clients/PipelineStageAdvanceModal';
 import WorkspacePanel from '@/components/clients/WorkspacePanel';
 import Logo from '@/components/Logo';
 import { useUserProfile } from '@/hooks/useUserProfile';
 import { formatClientStage, getStatusBadgeStyles, CLIENT_STAGES } from '@/lib/clientStages';
+import {
+  canUserAdvancePipelineStage,
+  getNextPipelineStage,
+  getPipelineAdvanceChecklist,
+} from '@/lib/pipelinePermissions';
+
+type ImportantDate = {
+  label: string;
+  date: string;
+};
 
 type Client360Data = {
   client_id: string;
@@ -18,6 +30,10 @@ type Client360Data = {
   email: string | null;
   phone: string | null;
   lead_source: string | null;
+  roleInCompany: string | null;
+  employeeCount: number | null;
+  expectations: string | null;
+  importantDates: ImportantDate[];
   deal_value: number;
   gross_profit: number;
   strategyText: string;
@@ -58,6 +74,7 @@ export default function Client360Page({ clientId }: { clientId: string }) {
   const [refreshKey, setRefreshKey] = useState(0);
   const [isUpdatingStage, setIsUpdatingStage] = useState(false);
   const [stageError, setStageError] = useState<string | null>(null);
+  const [isAdvanceModalOpen, setIsAdvanceModalOpen] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -133,9 +150,13 @@ export default function Client360Page({ clientId }: { clientId: string }) {
     setStageError(null);
 
     try {
+      const token = localStorage.getItem('token');
       const res = await fetch(`/api/clients/${clientId}`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
         credentials: 'same-origin',
         body: JSON.stringify({ status: newStatus }),
       });
@@ -147,12 +168,26 @@ export default function Client360Page({ clientId }: { clientId: string }) {
         );
       }
 
+      setIsAdvanceModalOpen(false);
       setRefreshKey((key) => key + 1);
     } catch (err) {
       setStageError(err instanceof Error ? err.message : 'Failed to update status');
     } finally {
       setIsUpdatingStage(false);
     }
+  }
+
+  async function handleConfirmAdvance() {
+    if (!client) {
+      return;
+    }
+
+    const nextStatus = getNextPipelineStage(client.status);
+    if (!nextStatus) {
+      return;
+    }
+
+    await handleStageChange(nextStatus);
   }
 
   const hasClientAccess = useMemo(() => {
@@ -168,6 +203,25 @@ export default function Client360Page({ clientId }: { clientId: string }) {
   }, [profile, client]);
 
   const isSuperAdmin = profile?.role === 'SUPER_ADMIN';
+  const isStandardUser = profile?.role === 'STANDARD_USER';
+  const userAssignmentRoles = useMemo(() => {
+    if (!profile || !client) {
+      return [];
+    }
+
+    return client.assignedUsers
+      .filter((user) => user.user_id === profile.id)
+      .map((user) => user.role);
+  }, [profile, client]);
+
+  const nextPipelineStage = client ? getNextPipelineStage(client.status) : null;
+  const canAdvancePipelineStage =
+    isStandardUser &&
+    client !== null &&
+    canUserAdvancePipelineStage(userAssignmentRoles, client.status);
+
+  const advanceChecklist =
+    client !== null ? getPipelineAdvanceChecklist(client.status) : [];
   const isRelationshipSpecialist = useMemo(() => {
     if (!profile || !client) {
       return false;
@@ -235,11 +289,26 @@ export default function Client360Page({ clientId }: { clientId: string }) {
                 ))}
               </select>
             ) : (
-              <span
-                className={`rounded-full px-3 py-1 text-xs font-semibold ${getStatusBadgeStyles(client.status)}`}
-              >
-                {formatClientStage(client.status)}
-              </span>
+              <>
+                <span
+                  className={`rounded-full px-3 py-1 text-xs font-semibold ${getStatusBadgeStyles(client.status)}`}
+                >
+                  {formatClientStage(client.status)}
+                </span>
+                {canAdvancePipelineStage && nextPipelineStage ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setStageError(null);
+                      setIsAdvanceModalOpen(true);
+                    }}
+                    disabled={isUpdatingStage}
+                    className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    Move to Next Stage
+                  </button>
+                ) : null}
+              </>
             )}
           </div>
 
@@ -283,6 +352,10 @@ export default function Client360Page({ clientId }: { clientId: string }) {
             email={client.email}
             phone={client.phone}
             leadSource={client.lead_source}
+            roleInCompany={client.roleInCompany}
+            employeeCount={client.employeeCount}
+            expectations={client.expectations}
+            importantDates={client.importantDates}
             canEdit={isSuperAdmin}
             onSaved={handleClientDetailsSaved}
           />
@@ -306,8 +379,31 @@ export default function Client360Page({ clientId }: { clientId: string }) {
             }
             onAssignmentsChange={handleAssignmentsChange}
           />
+          <CompanyHierarchyWidget
+            clientId={clientId}
+            refreshKey={refreshKey}
+            onEmployeeCreated={handleClientDetailsSaved}
+          />
         </aside>
       </div>
+
+      {client && nextPipelineStage ? (
+        <PipelineStageAdvanceModal
+          isOpen={isAdvanceModalOpen}
+          currentStatus={client.status}
+          nextStatus={nextPipelineStage}
+          checklist={advanceChecklist}
+          isSubmitting={isUpdatingStage}
+          error={stageError}
+          onClose={() => {
+            if (!isUpdatingStage) {
+              setIsAdvanceModalOpen(false);
+              setStageError(null);
+            }
+          }}
+          onConfirm={handleConfirmAdvance}
+        />
+      ) : null}
     </main>
   );
 }

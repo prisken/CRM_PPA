@@ -1,0 +1,80 @@
+'use client';
+
+import { formatClientStage } from '@/lib/clientStages';
+
+type PipelineStageAdvanceModalProps = {
+  isOpen: boolean;
+  currentStatus: string;
+  nextStatus: string;
+  checklist: string[];
+  isSubmitting: boolean;
+  error: string | null;
+  onClose: () => void;
+  onConfirm: () => void;
+};
+
+export default function PipelineStageAdvanceModal({
+  isOpen,
+  currentStatus,
+  nextStatus,
+  checklist,
+  isSubmitting,
+  error,
+  onClose,
+  onConfirm,
+}: PipelineStageAdvanceModalProps) {
+  if (!isOpen) {
+    return null;
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+      <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
+        <h3 className="text-lg font-semibold text-gray-900">Move to Next Stage</h3>
+        <p className="mt-2 text-sm text-gray-600">
+          You are about to move this client from{' '}
+          <span className="font-medium">{formatClientStage(currentStatus)}</span> to{' '}
+          <span className="font-medium">{formatClientStage(nextStatus)}</span>.
+        </p>
+
+        <div className="mt-5">
+          <p className="text-sm font-medium text-gray-700">Before you continue, confirm:</p>
+          <ul className="mt-3 space-y-2">
+            {checklist.map((item) => (
+              <li key={item} className="flex items-start gap-2 text-sm text-gray-700">
+                <span
+                  className="mt-0.5 inline-flex h-4 w-4 shrink-0 items-center justify-center rounded border border-gray-300 bg-gray-50 text-xs text-gray-400"
+                  aria-hidden="true"
+                >
+                  ☐
+                </span>
+                <span>{item}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+
+        {error && <p className="mt-4 text-sm text-red-600">{error}</p>}
+
+        <div className="mt-6 flex justify-end gap-3">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={isSubmitting}
+            className="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-60"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            disabled={isSubmitting}
+            className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {isSubmitting ? 'Updating...' : 'Confirm'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}

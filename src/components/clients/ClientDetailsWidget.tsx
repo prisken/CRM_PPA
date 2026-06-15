@@ -3,6 +3,11 @@
 import { useState } from 'react';
 import ClientDetailsEditModal from '@/components/clients/ClientDetailsEditModal';
 
+export type ImportantDate = {
+  label: string;
+  date: string;
+};
+
 type ClientDetailsWidgetProps = {
   clientId: string;
   name: string;
@@ -10,6 +15,10 @@ type ClientDetailsWidgetProps = {
   email: string | null;
   phone: string | null;
   leadSource: string | null;
+  roleInCompany: string | null;
+  employeeCount: number | null;
+  expectations: string | null;
+  importantDates: ImportantDate[];
   canEdit?: boolean;
   onSaved?: () => void;
 };
@@ -25,6 +34,32 @@ function DetailField({ label, value }: { label: string; value: string }) {
   );
 }
 
+function formatImportantDate(date: string) {
+  if (!date) {
+    return '—';
+  }
+
+  const parsed = new Date(date);
+  if (Number.isNaN(parsed.getTime())) {
+    return date;
+  }
+
+  return parsed.toLocaleDateString(undefined, {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+  });
+}
+
+function normalizeImportantDates(dates: ImportantDate[]) {
+  return dates.filter(
+    (entry) =>
+      typeof entry === 'object' &&
+      entry !== null &&
+      (entry.label?.trim() || entry.date?.trim())
+  );
+}
+
 export default function ClientDetailsWidget({
   clientId,
   name,
@@ -32,10 +67,15 @@ export default function ClientDetailsWidget({
   email,
   phone,
   leadSource,
+  roleInCompany,
+  employeeCount,
+  expectations,
+  importantDates,
   canEdit = false,
   onSaved,
 }: ClientDetailsWidgetProps) {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const displayDates = normalizeImportantDates(importantDates);
 
   return (
     <>
@@ -59,7 +99,38 @@ export default function ClientDetailsWidget({
           <DetailField label="Email" value={email ?? '—'} />
           <DetailField label="Phone" value={phone ?? '—'} />
           <DetailField label="Lead Source" value={leadSource ?? '—'} />
+          <DetailField label="Role in Company" value={roleInCompany ?? '—'} />
+          <DetailField
+            label="Employee Count"
+            value={employeeCount !== null ? String(employeeCount) : '—'}
+          />
         </dl>
+
+        <div className="mt-4">
+          <dt className="text-xs font-medium uppercase tracking-wide text-gray-500">
+            Expectations
+          </dt>
+          <dd className="mt-1 whitespace-pre-wrap text-sm text-gray-900">
+            {expectations?.trim() ? expectations : '—'}
+          </dd>
+        </div>
+
+        <div className="mt-4">
+          <dt className="text-xs font-medium uppercase tracking-wide text-gray-500">
+            Important Dates
+          </dt>
+          {displayDates.length === 0 ? (
+            <dd className="mt-1 text-sm text-gray-900">—</dd>
+          ) : (
+            <ul className="mt-2 space-y-1">
+              {displayDates.map((entry, index) => (
+                <li key={`${entry.label}-${entry.date}-${index}`} className="text-sm text-gray-900">
+                  {entry.label?.trim() || 'Untitled'}: {formatImportantDate(entry.date)}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
       </div>
 
       <ClientDetailsEditModal
@@ -69,6 +140,10 @@ export default function ClientDetailsWidget({
         initialEmail={email}
         initialPhone={phone}
         initialLeadSource={leadSource}
+        initialRoleInCompany={roleInCompany}
+        initialEmployeeCount={employeeCount}
+        initialExpectations={expectations}
+        initialImportantDates={importantDates}
         isOpen={isEditModalOpen}
         onClose={() => setIsEditModalOpen(false)}
         onSaved={() => onSaved?.()}

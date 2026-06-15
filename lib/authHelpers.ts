@@ -1,5 +1,8 @@
-import { AssignmentRole, UserRole } from '@prisma/client';
+import { AssignmentRole, ClientStatus, UserRole } from '@prisma/client';
 import { NextResponse } from 'next/server';
+import {
+  canAssignmentRoleChangePipelineStatus,
+} from '@/lib/pipelinePermissions';
 import { prisma } from '@/lib/prisma';
 import { createSupabaseServerClient } from '@/lib/supabaseServer';
 
@@ -198,4 +201,58 @@ export async function logClientSystemEvent(
       userId: userId ?? null,
     },
   });
+}
+
+export { canAssignmentRoleChangePipelineStatus } from '@/lib/pipelinePermissions';
+
+export async function authorizePipelineStatusChange(
+  userId: string,
+  userRole: UserRole,
+  clientId: string,
+  currentStatus: ClientStatus
+) {
+  if (userRole === UserRole.SUPER_ADMIN) {
+    return { authorized: true as const };
+  }
+
+  if (userRole !== UserRole.STANDARD_USER) {
+    return {
+      authorized: false as const,
+      error: NextResponse.json({ error: 'Forbidden' }, { status: 403 }),
+    };
+  }
+
+  const assignments = await prisma.clientAssignment.findMany({
+    where: { clientId, userId },
+    select: { role: true },
+  });
+
+  if (assignments.length === 0) {
+    return {
+      authorized: false as const,
+      error: NextResponse.json(
+        { error: 'You are not assigned to this client' },
+        { status: 403 }
+      ),
+    };
+  }
+
+  const canChange = assignments.some((assignment) =>
+    canAssignmentRoleChangePipelineStatus(assignment.role, currentStatus)
+  );
+
+  if (!canChange) {
+    return {
+      authorized: false as const,
+      error: NextResponse.json(
+        {
+          error:
+            'Your assignment role does not allow changing the pipeline stage from the current status',
+        },
+        { status: 403 }
+      ),
+    };
+  }
+
+  return { authorized: true as const };
 }

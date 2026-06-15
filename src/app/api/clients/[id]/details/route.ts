@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import {
   getClientOr404,
   logClientSystemEvent,
-  requireSuperAdmin,
+  requireSuperAdminFromRequest,
 } from '@/lib/authHelpers';
 import { prisma } from '@/lib/prisma';
 
@@ -10,22 +10,51 @@ export async function PUT(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const { id: clientId } = await params;
-  const auth = await requireSuperAdmin();
-  if (auth.error) {
-    return auth.error;
-  }
+  try {
+    const { id: clientId } = await params;
+    const auth = await requireSuperAdminFromRequest(request);
+    if (auth.error) {
+      return auth.error;
+    }
 
-  const clientCheck = await getClientOr404(clientId);
-  if (clientCheck.error) {
-    return clientCheck.error;
-  }
+    const clientCheck = await getClientOr404(clientId);
+    if (clientCheck.error) {
+      return clientCheck.error;
+    }
 
-  const body = await request.json();
-  const { name, email, phone, lead_source, company, contactInfo } = body;
+    const body = await request.json();
+  const {
+    name,
+    email,
+    phone,
+    lead_source,
+    company,
+    contactInfo,
+    roleInCompany,
+    employeeCount,
+    expectations,
+    importantDates,
+  } = body;
 
   if (name !== undefined && !name?.trim()) {
     return NextResponse.json({ error: 'Name cannot be empty' }, { status: 400 });
+  }
+
+  if (employeeCount !== undefined && employeeCount !== null) {
+    const parsedCount = Number(employeeCount);
+    if (!Number.isInteger(parsedCount) || parsedCount < 0) {
+      return NextResponse.json(
+        { error: 'employeeCount must be a non-negative integer' },
+        { status: 400 }
+      );
+    }
+  }
+
+  if (importantDates !== undefined && importantDates !== null && !Array.isArray(importantDates)) {
+    return NextResponse.json(
+      { error: 'importantDates must be an array' },
+      { status: 400 }
+    );
   }
 
   const client = await prisma.client.update({
@@ -37,6 +66,19 @@ export async function PUT(
       ...(lead_source !== undefined && { leadSource: lead_source?.trim() || null }),
       ...(company !== undefined && { company: company?.trim() || null }),
       ...(contactInfo !== undefined && { contactInfo: contactInfo?.trim() || null }),
+      ...(roleInCompany !== undefined && {
+        roleInCompany: roleInCompany?.trim() || null,
+      }),
+      ...(employeeCount !== undefined && {
+        employeeCount:
+          employeeCount === null ? null : Number(employeeCount),
+      }),
+      ...(expectations !== undefined && {
+        expectations: expectations?.trim() || null,
+      }),
+      ...(importantDates !== undefined && {
+        importantDates: importantDates ?? [],
+      }),
     },
     select: {
       id: true,
@@ -46,6 +88,10 @@ export async function PUT(
       leadSource: true,
       company: true,
       contactInfo: true,
+      roleInCompany: true,
+      employeeCount: true,
+      expectations: true,
+      importantDates: true,
       lastModified: true,
     },
   });
@@ -64,6 +110,17 @@ export async function PUT(
     lead_source: client.leadSource,
     company: client.company,
     contactInfo: client.contactInfo,
+    roleInCompany: client.roleInCompany,
+    employeeCount: client.employeeCount,
+    expectations: client.expectations,
+    importantDates: client.importantDates,
     lastModified: client.lastModified.toISOString(),
   });
+  } catch (error) {
+    console.error('Failed to update client details:', error);
+    return NextResponse.json(
+      { error: 'Failed to update client details' },
+      { status: 500 }
+    );
+  }
 }

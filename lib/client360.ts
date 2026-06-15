@@ -64,6 +64,26 @@ function resolveStrategyText(
   return latestStrategy.description;
 }
 
+function normalizeImportantDates(value: Client['importantDates']) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .filter((entry): entry is { label: string; date: string } => {
+      return (
+        typeof entry === 'object' &&
+        entry !== null &&
+        'label' in entry &&
+        'date' in entry
+      );
+    })
+    .map((entry) => ({
+      label: String(entry.label ?? ''),
+      date: String(entry.date ?? ''),
+    }));
+}
+
 function buildActivityLog(client: ClientWithRelations): ActivityLogEntry[] {
   const manualEntries: ActivityLogEntry[] = client.interactions.map((interaction) => ({
     id: interaction.id,
@@ -129,6 +149,10 @@ export function buildClient360Response(client: ClientWithRelations) {
     email: client.email,
     phone: client.phone,
     lead_source: client.leadSource,
+    roleInCompany: client.roleInCompany,
+    employeeCount: client.employeeCount,
+    expectations: client.expectations,
+    importantDates: normalizeImportantDates(client.importantDates),
     deal_value: resolveDealValue(client.dealValue, client.deals),
     gross_profit: resolveGrossProfit(client.deals),
     equity: client.equity !== null && client.equity !== undefined ? Number(client.equity) : 0,
