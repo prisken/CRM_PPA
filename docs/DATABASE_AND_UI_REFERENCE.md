@@ -1,20 +1,20 @@
 # Profit Pulse Ally CRM — Database & UI Reference
 
-**Last updated:** June 15, 2026 (post mobile + RELATIONSHIP details edit)  
+**Last updated:** June 16, 2026 (post commission engine + returnables)  
 **Repository:** [CRM_PPA](https://github.com/prisken/CRM_PPA)  
 **Deployment branch:** `deploy`  
 **Production URL:** `https://crm-ppa-nine.vercel.app`
 
 This document describes the PostgreSQL database schema, API surface, and frontend UI structure for handoff to developers, designers, and stakeholders.
 
-### Shipped features (as of June 15, 2026)
+### Shipped features (as of June 16, 2026)
 
 | Area | Status |
 |------|--------|
 | Standard & super admin dashboards | ✅ KPIs, funnel, revenue, leaderboards, master pipeline |
 | Recent Activity feed (grouped, unread, mark-read) | ✅ Standard + super admin dashboards |
 | Branding (logo, favicon) | ✅ Login, signup, dashboards, Client 360 |
-| Client 360 workspace | ✅ Strategy, tasks, notes, documents, deal info, team |
+| Client 360 workspace | ✅ Strategy, tasks, interactions, documents, multi-deal, team |
 | Client details expansion | ✅ Role in company, employee count, expectations, important dates |
 | Company hierarchy | ✅ Colleagues by company, add employee as lead |
 | Role-based pipeline advances | ✅ Standard users; super admin full control |
@@ -22,6 +22,11 @@ This document describes the PostgreSQL database schema, API surface, and fronten
 | RELATIONSHIP client details edit | ✅ API + Edit button on Client 360 |
 | Mobile-responsive UI | ✅ Dashboards, Client 360, pipeline, modals, workspace tabs |
 | Auth UX | ✅ Stale-session sign-out before login redirect |
+| **Commission engine** | ✅ Shared-role pools, `totalCommission`, secured commission |
+| **Team occupancy limits** | ✅ Max 2 Doctors, 1 Relationship, 1 Account Service per client |
+| **Multi-deal system** | ✅ CRUD per client; committed/potential value aggregation |
+| **Commission returnables** | ✅ Doctor liabilities on WON deals; statements + reconciliation |
+| **Role-based dashboard widgets** | ✅ Secured commission + returnables by assignment role (all users) |
 | Vercel deploy | ✅ `prisma generate` + `migrate deploy` on build |
 
 ---
@@ -88,7 +93,7 @@ docs/             # Documentation (this file)
 | Path | Unauthenticated | Authenticated |
 |------|-----------------|---------------|
 | `/` | → `/login` | → `/dashboard` |
-| `/dashboard`, `/admin`, `/clients/*` | → `/login` | Allowed |
+| `/dashboard`, `/my-statements`, `/admin/*`, `/clients/*` | → `/login` | Allowed |
 | `/login`, `/signup` | Allowed | → `/dashboard` |
 
 ### User roles
@@ -102,9 +107,9 @@ docs/             # Documentation (this file)
 
 | Role | Enum value | Primary responsibilities |
 |------|------------|--------------------------|
-| Relationship | `RELATIONSHIP` | Client details, deal info, notes, early pipeline stages, lead creation |
-| Doctor | `DOCTOR` | Strategy text, tasks, notes, strategy-session pipeline stage |
-| Account Service | `ACCOUNT_SERVICE` | Notes, active-client pipeline stage |
+| Relationship | `RELATIONSHIP` | Client details, interactions, early pipeline stages, lead creation |
+| Doctor | `DOCTOR` | Strategy text, tasks, deals, interactions, strategy-session pipeline stage |
+| Account Service | `ACCOUNT_SERVICE` | Interactions, active-client pipeline stage |
 
 Super Admins bypass assignment checks on most Client 360 APIs.
 
@@ -113,9 +118,10 @@ Super Admins bypass assignment checks on most Client 360 APIs.
 | Action | Super Admin | RELATIONSHIP | DOCTOR | ACCOUNT_SERVICE |
 |--------|-------------|--------------|--------|-----------------|
 | Edit client details (`PUT .../details`) | ✅ | ✅ | ❌ | ❌ |
-| Edit deal (`PUT .../deal`) | ✅ | ✅ | ❌ | ❌ |
+| Manage deals (`/deals` CRUD) | ✅ | ❌ | ✅ | ❌ |
 | Edit strategy / create tasks | ✅ | ❌ | ✅ | ❌ |
-| Post notes | ✅ | ✅ (if assigned) | ✅ | ✅ |
+| Post interactions (notes, calls, etc.) | ✅ | ✅ (if assigned) | ✅ | ✅ |
+| Edit/delete own interactions | ✅ | ✅ (author) | ✅ (author) | ✅ (author) |
 | Upload documents | ✅ | ✅ (if assigned) | ✅ | ✅ |
 | Delete documents | ✅ | ❌ | ❌ | ❌ |
 | Advance pipeline stage | ✅ (any stage) | Early stages | Strategy session | Active client |
@@ -160,8 +166,8 @@ Standard users advance one stage at a time via **Move to Next Stage** + confirma
 
 | Mode | How it works | Used by |
 |------|--------------|---------|
-| Session cookie | Supabase session via `getAuthenticatedUser()` | Most Client 360 sub-routes (notes, strategy, tasks, deal, assignments) |
-| Bearer or session | JWT in `Authorization` header **or** session via `getAuthenticatedUserFromRequest()` | Dashboard APIs, `PUT .../details`, employees endpoints, `POST /api/clients` |
+| Session cookie | Supabase session via `getAuthenticatedUser()` | Most Client 360 sub-routes (interactions, strategy, tasks, deals, assignments) |
+| Bearer or session | JWT in `Authorization` header **or** session via `getAuthenticatedUserFromRequest()` | Dashboard APIs, `PUT .../details`, employees endpoints, `POST /api/clients`, commission returnable APIs |
 
 **Note:** Client-side fetches that only send Bearer tokens will fail on session-only routes unless cookies are also sent (`credentials: 'same-origin'`).
 
@@ -179,7 +185,8 @@ Standard users advance one stage at a time via **Move to Next Stage** + confirma
 2. **Clients & pipeline** — `Client`, `Deal`
 3. **Client 360 workspace** — `Task`, `ClientDocument`, `Strategy`, `Interaction`, `ClientActivityLog`
 4. **Activity & notifications** — `ActivityReadStatus`, `Notification`
-5. **Legacy strategy docs** — `Strategy`, `Document` (strategy-linked; Client 360 also uses `Client.strategyText`)
+5. **Commission & liabilities** — `CommissionReturnable`
+6. **Legacy strategy docs** — `Strategy`, `Document` (strategy-linked; Client 360 also uses `Client.strategyText`)
 
 ---
 
@@ -222,7 +229,27 @@ Standard users advance one stage at a time via **Move to Next Stage** + confirma
 | `role` | UserRole | `SUPER_ADMIN` or `STANDARD_USER` |
 | `createdAt`, `updatedAt` | TIMESTAMP | Audit |
 
-**Relations:** assignments, interactions, tasks (assignee), activity logs, read statuses, notifications (sent/received), strategies (author).
+**Relations:** assignments, interactions, tasks (assignee), activity logs, read statuses, notifications (sent/received), strategies (author), **commission returnables**.
+
+---
+
+### `CommissionReturnable` (table: `CommissionReturnable`)
+
+Doctor liability records generated when a deal transitions to `WON`.
+
+| Column | Type | Notes |
+|--------|------|-------|
+| `id` | TEXT PK | |
+| `amount` | DECIMAL(10,2) | Returnable amount owed by the doctor |
+| `status` | TEXT | `"UNPAID"` (default) or `"PAID"` |
+| `period` | TIMESTAMP | First day of the month the liability was generated |
+| `userId` | TEXT FK → User | Doctor who owes the returnable |
+| `dealId` | TEXT FK → Deal | Source WON deal |
+| `createdAt`, `updatedAt` | TIMESTAMP | |
+
+**Generation trigger:** When a deal's status changes to `WON` (via `PUT .../deals/[dealId]`) or is created as `WON` (via `POST .../deals`), one record is created per `DOCTOR` assignment on the client. Idempotent — skips if records already exist for that deal.
+
+**Amount formula:** `(deal.totalCommission / doctorCount) × (1 - COMMISSION_RATE_POOLS.DOCTOR)`.
 
 ---
 
@@ -236,7 +263,7 @@ Standard users advance one stage at a time via **Move to Next Stage** + confirma
 | `contactInfo` | TEXT | Legacy / general contact |
 | `email`, `phone` | TEXT | Contact fields |
 | `lead_source` | TEXT | e.g. referral, website |
-| `deal_value` | DECIMAL(12,2) | Client-level deal value (overrides sum of deals when set) |
+| `deal_value` | DECIMAL(12,2) | Legacy client-level deal value (Client 360 uses aggregated deals) |
 | `equity` | DECIMAL(12,2) | Equity stake |
 | `strategy_text` | TEXT | Free-form strategy on Client 360 |
 | `role_in_company` | TEXT | Contact's role/title at their company |
@@ -294,6 +321,8 @@ Financial deal records linked to a client.
 | `status` | DealStatus | |
 | `clientId` | TEXT FK → Client | |
 | `createdAt`, `updatedAt` | TIMESTAMP | |
+
+**Relations:** client, **commission returnables**.
 
 ---
 
@@ -396,6 +425,8 @@ erDiagram
     User ||--o{ ClientActivityLog : "authors"
     User ||--o{ ActivityReadStatus : "reads"
     User ||--o{ Notification : "sends/receives"
+    User ||--o{ CommissionReturnable : "owes"
+    Deal ||--o{ CommissionReturnable : "generates"
     Strategy ||--o{ Document : "has"
     User ||--o{ Strategy : "authors"
 ```
@@ -413,6 +444,8 @@ erDiagram
 | `20260615060000_add_user_password_hash` | `password_hash` on User |
 | `20260615070000_add_activity_read_status` | `activity_read_status` for dashboard unread tracking |
 | `20260615024217_add_client_360_fields` | `role_in_company`, `employee_count`, `expectations`, `important_dates` on Client |
+| `20260615120000_rename_gross_profit_to_total_commission` | Renamed `Deal.grossProfit` → `Deal.totalCommission` |
+| `20260616004617_add_commission_returnable_model` | `CommissionReturnable` table + relations on User and Deal |
 
 **Deploy note:** `package.json` runs `prisma generate` on `postinstall` and `prisma generate && prisma migrate deploy && next build` on production build so Vercel applies migrations and has an up-to-date Prisma client.
 
@@ -420,28 +453,85 @@ erDiagram
 
 ## 8. Business Rules
 
-### Commission rates (standard user dashboard)
+### Commission pools (`lib/constants.ts`)
 
-Applied to **total commission** by assignment role (see `lib/constants.ts` — `COMMISSION_RATE_POOLS`):
+Total commission on each deal is split across role pools and company overhead:
 
-| Assignment role | Pool rate |
-|-----------------|-----------|
+| Assignment role | Pool rate (`COMMISSION_RATE_POOLS`) |
+|-----------------|-------------------------------------|
 | Doctor (`DOCTOR`) | 60% |
 | Relationship (`RELATIONSHIP`) | 10% |
 | Account Service (`ACCOUNT_SERVICE`) | 10% |
 
 Company overhead: 20% (`COMPANY_OVERHEAD_RATE`).
 
-`mySecuredCommission` on the standard dashboard = sum of each WON deal's `totalCommission × individualShare`, where `individualShare = COMMISSION_RATE_POOLS[role] / roleOccupancy` for every client assignment the user holds.
+Pools + overhead = 100%.
 
-### Deal value resolution
+### Shared-role commission calculation (`lib/commissionCalculations.ts`)
 
-1. If `Client.deal_value` is set → use it.
-2. Else → sum of related `Deal.dealValue`.
+When multiple users share a role on a client, the pool is divided evenly:
 
-### Gross profit resolution
+```
+individualShare = COMMISSION_RATE_POOLS[role] / roleOccupancy
+```
 
-Uses the **first deal** (by `createdAt`) gross profit, or `0` if none.
+**Secured commission** (dashboard metric `mySecuredCommission`):
+
+```
+For each ClientAssignment the user holds:
+  For each WON deal on that client:
+    earnings += deal.totalCommission × individualShare
+```
+
+**Client 360 personal share** (displayed on `DealInfoWidget`):
+
+```
+For each role the user holds on the client:
+  share += COMMISSION_RATE_POOLS[role] / roleOccupancy
+```
+
+Example: sole Doctor on a client → 60% share. Two Doctors → 30% each.
+
+### Team occupancy limits (`ROLE_OCCUPANCY_LIMITS`)
+
+| Role | Max per client |
+|------|----------------|
+| `DOCTOR` | 2 |
+| `RELATIONSHIP` | 1 |
+| `ACCOUNT_SERVICE` | 1 |
+
+Enforced in `AssignedTeamWidget` (UI) and `POST /api/clients/[id]/assignments` (API). Error message format: *"Error: A client can have a maximum of N {role label}."*
+
+### Commission returnables
+
+When a deal becomes `WON`, each assigned Doctor receives a liability:
+
+```
+returnableAmount = (deal.totalCommission / doctorCount) × (1 - COMMISSION_RATE_POOLS.DOCTOR)
+```
+
+- `period` = first day of the current month at generation time
+- `status` starts as `UNPAID`; doctors mark as `PAID` via statements page
+- Creation is idempotent (no duplicates per deal)
+
+**Recalculate:** Run `npx tsx scripts/recalculate-commission-returnables.ts` to fix historical amounts via `backfillCommissionReturnablesForWonDeals()` in `lib/commissionReturnables.ts`.
+
+### Deal value aggregation (`lib/dealCalculations.ts`)
+
+| Metric | Calculation |
+|--------|-------------|
+| **Committed Value** | Sum of `dealValue` where `status = WON` |
+| **Potential Value** | Sum of `dealValue` where `status = PROPOSED` |
+
+Client 360 displays `committedValue` and `potentialValue` on `DealInfoWidget`.
+
+### Company overhead earnings (admin KPI)
+
+```
+companyOverheadEarnings = Σ (deal.totalCommission × COMPANY_OVERHEAD_RATE) for all WON deals
+```
+
+Returned by `GET /api/admin/dashboard-kpis` and displayed in `CompanyEarningsWidget`.
 
 ### Activity feed
 
@@ -496,9 +586,18 @@ Edited via `PUT /api/clients/[id]/details` by super admins or `RELATIONSHIP` ass
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
-| GET | `/api/dashboard/standard` | Standard user (Bearer or session) | Assigned clients, open tasks, grouped recent activity, performance metrics |
+| GET | `/api/dashboard/standard` | Any authenticated user (Bearer or session) | Assigned clients, open tasks, grouped recent activity, performance metrics |
 | GET | `/api/dashboard/superadmin` | Super admin (Bearer or session) | System-wide grouped recent activity (last ~100 items) |
+| GET | `/api/me/assignments` | Any authenticated user (Bearer or session) | User's client assignments; returns `roles`, `hasAnyAssignment`, `hasDoctorRole` |
 | POST | `/api/activity/mark-read` | Bearer or session | Body: `{ activityLogIds: string[] }` — upsert read status |
+
+### Commission returnables
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| GET | `/api/me/commission-returnable` | Any authenticated user (Bearer or session) | User's returnables. Query: `?status=UNPAID\|PAID`, `?period=YYYY-MM` |
+| PATCH | `/api/commission-returnable/[id]` | Owner only (Bearer or session) | Mark returnable as `PAID` |
+| GET | `/api/admin/all-commission-returnable` | Super admin (session or Bearer) | All returnables with user + deal + client data. Same query filters |
 
 ### Tasks
 
@@ -514,13 +613,20 @@ Edited via `PUT /api/clients/[id]/details` by super admins or `RELATIONSHIP` ass
 | GET | `/api/clients/[id]` | Session | Full Client 360 payload (**any authenticated user**) |
 | PATCH | `/api/clients/[id]` | Session | Super admin: any field; standard user: `status` only (role-based). Stage changes log system activity |
 | PUT | `/api/clients/[id]/details` | Super admin or `RELATIONSHIP` assignee (Bearer or session) | Name, company, email, phone, lead source, `roleInCompany`, `employeeCount`, `expectations`, `importantDates` |
-| PUT | `/api/clients/[id]/deal` | Super admin or `RELATIONSHIP` assignment (session) | Deal value + gross profit on primary `Deal` |
+| GET | `/api/clients/[id]/deals` | Super admin or `DOCTOR` assignment (session) | List all deals for client |
+| POST | `/api/clients/[id]/deals` | Super admin or `DOCTOR` assignment (session) | Create deal. Body: `name`, `dealValue`, `totalCommission`, `status`. Creates returnables if status is `WON` |
+| PUT | `/api/clients/[id]/deals/[dealId]` | Super admin or `DOCTOR` assignment (session) | Update deal. Triggers returnable generation on transition to `WON` |
+| DELETE | `/api/clients/[id]/deals/[dealId]` | Super admin or `DOCTOR` assignment (session) | Delete deal |
 | PUT | `/api/clients/[id]/strategy` | Super admin or `DOCTOR` assignment (session) | `strategyText` |
 | POST | `/api/clients/[id]/tasks` | Super admin or `DOCTOR` assignment (session) | Create task |
-| POST | `/api/clients/[id]/notes` | Super admin or any assignment (session) | Add interaction (note) |
+| PUT | `/api/clients/[id]/tasks/[taskId]` | Super admin or `DOCTOR` assignment (session) | Update task |
+| DELETE | `/api/clients/[id]/tasks/[taskId]` | Super admin or `DOCTOR` assignment (session) | Delete task |
+| POST | `/api/clients/[id]/interactions` | Super admin or any assignment (session) | Add interaction (note, call, email, meeting). Body: `content`, `type` |
+| PUT | `/api/clients/[id]/interactions/[interactionId]` | Author or super admin (session) | Edit interaction |
+| DELETE | `/api/clients/[id]/interactions/[interactionId]` | Author or super admin (session) | Delete interaction |
 | GET | `/api/clients/[id]/employees` | Bearer or session | Company hierarchy: `employeeCount`, colleagues with same `company` |
 | POST | `/api/clients/[id]/employees` | Bearer or session | Create employee as new lead. Body: `fullName`, `roleInCompany`. Auto-assigns creator as `RELATIONSHIP` |
-| POST | `/api/clients/[id]/assignments` | Super admin (session) | Assign user to client |
+| POST | `/api/clients/[id]/assignments` | Super admin (session) | Assign user to client. Enforces `ROLE_OCCUPANCY_LIMITS` |
 | DELETE | `/api/clients/[id]/assignments/[assignmentId]` | Super admin (session) | Remove assignment |
 | POST | `/api/clients/[id]/documents` | Super admin or any assignment (session) | Upload document (Supabase Storage, 10MB, MIME whitelist) |
 | DELETE | `/api/clients/[id]/documents/[documentId]` | Super admin (session) | Delete document |
@@ -529,7 +635,8 @@ Edited via `PUT /api/clients/[id]/details` by super admins or `RELATIONSHIP` ass
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
-| GET | `/api/admin/dashboard-kpis` | Super admin | KPI summary |
+| GET | `/api/admin/dashboard-kpis` | Super admin | KPI summary incl. `companyOverheadEarnings` |
+| GET | `/api/admin/all-commission-returnable` | Super admin | All commission returnables (see above) |
 | GET | `/api/admin/funnel-data` | Super admin | Conversion funnel chart data |
 | GET | `/api/admin/revenue-tracker` | Super admin | Revenue over time; requires `?groupBy=month\|quarter\|year` |
 | GET | `/api/admin/leaderboards` | Super admin | Commission & deals leaderboards |
@@ -620,15 +727,51 @@ Edited via `PUT /api/clients/[id]/details` by super admins or `RELATIONSHIP` ass
   "importantDates": [
     { "label": "Contract renewal", "date": "2026-12-01" }
   ],
-  "deal_value": 50000,
-  "total_commission": 20000,
+  "committedValue": 1000000,
+  "potentialValue": 50000,
   "equity": 0,
   "status": "ACTIVE_CLIENT",
   "strategyText": "...",
-  "assignedUsers": [{ "assignment_id": "...", "user_id": "...", "name": "...", "role": "RELATIONSHIP" }],
+  "deals": [
+    {
+      "id": "...",
+      "name": "TMP",
+      "dealValue": 1000000,
+      "totalCommission": 28000,
+      "status": "WON",
+      "createdAt": "...",
+      "updatedAt": "..."
+    }
+  ],
+  "assignedUsers": [{ "assignment_id": "...", "user_id": "...", "name": "...", "role": "DOCTOR" }],
   "documents": [{ "id": "...", "fileName": "...", "downloadUrl": "...", "uploadedAt": "..." }],
   "tasks": [{ "id": "...", "title": "...", "status": "PENDING", "dueDate": null, "assignee": null }],
-  "activityLog": [{ "id": "...", "type": "NOTE", "content": "...", "date": "...", "source": "manual", "userName": "..." }]
+  "activityLog": [{ "id": "...", "type": "NOTE", "content": "...", "date": "...", "source": "manual", "userId": "...", "userName": "..." }]
+}
+```
+
+### Commission returnable response shape
+
+```json
+{
+  "returnables": [
+    {
+      "id": "...",
+      "amount": 11200,
+      "status": "UNPAID",
+      "period": "2026-06-01T00:00:00.000Z",
+      "userId": "...",
+      "dealId": "...",
+      "deal": {
+        "id": "...",
+        "name": "TMP",
+        "clientId": "...",
+        "dealValue": 1000000,
+        "totalCommission": 28000,
+        "client": { "id": "...", "name": "ccc", "company": null }
+      }
+    }
+  ]
 }
 ```
 
@@ -675,17 +818,19 @@ Edited via `PUT /api/clients/[id]/details` by super admins or `RELATIONSHIP` ass
 /                     → redirect to /login or /dashboard
 /login                → Sign in
 /signup               → Register
-/dashboard            → Standard User Dashboard (SUPER_ADMIN redirected to /admin)
+/dashboard            → User Dashboard (all authenticated users; role-based commission widgets)
 /admin                → Super Admin Dashboard
+/admin/reconciliation → Global Reconciliation Dashboard (commission returnables audit)
+/my-statements        → Returnable Statements (doctors mark liabilities as paid)
 /clients/[id]         → Client 360 page
 ```
 
 ### Role-based landing
 
-| Role | Primary home |
-|------|--------------|
-| `STANDARD_USER` | `/dashboard` |
-| `SUPER_ADMIN` | `/admin` (auto-redirect from `/dashboard`) |
+| Role | Primary home | Notes |
+|------|--------------|-------|
+| `STANDARD_USER` | `/dashboard` | Commission widgets shown based on assignment roles |
+| `SUPER_ADMIN` | `/admin` (typical) | Can also use `/dashboard` for personal commission widgets if assigned to clients |
 
 ### Branding
 
@@ -715,22 +860,25 @@ Edited via `PUT /api/clients/[id]/details` by super admins or `RELATIONSHIP` ass
 
 ---
 
-### Page: Standard User Dashboard (`/dashboard`)
+### Page: User Dashboard (`/dashboard`)
 
 **File:** `src/components/dashboard/StandardUserDashboardPage.tsx`
 
-**Header:** Logo (links home), welcome message, **Add Lead**, Sign Out
+**Header:** Logo (links home), welcome message, **Add Lead** (standard users only), **Returnable Statements** link (if `DOCTOR` role), **Admin Dashboard** link (super admin), Sign Out
+
+**Data loading:** Fetches `/api/dashboard/standard` + `/api/me/assignments` in parallel.
 
 **Modals:** `AddLeadModal` — simplified lead form (name, company, email, phone) → `POST /api/clients`
 
 **Widgets (responsive grid: `grid-cols-1 md:grid-cols-2`):**
 
-| Widget | Component | Data source |
-|--------|-----------|-------------|
-| My Assigned Clients | `MyClientsWidget` | `assignedClients` — searchable table, links to Client 360 |
-| My Open Tasks | `MyTasksWidget` | `openTasks` — checkbox to complete via API |
-| Recent Activity | `CollapsibleActivityWidget` | `recentActivity` — grouped by client, unread badges, mark-read on expand |
-| Performance Snapshot | `PerformanceSnapshotWidget` | `performanceMetrics` — active clients, pipeline value, commission |
+| Widget | Component | Visibility | Data source |
+|--------|-----------|------------|-------------|
+| My Assigned Clients | `MyClientsWidget` | Always | `assignedClients` — searchable table, links to Client 360 |
+| My Open Tasks | `MyTasksWidget` | Always | `openTasks` — checkbox to complete via API |
+| Recent Activity | `CollapsibleActivityWidget` | Always | `recentActivity` — grouped by client, unread badges, mark-read on expand |
+| My Secured Commission | `MySecuredCommissionWidget` | If `hasAnyAssignment` | `performanceMetrics.mySecuredCommission` — WON-deal earnings with shared-role splits |
+| Current Month Commission Returnable | `MyCommissionReturnableWidget` | If `hasDoctorRole` | `GET /api/me/commission-returnable?status=UNPAID&period=YYYY-MM` — sum of current-month unpaid liabilities |
 
 **Unauthenticated state:** `AuthRequiredMessage` with “Back to Sign In” (signs out stale session, then → `/login`)
 
@@ -740,7 +888,7 @@ Edited via `PUT /api/clients/[id]/details` by super admins or `RELATIONSHIP` ass
 
 **File:** `src/components/admin/SuperAdminDashboardPage.tsx`
 
-**Header:** Logo, title, Add Lead/Client, User Dashboard link, Sign Out
+**Header:** Logo, title, Add Lead/Client, User Dashboard link, **Reconciliation** link, Sign Out
 
 **Header:** Responsive — stacks on mobile (`flex-col`), horizontal from `sm` up; action buttons wrap.
 
@@ -748,7 +896,7 @@ Edited via `PUT /api/clients/[id]/details` by super admins or `RELATIONSHIP` ass
 
 | Section | Component | API |
 |---------|-----------|-----|
-| KPI bar | `KpiBar` | `/api/admin/dashboard-kpis` |
+| KPI bar + Company earnings | `KpiBar` + `CompanyEarningsWidget` | `/api/admin/dashboard-kpis` |
 | Conversion funnel | `ConversionFunnelChart` | `/api/admin/funnel-data` |
 | Revenue tracker | `RevenueTrackerChart` | `/api/admin/revenue-tracker` (`groupBy` param) |
 | Leaderboards | `Leaderboards` | `/api/admin/leaderboards` |
@@ -756,6 +904,37 @@ Edited via `PUT /api/clients/[id]/details` by super admins or `RELATIONSHIP` ass
 | Master pipeline | `MasterPipelineView` | `/api/admin/pipeline` — Kanban on `lg+`, grouped list on mobile |
 
 **Modals:** `AddClientModal` — scroll-safe centered overlay (`max-w-lg`)
+
+---
+
+### Page: Global Reconciliation Dashboard (`/admin/reconciliation`)
+
+**File:** `src/components/admin/ReconciliationPage.tsx`
+
+**Auth:** Super admin only (non-admins redirected to `/dashboard`).
+
+**Data:** `GET /api/admin/all-commission-returnable`
+
+**Features:**
+- TanStack Table with columns: User Name, Period, Client Name, Deal Value, Returnable Amount, Status
+- Filters: User Name (text search), Status (UNPAID/PAID), Period (dropdown)
+- Link back to `/admin`
+
+---
+
+### Page: Returnable Statements (`/my-statements`)
+
+**File:** `src/components/dashboard/MyStatementsPage.tsx`
+
+**Auth:** Any authenticated user (typically doctors).
+
+**Data:** `GET /api/me/commission-returnable` (all records)
+
+**Features:**
+- Grouped by period with monthly headings (e.g. "June 2026")
+- Table per month: Client Name, Deal Value, Returnable Amount, Status
+- **Mark as Paid** checkbox on UNPAID rows → `PATCH /api/commission-returnable/[id]`
+- Link back to `/dashboard`
 
 ---
 
@@ -779,8 +958,8 @@ Edited via `PUT /api/clients/[id]/details` by super admins or `RELATIONSHIP` ass
 
 | Tab | Component | Features |
 |-----|-----------|----------|
-| Strategy & Tasks | `StrategyAndTasks` | Edit strategy text, create tasks (super admin or `DOCTOR`) |
-| Activity & Notes | `ActivityLog` | View merged activity, add notes |
+| Strategy & Tasks | `StrategyAndTasks` | Edit strategy text, create/edit/complete/delete tasks (super admin or `DOCTOR`) |
+| Activity & Notes | `ActivityLog` | View merged activity, add/edit/delete interactions, filter by type |
 
 **Tab navigation:** Horizontal tabs on `md+` (`hidden md:flex`); Headless UI dropdown on mobile (`block md:hidden`).
 
@@ -791,8 +970,8 @@ Deep link: `#activity-notes` opens Activity tab and scrolls into view.
 | Widget | Component | Who can edit |
 |--------|-----------|--------------|
 | Client Details | `ClientDetailsWidget` + `ClientDetailsEditModal` | Super admin **or** `RELATIONSHIP` assignee |
-| Deal Info | `DealInfoWidget` | Edit button shown for super admin / `RELATIONSHIP`; **no edit modal wired yet** |
-| Assigned Team | `AssignedTeamWidget` | Super admin manages assignments |
+| Deal Info | `DealInfoWidget` + `DealEditModal` | Super admin **or** `DOCTOR` assignee — multi-deal CRUD, committed/potential values, personal commission share % |
+| Assigned Team | `AssignedTeamWidget` | Super admin manages assignments (occupancy limits enforced) |
 | Company Hierarchy | `CompanyHierarchyWidget` | All authenticated — view colleagues, add employee leads |
 
 ---
@@ -818,6 +997,9 @@ Deep link: `#activity-notes` opens Activity tab and scrolls into view.
 | `MyClientsWidget` | `src/components/dashboard/MyClientsWidget.tsx` |
 | `MyTasksWidget` | `src/components/dashboard/MyTasksWidget.tsx` |
 | `CollapsibleActivityWidget` | `src/components/dashboard/CollapsibleActivityWidget.tsx` |
+| `MySecuredCommissionWidget` | `src/components/dashboard/MySecuredCommissionWidget.tsx` |
+| `MyCommissionReturnableWidget` | `src/components/dashboard/MyCommissionReturnableWidget.tsx` |
+| `MyStatementsPage` | `src/components/dashboard/MyStatementsPage.tsx` |
 | `PerformanceSnapshotWidget` | `src/components/dashboard/PerformanceSnapshotWidget.tsx` |
 | `AddLeadModal` | `src/components/dashboard/AddLeadModal.tsx` |
 
@@ -827,6 +1009,8 @@ Deep link: `#activity-notes` opens Activity tab and scrolls into view.
 |-----------|------|
 | `SuperAdminDashboardPage` | `src/components/admin/SuperAdminDashboardPage.tsx` |
 | `KpiBar` | `src/components/admin/KpiBar.tsx` |
+| `CompanyEarningsWidget` | `src/components/admin/CompanyEarningsWidget.tsx` |
+| `ReconciliationPage` | `src/components/admin/ReconciliationPage.tsx` |
 | `ConversionFunnelChart` | `src/components/admin/ConversionFunnelChart.tsx` |
 | `RevenueTrackerChart` | `src/components/admin/RevenueTrackerChart.tsx` |
 | `Leaderboards` | `src/components/admin/Leaderboards.tsx` |
@@ -845,6 +1029,8 @@ Deep link: `#activity-notes` opens Activity tab and scrolls into view.
 | `ClientDetailsWidget` | `src/components/clients/ClientDetailsWidget.tsx` |
 | `ClientDetailsEditModal` | `src/components/clients/ClientDetailsEditModal.tsx` |
 | `DealInfoWidget` | `src/components/clients/DealInfoWidget.tsx` |
+| `DealEditModal` | `src/components/clients/DealEditModal.tsx` |
+| `TaskEditModal` | `src/components/clients/TaskEditModal.tsx` |
 | `AssignedTeamWidget` | `src/components/clients/AssignedTeamWidget.tsx` |
 | `CompanyHierarchyWidget` | `src/components/clients/CompanyHierarchyWidget.tsx` |
 | `PipelineStageAdvanceModal` | `src/components/clients/PipelineStageAdvanceModal.tsx` |
@@ -855,15 +1041,19 @@ Deep link: `#activity-notes` opens Activity tab and scrolls into view.
 |--------|---------|
 | `prisma.ts` | Prisma client singleton |
 | `authHelpers.ts` | Auth guards (`authorizeClientDetailsEdit`, `authorizePipelineStatusChange`, etc.), client access checks, system event logging |
-| `client360.ts` | Client 360 query includes + response builder |
+| `client360.ts` | Client 360 query includes + response builder (deals, committed/potential values) |
 | `pipelinePermissions.ts` | Pipeline stage advance rules + advance checklists (shared by API + UI) |
-| `standardDashboard.ts` | Standard user dashboard data (15 activity items) |
+| `standardDashboard.ts` | User dashboard data with shared-role secured commission |
 | `superAdminDashboard.ts` | Super admin activity feed data (~100 items) |
 | `activityFeed.ts` | Grouped activity + mark-as-read |
 | `dashboardTypes.ts` | TypeScript types for dashboard payloads |
 | `clientStages.ts` | Pipeline stage labels and badge styles |
-| `commissionRates.ts` | Role-based commission constants |
-| `clientDeals.ts` | Primary deal upsert helpers |
+| `constants.ts` | Commission pools, company overhead, role occupancy limits |
+| `commissionCalculations.ts` | Shared-role commission share + secured commission math |
+| `commissionReturnables.ts` | Returnable generation, formatting, period filters, backfill |
+| `dealCalculations.ts` | Committed/potential value, deal response formatting, money parsing |
+| `commissionRates.ts` | Legacy role labels (superseded by `constants.ts` for rates) |
+| `clientDeals.ts` | Legacy primary deal helpers |
 | `leadSources.ts` | Lead source combobox suggestions |
 | `reports.ts` | CSV/PDF export helpers for admin widgets |
 | `jwt.ts` | JWT sign/verify for Bearer auth (7-day expiry) |
@@ -884,12 +1074,31 @@ Deep link: `#activity-notes` opens Activity tab and scrolls into view.
 
 ```
 /dashboard → view assigned clients, tasks, activity
+          → My Secured Commission (if assigned to any client)
+          → Current Month Commission Returnable (if DOCTOR role)
           → Add Lead → POST /api/clients (auto-assigned RELATIONSHIP)
           → click client → /clients/[id]
-          → add note / update strategy / complete tasks
+          → add interaction / update strategy / manage deals / complete tasks
           → Edit Client Details (if RELATIONSHIP) → PUT /api/clients/[id]/details
           → Move to Next Stage (if role permits) → confirmation modal → PATCH status
           → expand activity group → POST /api/activity/mark-read
+```
+
+### Doctor — commission returnables
+
+```
+/dashboard → Current Month Commission Returnable widget shows unpaid total
+          → Returnable Statements → /my-statements
+          → review monthly liabilities grouped by period
+          → check "Mark as Paid" → PATCH /api/commission-returnable/[id]
+```
+
+### Super admin — reconciliation
+
+```
+/admin/reconciliation → audit all commission returnables
+                     → filter by user, status, period
+                     → verify doctor payments against WON deals
 ```
 
 ### Standard user — edit client details (RELATIONSHIP)
@@ -938,7 +1147,7 @@ Deep link: `#activity-notes` opens Activity tab and scrolls into view.
 | `SUPABASE_SECRET_KEY` | Service role (registration, uploads) |
 | `NEXTAUTH_SECRET` | JWT signing secret (`lib/jwt.ts`) |
 | `SUPABASE_CLIENT_DOCUMENTS_BUCKET` | Supabase Storage bucket for client uploads (default: `client-documents`) |
-| `TEST_BASE_URL` | Optional override for `scripts/test-activity-apis.ts` (default: `http://localhost:3000`) |
+| `TEST_BASE_URL` | Optional override for integration test scripts (default: `http://localhost:3000`) |
 
 ---
 
@@ -950,10 +1159,11 @@ npx prisma migrate deploy
 npm run dev          # http://localhost:3000
 ```
 
-**Integration test (activity APIs):**
+**Integration tests:**
 
 ```bash
-npx tsx scripts/test-activity-apis.ts
+npx tsx scripts/test-activity-apis.ts       # Activity feed + dashboard APIs
+npx tsx scripts/test-commission-system.ts     # Commission engine + returnables
 ```
 
 **Build (matches Vercel):**
@@ -1022,15 +1232,16 @@ Related: `lib/pipelinePermissions.ts` exports `getNextPipelineStage`, `canUserAd
 ├──────────────────────────┬──────────────────────────────────┤
 │  My Assigned Clients     │  My Open Tasks                     │
 ├──────────────────────────┼──────────────────────────────────┤
-│  Recent Activity         │  Performance Snapshot              │
-│  ▼ Client A  [!]         │  Active clients / Pipeline / $     │
-│  ▼ Client B              │                                    │
+│  Recent Activity         │  My Secured Commission (*)       │
+│  ▼ Client A  [!]         │                                    │
+│  ▼ Client B              │  Current Month Returnable (**)   │
 └──────────────────────────┴──────────────────────────────────┘
+  (*)  if any assignment   (**) if DOCTOR role
 
 ┌─────────────────────────────────────────────────────────────┐
 │  [Logo]  Super Admin Dashboard    [+Add] [User Dash] [Out]  │
 ├─────────────────────────────────────────────────────────────┤
-│  KPI Bar                                                    │
+│  KPI Bar + Company Overhead Earnings                        │
 ├──────────────────────────┬──────────────────────────────────┤
 │  Conversion Funnel         │  Revenue Tracker                 │
 ├──────────────────────────┴──────────────────────────────────┤
@@ -1042,11 +1253,20 @@ Related: `lib/pipelinePermissions.ts` exports `getNextPipelineStage`, `canUserAd
 └─────────────────────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────────────────────┐
+│  Global Reconciliation Dashboard          [Back to Admin]   │
+├─────────────────────────────────────────────────────────────┤
+│  Filters: [User Name] [Status ▼] [Period ▼]                 │
+├─────────────────────────────────────────────────────────────┤
+│  User │ Period │ Client │ Deal Value │ Returnable │ Status  │
+│  ...  │  ...   │  ...   │    ...     │    ...     │  ...    │
+└─────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────┐
 │  [Logo]                              ← Back to list         │  Client 360 (desktop)
 │  {Client Name}  [Stage badge ▼ or Move to Next Stage]       │
 ├──────────────────────────────┬──────────────────────────────┤
 │  WORKSPACE                   │  Client Details              │
-│  [Strategy & Tasks] [Activity]│  Deal Info                  │
+│  [Strategy & Tasks] [Activity]│  Deal Info (committed/potential + commission share %)       │
 │  ...                         │  Assigned Team               │
 │                              │  Company Hierarchy           │
 └──────────────────────────────┴──────────────────────────────┘
@@ -1059,7 +1279,7 @@ Related: `lib/pipelinePermissions.ts` exports `getNextPipelineStage`, `canUserAd
 │  ...                        │
 ├─────────────────────────────┤
 │  Client Details  [Edit]     │
-│  Deal Info                  │
+│  Deal Info (committed/potential + commission share %)       │
 │  Assigned Team              │
 │  Company Hierarchy          │
 └─────────────────────────────┘
@@ -1075,13 +1295,14 @@ Related: `lib/pipelinePermissions.ts` exports `getNextPipelineStage`, `canUserAd
 |------|-------|
 | Client 360 read access | `GET /api/clients/[id]` allows any authenticated user (not restricted to assignees) |
 | Company hierarchy APIs | `GET/POST .../employees` — any authenticated user, no assignment check |
-| Bearer vs session split | Dashboard/details/employees accept Bearer+session; notes, strategy, tasks, deal use session-only helpers |
-| Deal edit UI | `DealInfoWidget` shows Edit for super admin / `RELATIONSHIP` but **no modal/handler is wired** |
+| Bearer vs session split | Dashboard/returnable/details/employees accept Bearer+session; interactions, strategy, tasks, deals use session-only helpers |
+| Returnable backfill | WON deals marked before returnable feature require manual backfill (`backfillCommissionReturnablesForWonDeals`) |
 | Pipeline checklist in modal | Display-only reminders in `PipelineStageAdvanceModal`; not persisted or server-validated |
-| Admin route protection | `/admin` middleware checks session only; role enforced client-side + API 403 |
+| Admin route protection | `/admin/*` middleware checks session only; role enforced client-side + API 403 |
 | Duplicate auth in admin routes | Several `/api/admin/*` routes inline their own `requireSuperAdmin()` instead of shared helper |
 | NextAuth legacy route | `/api/auth/[...nextauth]` exists with placeholder credentials; primary auth is Supabase |
 | Activity read IDs | Polymorphic: `activity_read_status.activity_log_id` may reference `Interaction.id` or `ClientActivityLog.id` |
 | ARCHIVED pipeline stage | In enum but excluded from funnel charts and advance logic |
 | Legacy models | `Strategy` + `Document` coexist with `Client.strategyText`; Client 360 uses `strategyText` |
 | Legacy endpoint | `GET /api/get-dashboard-data` still present |
+| Legacy commission rates | `lib/commissionRates.ts` retains old flat rates; active logic uses `lib/constants.ts` pools |

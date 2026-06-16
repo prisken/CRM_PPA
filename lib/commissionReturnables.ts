@@ -1,4 +1,4 @@
-import { AssignmentRole, DealStatus } from '@prisma/client';
+import { AssignmentRole } from '@prisma/client';
 import { COMMISSION_RATE_POOLS } from '@/lib/constants';
 import { prisma } from '@/lib/prisma';
 
@@ -12,6 +12,29 @@ type CreateCommissionReturnablesInput = {
 export function getCurrentCommissionReturnablePeriod() {
   const now = new Date();
   return new Date(now.getFullYear(), now.getMonth(), 1);
+}
+
+export function calculateCommissionReturnableAmount(
+  totalCommission: number,
+  doctorCount: number
+) {
+  if (doctorCount <= 0) {
+    return 0;
+  }
+
+  return (
+    (totalCommission / doctorCount) *
+    (1 - COMMISSION_RATE_POOLS.DOCTOR)
+  );
+}
+
+export async function getDoctorCountForClient(clientId: string) {
+  return prisma.clientAssignment.count({
+    where: {
+      clientId,
+      role: AssignmentRole.DOCTOR,
+    },
+  });
 }
 
 export async function createCommissionReturnablesForWonDeal({
@@ -41,13 +64,16 @@ export async function createCommissionReturnablesForWonDeal({
     return [];
   }
 
-  const individualShare = COMMISSION_RATE_POOLS.DOCTOR / doctorCount;
+  const returnableAmount = calculateCommissionReturnableAmount(
+    totalCommission,
+    doctorCount
+  );
 
   const returnables = await Promise.all(
     doctorAssignments.map((assignment) =>
       prisma.commissionReturnable.create({
         data: {
-          amount: totalCommission * (1 - individualShare),
+          amount: returnableAmount,
           status: 'UNPAID',
           period,
           userId: assignment.userId,
@@ -61,38 +87,52 @@ export async function createCommissionReturnablesForWonDeal({
 }
 
 export async function backfillCommissionReturnablesForWonDeals() {
-  const wonDeals = await prisma.deal.findMany({
-    where: { status: DealStatus.WON },
-    select: {
-      id: true,
-      clientId: true,
-      totalCommission: true,
-      updatedAt: true,
+  const returnables = await prisma.commissionReturnable.findMany({
+    include: {
+      deal: {
+        select: {
+          id: true,
+          clientId: true,
+          totalCommission: true,
+        },
+      },
     },
   });
 
-  let createdForDeals = 0;
+  let updatedCount = 0;
+  let skippedCount = 0;
 
-  for (const deal of wonDeals) {
-    const created = await createCommissionReturnablesForWonDeal({
-      dealId: deal.id,
-      clientId: deal.clientId,
-      totalCommission: Number(deal.totalCommission),
-      period: new Date(
-        deal.updatedAt.getFullYear(),
-        deal.updatedAt.getMonth(),
-        1
-      ),
-    });
+  for (const record of returnables) {
+    if (!record.deal) {
+      skippedCount += 1;
+      continue;
+    }
 
-    if (created.length > 0) {
-      createdForDeals += 1;
+    const doctorCount = await getDoctorCountForClient(record.deal.clientId);
+    if (doctorCount === 0) {
+      skippedCount += 1;
+      continue;
+    }
+
+    const correctAmount = calculateCommissionReturnableAmount(
+      Number(record.deal.totalCommission),
+      doctorCount
+    );
+    const currentAmount = Number(record.amount);
+
+    if (Math.abs(currentAmount - correctAmount) > 0.005) {
+      await prisma.commissionReturnable.update({
+        where: { id: record.id },
+        data: { amount: correctAmount },
+      });
+      updatedCount += 1;
     }
   }
 
   return {
-    wonDealsProcessed: wonDeals.length,
-    dealsBackfilled: createdForDeals,
+    recordsProcessed: returnables.length,
+    recordsUpdated: updatedCount,
+    recordsSkipped: skippedCount,
   };
 }
 
