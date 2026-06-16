@@ -2,15 +2,19 @@ import {
   AssignmentRole,
   ClientStatus,
   TaskStatus,
-  type Client,
-  type Deal,
 } from '@prisma/client';
 import { buildGroupedRecentActivity } from '@/lib/activityFeed';
 import {
-  COMMISSION_RATES,
-  formatAssignmentRole,
-} from '@/lib/commissionRates';
+  buildRoleOccupancyMap,
+  calculateAssignmentSecuredCommission,
+  getRoleOccupancy,
+} from '@/lib/commissionCalculations';
+import { formatAssignmentRole } from '@/lib/commissionRates';
 import { formatClientStage } from '@/lib/clientStages';
+import {
+  calculateCommittedValue,
+  calculatePotentialValue,
+} from '@/lib/dealCalculations';
 import { prisma } from '@/lib/prisma';
 
 const RECENT_ACTIVITY_LIMIT = 15;
@@ -18,25 +22,6 @@ const OPEN_TASK_STATUSES: TaskStatus[] = [
   TaskStatus.PENDING,
   TaskStatus.IN_PROGRESS,
 ];
-
-function resolveClientDealValue(
-  client: Pick<Client, 'dealValue'>,
-  deals: Pick<Deal, 'dealValue'>[]
-) {
-  if (client.dealValue !== null && client.dealValue !== undefined) {
-    return Number(client.dealValue);
-  }
-
-  return deals.reduce((total, deal) => total + Number(deal.dealValue), 0);
-}
-
-function resolveClientGrossProfit(deals: Pick<Deal, 'grossProfit'>[]) {
-  if (deals.length === 0) {
-    return 0;
-  }
-
-  return Number(deals[0].grossProfit);
-}
 
 export async function buildStandardDashboard(userId: string) {
   const assignments = await prisma.clientAssignment.findMany({
@@ -48,7 +33,8 @@ export async function buildStandardDashboard(userId: string) {
             orderBy: { createdAt: 'asc' },
             select: {
               dealValue: true,
-              grossProfit: true,
+              totalCommission: true,
+              status: true,
             },
           },
         },
@@ -59,7 +45,7 @@ export async function buildStandardDashboard(userId: string) {
 
   const clientIds = assignments.map((assignment) => assignment.clientId);
 
-  const [openTasks, recentActivity] = await Promise.all([
+  const [openTasks, recentActivity, clientRoleAssignments] = await Promise.all([
     clientIds.length === 0
       ? Promise.resolve([])
       : prisma.task.findMany({
@@ -80,37 +66,47 @@ export async function buildStandardDashboard(userId: string) {
       totalLimit: RECENT_ACTIVITY_LIMIT,
       perSourceLimit: RECENT_ACTIVITY_LIMIT,
     }),
+    clientIds.length === 0
+      ? Promise.resolve([])
+      : prisma.clientAssignment.findMany({
+          where: { clientId: { in: clientIds } },
+          select: { clientId: true, role: true },
+        }),
   ]);
 
+  const roleOccupancyMap = buildRoleOccupancyMap(clientRoleAssignments);
+
   const assignedClients = assignments.map((assignment) => {
-    const dealValue = resolveClientDealValue(
-      assignment.client,
-      assignment.client.deals
-    );
+    const committedValue = calculateCommittedValue(assignment.client.deals);
+    const potentialValue = calculatePotentialValue(assignment.client.deals);
 
     return {
       clientId: assignment.client.id,
       clientName: assignment.client.name,
       myRole: formatAssignmentRole(assignment.role),
       clientStatus: formatClientStage(assignment.client.status),
-      dealValue,
+      dealValue: committedValue + potentialValue,
     };
   });
 
   let totalActiveClients = 0;
   let totalPipelineValue = 0;
-  let myPotentialCommission = 0;
+  let mySecuredCommission = 0;
 
   for (const assignment of assignments) {
-    const dealValue = resolveClientDealValue(
-      assignment.client,
-      assignment.client.deals
+    const potentialValue = calculatePotentialValue(assignment.client.deals);
+    const roleOccupancy = getRoleOccupancy(
+      roleOccupancyMap,
+      assignment.clientId,
+      assignment.role
     );
-    const grossProfit = resolveClientGrossProfit(assignment.client.deals);
-    const commissionRate = COMMISSION_RATES[assignment.role as AssignmentRole];
 
-    totalPipelineValue += dealValue;
-    myPotentialCommission += grossProfit * commissionRate;
+    totalPipelineValue += potentialValue;
+    mySecuredCommission += calculateAssignmentSecuredCommission(
+      assignment.client.deals,
+      assignment.role as AssignmentRole,
+      roleOccupancy
+    );
 
     if (assignment.client.status === ClientStatus.ACTIVE_CLIENT) {
       totalActiveClients += 1;
@@ -130,7 +126,7 @@ export async function buildStandardDashboard(userId: string) {
     performanceMetrics: {
       totalActiveClients,
       totalPipelineValue: Math.round(totalPipelineValue),
-      myPotentialCommission: Math.round(myPotentialCommission),
+      mySecuredCommission: Math.round(mySecuredCommission),
     },
   };
 }

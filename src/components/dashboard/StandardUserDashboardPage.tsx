@@ -6,13 +6,19 @@ import Link from 'next/link';
 import AddLeadModal from '@/components/dashboard/AddLeadModal';
 import CollapsibleActivityWidget from '@/components/dashboard/CollapsibleActivityWidget';
 import AuthRequiredMessage from '@/components/auth/AuthRequiredMessage';
+import MyCommissionReturnableWidget from '@/components/dashboard/MyCommissionReturnableWidget';
 import MyClientsWidget from '@/components/dashboard/MyClientsWidget';
+import MySecuredCommissionWidget from '@/components/dashboard/MySecuredCommissionWidget';
 import MyTasksWidget from '@/components/dashboard/MyTasksWidget';
-import PerformanceSnapshotWidget from '@/components/dashboard/PerformanceSnapshotWidget';
 import Logo from '@/components/Logo';
 import { useUserProfile } from '@/hooks/useUserProfile';
 import type { StandardDashboardData } from '@/lib/dashboardTypes';
 import { supabase } from '@/lib/supabaseClient';
+
+type AssignmentSummary = {
+  hasAnyAssignment: boolean;
+  hasDoctorRole: boolean;
+};
 
 export default function StandardUserDashboardPage() {
   const router = useRouter();
@@ -20,6 +26,8 @@ export default function StandardUserDashboardPage() {
   const [dashboardData, setDashboardData] = useState<StandardDashboardData | null>(
     null
   );
+  const [assignmentSummary, setAssignmentSummary] =
+    useState<AssignmentSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showAddLead, setShowAddLead] = useState(false);
@@ -30,13 +38,21 @@ export default function StandardUserDashboardPage() {
 
     try {
       const token = localStorage.getItem('token');
-      const res = await fetch('/api/dashboard/standard', {
-        credentials: 'same-origin',
-        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-      });
+      const authHeaders = token ? { Authorization: `Bearer ${token}` } : undefined;
 
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
+      const [dashboardRes, assignmentsRes] = await Promise.all([
+        fetch('/api/dashboard/standard', {
+          credentials: 'same-origin',
+          headers: authHeaders,
+        }),
+        fetch('/api/me/assignments', {
+          credentials: 'same-origin',
+          headers: authHeaders,
+        }),
+      ]);
+
+      if (!dashboardRes.ok) {
+        const data = await dashboardRes.json().catch(() => ({}));
         throw new Error(
           typeof data.error === 'string'
             ? data.error
@@ -44,8 +60,25 @@ export default function StandardUserDashboardPage() {
         );
       }
 
-      const data = await res.json();
-      setDashboardData(data);
+      if (!assignmentsRes.ok) {
+        const data = await assignmentsRes.json().catch(() => ({}));
+        throw new Error(
+          typeof data.error === 'string'
+            ? data.error
+            : 'Failed to load assignment data'
+        );
+      }
+
+      const [dashboard, assignments] = await Promise.all([
+        dashboardRes.json(),
+        assignmentsRes.json(),
+      ]);
+
+      setDashboardData(dashboard);
+      setAssignmentSummary({
+        hasAnyAssignment: assignments.hasAnyAssignment === true,
+        hasDoctorRole: assignments.hasDoctorRole === true,
+      });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load dashboard data');
     } finally {
@@ -63,13 +96,8 @@ export default function StandardUserDashboardPage() {
       return;
     }
 
-    if (profile.role === 'SUPER_ADMIN') {
-      router.replace('/admin');
-      return;
-    }
-
     loadDashboard();
-  }, [profile, profileLoading, router, loadDashboard]);
+  }, [profile, profileLoading, loadDashboard]);
 
   function handleTaskCompleted(taskId: string) {
     setDashboardData((current) => {
@@ -90,7 +118,7 @@ export default function StandardUserDashboardPage() {
     router.push('/login');
   }
 
-  if (profileLoading || (loading && profile?.role !== 'SUPER_ADMIN')) {
+  if (profileLoading || loading) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-gray-100">
         <p className="text-gray-600">Loading dashboard...</p>
@@ -104,11 +132,7 @@ export default function StandardUserDashboardPage() {
     );
   }
 
-  if (profile.role === 'SUPER_ADMIN') {
-    return null;
-  }
-
-  if (error || !dashboardData) {
+  if (error || !dashboardData || !assignmentSummary) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-gray-100 px-4">
         <p className="text-red-600">{error ?? 'Failed to load dashboard'}</p>
@@ -117,6 +141,7 @@ export default function StandardUserDashboardPage() {
   }
 
   const displayName = profile.name ?? profile.email;
+  const isSuperAdmin = profile.role === 'SUPER_ADMIN';
 
   return (
     <main className="min-h-screen bg-gray-100">
@@ -134,13 +159,31 @@ export default function StandardUserDashboardPage() {
             </div>
           </div>
           <div className="flex flex-wrap gap-3">
-            <button
-              type="button"
-              onClick={() => setShowAddLead(true)}
-              className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
-            >
-              Add Lead
-            </button>
+            {!isSuperAdmin && (
+              <button
+                type="button"
+                onClick={() => setShowAddLead(true)}
+                className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+              >
+                Add Lead
+              </button>
+            )}
+            {assignmentSummary.hasDoctorRole && (
+              <Link
+                href="/my-statements"
+                className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+              >
+                Returnable Statements
+              </Link>
+            )}
+            {isSuperAdmin && (
+              <Link
+                href="/admin"
+                className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+              >
+                Admin Dashboard
+              </Link>
+            )}
             <button
               type="button"
               onClick={handleSignOut}
@@ -163,9 +206,12 @@ export default function StandardUserDashboardPage() {
             recentActivity={dashboardData.recentActivity}
             title="Recent Activity on My Clients"
           />
-          <PerformanceSnapshotWidget
-            performanceMetrics={dashboardData.performanceMetrics}
-          />
+          {assignmentSummary.hasAnyAssignment && (
+            <MySecuredCommissionWidget
+              amount={dashboardData.performanceMetrics.mySecuredCommission}
+            />
+          )}
+          {assignmentSummary.hasDoctorRole && <MyCommissionReturnableWidget />}
         </div>
       </div>
 

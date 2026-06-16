@@ -70,7 +70,7 @@ export async function GET() {
       select: {
         clientId: true,
         dealValue: true,
-        grossProfit: true,
+        totalCommission: true,
       },
     }),
     prisma.clientAssignment.findMany({
@@ -94,12 +94,12 @@ export async function GET() {
   for (const deal of wonDealsYTD) {
     const clientAssignments = assignmentsByClient.get(deal.clientId) ?? [];
     const dealValue = Number(deal.dealValue);
-    const grossProfit = Number(deal.grossProfit);
+    const totalCommission = Number(deal.totalCommission);
 
     for (const assignment of clientAssignments) {
       const userId = assignment.user.id;
       const userName = getUserName(assignment.user.name, assignment.user.email);
-      const commission = grossProfit * COMMISSION_RATES[assignment.role];
+      const commission = totalCommission * COMMISSION_RATES[assignment.role];
 
       const existing = userStats.get(userId) ?? {
         userName,

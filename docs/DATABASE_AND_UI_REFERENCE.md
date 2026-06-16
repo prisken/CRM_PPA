@@ -290,7 +290,7 @@ Financial deal records linked to a client.
 | `id` | TEXT PK | |
 | `name` | TEXT | Deal name |
 | `dealValue` | DECIMAL(12,2) | |
-| `grossProfit` | DECIMAL(12,2) | Used for commission calculations |
+| `totalCommission` | DECIMAL(12,2) | Used for commission calculations |
 | `status` | DealStatus | |
 | `clientId` | TEXT FK → Client | |
 | `createdAt`, `updatedAt` | TIMESTAMP | |
@@ -422,15 +422,17 @@ erDiagram
 
 ### Commission rates (standard user dashboard)
 
-Applied to **gross profit** by assignment role:
+Applied to **total commission** by assignment role (see `lib/constants.ts` — `COMMISSION_RATE_POOLS`):
 
-| Assignment role | Rate |
-|-----------------|------|
-| Relationship (`RELATIONSHIP`) | 15% |
-| Doctor (`DOCTOR`) | 10% |
+| Assignment role | Pool rate |
+|-----------------|-----------|
+| Doctor (`DOCTOR`) | 60% |
+| Relationship (`RELATIONSHIP`) | 10% |
 | Account Service (`ACCOUNT_SERVICE`) | 10% |
 
-`myPotentialCommission` on the standard dashboard = sum of `(grossProfit × rate)` per assigned client.
+Company overhead: 20% (`COMPANY_OVERHEAD_RATE`).
+
+`mySecuredCommission` on the standard dashboard = sum of each WON deal's `totalCommission × individualShare`, where `individualShare = COMMISSION_RATE_POOLS[role] / roleOccupancy` for every client assignment the user holds.
 
 ### Deal value resolution
 
@@ -597,7 +599,7 @@ Edited via `PUT /api/clients/[id]/details` by super admins or `RELATIONSHIP` ass
   "performanceMetrics": {
     "totalActiveClients": 3,
     "totalPipelineValue": 150000,
-    "myPotentialCommission": 12000
+    "mySecuredCommission": 12000
   }
 }
 ```
@@ -619,7 +621,7 @@ Edited via `PUT /api/clients/[id]/details` by super admins or `RELATIONSHIP` ass
     { "label": "Contract renewal", "date": "2026-12-01" }
   ],
   "deal_value": 50000,
-  "gross_profit": 20000,
+  "total_commission": 20000,
   "equity": 0,
   "status": "ACTIVE_CLIENT",
   "strategyText": "...",

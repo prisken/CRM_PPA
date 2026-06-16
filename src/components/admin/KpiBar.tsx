@@ -3,15 +3,29 @@
 import { useEffect, useState } from 'react';
 
 type KpiData = {
-  totalRevenueYTD: number;
-  totalGrossProfitYTD: number;
+  totalCommittedRevenue: number;
+  totalPotentialRevenue: number;
+  totalCommissionYTD: number;
   pipelineVelocity: number;
   activeDeals: number;
 };
 
 const KPI_CARDS = [
-  { key: 'totalRevenueYTD' as const, title: 'Total Revenue YTD', format: 'currency' },
-  { key: 'totalGrossProfitYTD' as const, title: 'Gross Profit YTD', format: 'currency' },
+  {
+    key: 'totalCommittedRevenue' as const,
+    title: 'Total Committed Revenue',
+    format: 'currency',
+  },
+  {
+    key: 'totalPotentialRevenue' as const,
+    title: 'Total Potential Revenue',
+    format: 'currency',
+  },
+  {
+    key: 'totalCommissionYTD' as const,
+    title: 'Total Commission YTD',
+    format: 'currency',
+  },
   { key: 'pipelineVelocity' as const, title: 'Pipeline Velocity', format: 'days' },
   { key: 'activeDeals' as const, title: 'Active Deals', format: 'number' },
 ];
@@ -56,7 +70,7 @@ export default function KpiBar() {
 
   if (loading) {
     return (
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
         {KPI_CARDS.map((card) => (
           <div
             key={card.key}
@@ -76,7 +90,7 @@ export default function KpiBar() {
   }
 
   return (
-    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
       {KPI_CARDS.map((card) => (
         <div
           key={card.key}

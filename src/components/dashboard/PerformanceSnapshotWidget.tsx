@@ -25,8 +25,8 @@ const KPI_ITEMS = [
     format: formatMoney,
   },
   {
-    key: 'myPotentialCommission' as const,
-    label: 'My Potential Commission',
+    key: 'mySecuredCommission' as const,
+    label: 'My Secured Commission',
     format: formatMoney,
   },
 ];

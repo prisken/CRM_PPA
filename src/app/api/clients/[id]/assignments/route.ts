@@ -1,6 +1,9 @@
 import { AssignmentRole } from '@prisma/client';
 import { NextResponse } from 'next/server';
 import { logClientSystemEvent, requireSuperAdmin } from '@/lib/authHelpers';
+import {
+  getRoleOccupancyLimitMessage,
+} from '@/lib/constants';
 import { prisma } from '@/lib/prisma';
 
 export async function POST(
@@ -36,6 +39,15 @@ export async function POST(
   const user = await prisma.user.findUnique({ where: { id: userId } });
   if (!user) {
     return NextResponse.json({ error: 'User not found' }, { status: 404 });
+  }
+
+  const roleCount = await prisma.clientAssignment.count({
+    where: { clientId, role },
+  });
+
+  const occupancyMessage = getRoleOccupancyLimitMessage(role, roleCount);
+  if (occupancyMessage) {
+    return NextResponse.json({ error: occupancyMessage }, { status: 400 });
   }
 
   const existing = await prisma.clientAssignment.findFirst({

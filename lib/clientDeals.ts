@@ -10,7 +10,7 @@ export async function getPrimaryDeal(clientId: string) {
 export async function upsertPrimaryDeal(
   clientId: string,
   dealValue: number,
-  grossProfit: number
+  totalCommission: number
 ) {
   const existingDeal = await getPrimaryDeal(clientId);
 
@@ -19,7 +19,7 @@ export async function upsertPrimaryDeal(
       where: { id: existingDeal.id },
       data: {
         dealValue,
-        grossProfit,
+        totalCommission,
       },
     });
   }
@@ -29,20 +29,20 @@ export async function upsertPrimaryDeal(
       clientId,
       name: 'Primary Deal',
       dealValue,
-      grossProfit,
+      totalCommission,
     },
   });
 }
 
-export async function resolveClientGrossProfit(
+export async function resolveClientTotalCommission(
   clientId: string,
-  deals: { grossProfit: { toString(): string } }[]
+  deals: { totalCommission: { toString(): string } }[]
 ) {
   const primaryDeal = deals[0];
   if (primaryDeal) {
-    return Number(primaryDeal.grossProfit);
+    return Number(primaryDeal.totalCommission);
   }
 
   const deal = await getPrimaryDeal(clientId);
-  return deal ? Number(deal.grossProfit) : 0;
+  return deal ? Number(deal.totalCommission) : 0;
 }

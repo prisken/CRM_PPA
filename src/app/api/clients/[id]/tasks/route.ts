@@ -57,13 +57,16 @@ export async function POST(
   }
 
   if (assigneeId) {
-    const assignee = await prisma.user.findUnique({
-      where: { id: assigneeId },
-      select: { id: true },
+    const assignment = await prisma.clientAssignment.findFirst({
+      where: { clientId, userId: assigneeId },
+      select: { assignmentId: true },
     });
 
-    if (!assignee) {
-      return NextResponse.json({ error: 'Assignee not found' }, { status: 404 });
+    if (!assignment) {
+      return NextResponse.json(
+        { error: 'Assignee must be a user assigned to this client' },
+        { status: 400 }
+      );
     }
   }
 

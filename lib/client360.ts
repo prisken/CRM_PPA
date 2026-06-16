@@ -1,11 +1,14 @@
 import type {
   ActivityLogType,
   Client,
-  Deal,
   Prisma,
   Strategy,
   User,
 } from '@prisma/client';
+import {
+  calculateCommittedValue,
+  calculatePotentialValue,
+} from '@/lib/dealCalculations';
 
 type ClientWithRelations = Client360Record;
 
@@ -15,6 +18,7 @@ type ActivityLogEntry = {
   content: string;
   date: string;
   source: 'manual' | 'system';
+  userId?: string | null;
   userName: string | null;
 };
 
@@ -24,25 +28,6 @@ function formatUserName(user: Pick<User, 'name' | 'email'> | null | undefined) {
   }
 
   return user.name ?? user.email;
-}
-
-function resolveDealValue(
-  clientDealValue: Client['dealValue'],
-  deals: Pick<Deal, 'dealValue'>[]
-) {
-  if (clientDealValue !== null && clientDealValue !== undefined) {
-    return Number(clientDealValue);
-  }
-
-  return deals.reduce((total, deal) => total + Number(deal.dealValue), 0);
-}
-
-function resolveGrossProfit(deals: Pick<Deal, 'grossProfit'>[]) {
-  if (deals.length === 0) {
-    return 0;
-  }
-
-  return Number(deals[0].grossProfit);
 }
 
 function resolveStrategyText(
@@ -91,6 +76,7 @@ function buildActivityLog(client: ClientWithRelations): ActivityLogEntry[] {
     content: interaction.content,
     date: interaction.date.toISOString(),
     source: 'manual',
+    userId: interaction.userId,
     userName: formatUserName(interaction.user),
   }));
 
@@ -140,6 +126,15 @@ export function buildClient360Response(client: ClientWithRelations) {
   }));
 
   const activityLog = buildActivityLog(client);
+  const deals = client.deals.map((deal) => ({
+    id: deal.id,
+    name: deal.name,
+    dealValue: Number(deal.dealValue),
+    totalCommission: Number(deal.totalCommission),
+    status: deal.status,
+    createdAt: deal.createdAt.toISOString(),
+    updatedAt: deal.updatedAt.toISOString(),
+  }));
 
   return {
     client_id: client.id,
@@ -153,8 +148,8 @@ export function buildClient360Response(client: ClientWithRelations) {
     employeeCount: client.employeeCount,
     expectations: client.expectations,
     importantDates: normalizeImportantDates(client.importantDates),
-    deal_value: resolveDealValue(client.dealValue, client.deals),
-    gross_profit: resolveGrossProfit(client.deals),
+    committedValue: calculateCommittedValue(client.deals),
+    potentialValue: calculatePotentialValue(client.deals),
     equity: client.equity !== null && client.equity !== undefined ? Number(client.equity) : 0,
     status: client.status,
     pendingNotifications: client.pendingNotifications,
@@ -171,13 +166,7 @@ export function buildClient360Response(client: ClientWithRelations) {
       userName: assignment.user.name ?? assignment.user.email,
       role: assignment.role,
     })),
-    deals: client.deals.map((deal) => ({
-      id: deal.id,
-      name: deal.name,
-      dealValue: Number(deal.dealValue),
-      grossProfit: Number(deal.grossProfit),
-      status: deal.status,
-    })),
+    deals,
     interactions: client.interactions.map((interaction) => ({
       id: interaction.id,
       type: interaction.type,
@@ -239,8 +228,10 @@ export const client360Include = {
       id: true,
       name: true,
       dealValue: true,
-      grossProfit: true,
+      totalCommission: true,
       status: true,
+      createdAt: true,
+      updatedAt: true,
     },
   },
 } satisfies Prisma.ClientInclude;

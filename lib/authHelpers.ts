@@ -230,6 +230,21 @@ export async function logClientSystemEvent(
 
 export { canAssignmentRoleChangePipelineStatus } from '@/lib/pipelinePermissions';
 
+export function authorizeInteractionOwner(
+  userId: string,
+  userRole: UserRole,
+  interactionUserId: string
+) {
+  if (userRole === UserRole.SUPER_ADMIN || userId === interactionUserId) {
+    return { authorized: true as const };
+  }
+
+  return {
+    authorized: false as const,
+    error: NextResponse.json({ error: 'Forbidden' }, { status: 403 }),
+  };
+}
+
 export async function authorizePipelineStatusChange(
   userId: string,
   userRole: UserRole,

@@ -6,6 +6,13 @@ import {
 } from '@/lib/authHelpers';
 import { prisma } from '@/lib/prisma';
 
+const MANUAL_INTERACTION_TYPES = [
+  InteractionType.NOTE,
+  InteractionType.CALL,
+  InteractionType.EMAIL,
+  InteractionType.MEETING,
+] as const;
+
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -23,16 +30,21 @@ export async function POST(
 
   const body = await request.json();
   const content = body.content?.trim();
+  const type = body.type ?? InteractionType.NOTE;
 
   if (!content) {
     return NextResponse.json({ error: 'content is required' }, { status: 400 });
   }
 
-  const note = await prisma.interaction.create({
+  if (!MANUAL_INTERACTION_TYPES.includes(type)) {
+    return NextResponse.json({ error: 'Invalid interaction type' }, { status: 400 });
+  }
+
+  const interaction = await prisma.interaction.create({
     data: {
       clientId,
       userId: auth.user.id,
-      type: InteractionType.NOTE,
+      type,
       content,
     },
     include: {
@@ -44,12 +56,13 @@ export async function POST(
 
   return NextResponse.json(
     {
-      id: note.id,
-      type: note.type,
-      content: note.content,
-      date: note.date.toISOString(),
+      id: interaction.id,
+      type: interaction.type,
+      content: interaction.content,
+      date: interaction.date.toISOString(),
       source: 'manual',
-      userName: note.user.name ?? note.user.email,
+      userId: interaction.userId,
+      userName: interaction.user.name ?? interaction.user.email,
     },
     { status: 201 }
   );

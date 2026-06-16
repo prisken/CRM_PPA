@@ -1,5 +1,6 @@
 import { DealStatus, UserRole } from '@prisma/client';
 import { NextResponse } from 'next/server';
+import { COMPANY_OVERHEAD_RATE } from '@/lib/constants';
 import { prisma } from '@/lib/prisma';
 import { createSupabaseServerClient } from '@/lib/supabaseServer';
 
@@ -44,7 +45,8 @@ export async function GET() {
 
   const yearStart = getYearStart();
 
-  const [wonDealsYTD, wonDealsForVelocity, activeDeals] = await Promise.all([
+  const [wonDealsYTD, committedRevenue, potentialRevenue, wonDealsForVelocity, activeDeals, wonDeals] =
+    await Promise.all([
     prisma.deal.aggregate({
       where: {
         status: DealStatus.WON,
@@ -52,8 +54,16 @@ export async function GET() {
       },
       _sum: {
         dealValue: true,
-        grossProfit: true,
+        totalCommission: true,
       },
+    }),
+    prisma.deal.aggregate({
+      where: { status: DealStatus.WON },
+      _sum: { dealValue: true },
+    }),
+    prisma.deal.aggregate({
+      where: { status: DealStatus.PROPOSED },
+      _sum: { dealValue: true },
     }),
     prisma.deal.findMany({
       where: { status: DealStatus.WON },
@@ -69,10 +79,15 @@ export async function GET() {
         status: { notIn: [DealStatus.WON, DealStatus.LOST] },
       },
     }),
+    prisma.deal.findMany({
+      where: { status: DealStatus.WON },
+      select: { totalCommission: true },
+    }),
   ]);
 
-  const totalRevenueYTD = Number(wonDealsYTD._sum.dealValue ?? 0);
-  const totalGrossProfitYTD = Number(wonDealsYTD._sum.grossProfit ?? 0);
+  const totalCommissionYTD = Number(wonDealsYTD._sum.totalCommission ?? 0);
+  const totalCommittedRevenue = Number(committedRevenue._sum.dealValue ?? 0);
+  const totalPotentialRevenue = Number(potentialRevenue._sum.dealValue ?? 0);
 
   const pipelineVelocity =
     wonDealsForVelocity.length > 0
@@ -84,9 +99,16 @@ export async function GET() {
         }, 0) / wonDealsForVelocity.length
       : 0;
 
+  const companyOverheadEarnings = wonDeals.reduce(
+    (sum, deal) => sum + Number(deal.totalCommission) * COMPANY_OVERHEAD_RATE,
+    0
+  );
+
   return NextResponse.json({
-    totalRevenueYTD,
-    totalGrossProfitYTD,
+    totalCommittedRevenue,
+    totalPotentialRevenue,
+    totalCommissionYTD,
+    companyOverheadEarnings,
     pipelineVelocity: Math.round(pipelineVelocity * 10) / 10,
     activeDeals,
   });

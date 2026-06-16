@@ -30,7 +30,7 @@ export type GroupedClientActivity = {
 export type PerformanceMetrics = {
   totalActiveClients: number;
   totalPipelineValue: number;
-  myPotentialCommission: number;
+  mySecuredCommission: number;
 };
 
 export type StandardDashboardData = {

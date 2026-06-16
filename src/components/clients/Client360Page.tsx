@@ -11,6 +11,7 @@ import WorkspacePanel from '@/components/clients/WorkspacePanel';
 import Logo from '@/components/Logo';
 import { useUserProfile } from '@/hooks/useUserProfile';
 import { formatClientStage, getStatusBadgeStyles, CLIENT_STAGES } from '@/lib/clientStages';
+import { calculateUserClientCommissionShare } from '@/lib/commissionCalculations';
 import {
   canUserAdvancePipelineStage,
   getNextPipelineStage,
@@ -34,8 +35,17 @@ type Client360Data = {
   employeeCount: number | null;
   expectations: string | null;
   importantDates: ImportantDate[];
-  deal_value: number;
-  gross_profit: number;
+  committedValue: number;
+  potentialValue: number;
+  deals: {
+    id: string;
+    name: string;
+    dealValue: number;
+    totalCommission: number;
+    status: string;
+    createdAt: string;
+    updatedAt: string;
+  }[];
   strategyText: string;
   assignedUsers: {
     assignment_id: string;
@@ -55,6 +65,7 @@ type Client360Data = {
     description: string | null;
     status: string;
     dueDate: string | null;
+    assignee: { user_id: string; name: string } | null;
   }[];
   activityLog: {
     id: string;
@@ -62,6 +73,7 @@ type Client360Data = {
     content: string;
     date: string;
     source: 'manual' | 'system';
+    userId?: string | null;
     userName: string | null;
   }[];
 };
@@ -232,6 +244,27 @@ export default function Client360Page({ clientId }: { clientId: string }) {
     );
   }, [profile, client]);
 
+  const isDoctorSpecialist = useMemo(() => {
+    if (!profile || !client) {
+      return false;
+    }
+
+    return client.assignedUsers.some(
+      (user) => user.user_id === profile.id && user.role === 'DOCTOR'
+    );
+  }, [profile, client]);
+
+  const myClientCommissionPercentage = useMemo(() => {
+    if (!profile || !client) {
+      return 0;
+    }
+
+    return calculateUserClientCommissionShare(
+      profile.id,
+      client.assignedUsers
+    );
+  }, [profile, client]);
+
   if (loading) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-gray-100">
@@ -363,9 +396,13 @@ export default function Client360Page({ clientId }: { clientId: string }) {
             onSaved={handleClientDetailsSaved}
           />
           <DealInfoWidget
-            dealValue={client.deal_value}
-            grossProfit={client.gross_profit}
-            canEdit={isSuperAdmin || isRelationshipSpecialist}
+            clientId={clientId}
+            deals={client.deals}
+            committedValue={client.committedValue}
+            potentialValue={client.potentialValue}
+            myClientCommissionPercentage={myClientCommissionPercentage}
+            canManage={isSuperAdmin || isDoctorSpecialist}
+            onUpdated={handleClientDetailsSaved}
           />
           <AssignedTeamWidget
             clientId={clientId}

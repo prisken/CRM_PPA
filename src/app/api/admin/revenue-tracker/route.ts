@@ -89,7 +89,7 @@ export async function GET(request: Request) {
     where: { status: DealStatus.WON },
     select: {
       dealValue: true,
-      grossProfit: true,
+      totalCommission: true,
       updatedAt: true,
     },
     orderBy: { updatedAt: 'asc' },
@@ -104,14 +104,14 @@ export async function GET(request: Request) {
     const period = formatPeriod(deal.updatedAt, groupBy);
     const key = sortKey(deal.updatedAt, groupBy);
     const revenue = Number(deal.dealValue);
-    const profit = Number(deal.grossProfit);
+    const commission = Number(deal.totalCommission);
 
     const existing = periodMap.get(period);
     if (existing) {
       existing.revenue += revenue;
-      existing.profit += profit;
+      existing.profit += commission;
     } else {
-      periodMap.set(period, { period, revenue, profit, sortKey: key });
+      periodMap.set(period, { period, revenue, profit: commission, sortKey: key });
     }
   }
 

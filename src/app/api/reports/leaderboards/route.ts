@@ -30,7 +30,7 @@ export async function GET(request: Request) {
   const [wonDealsYTD, assignments] = await Promise.all([
     prisma.deal.findMany({
       where: { status: DealStatus.WON, updatedAt: { gte: yearStart } },
-      select: { clientId: true, dealValue: true, grossProfit: true },
+      select: { clientId: true, dealValue: true, totalCommission: true },
     }),
     prisma.clientAssignment.findMany({
       include: { user: { select: { name: true, email: true } } },
@@ -56,11 +56,11 @@ export async function GET(request: Request) {
   for (const deal of wonDealsYTD) {
     const clientAssignments = assignmentsByClient.get(deal.clientId) ?? [];
     const dealValue = Number(deal.dealValue);
-    const grossProfit = Number(deal.grossProfit);
+    const totalCommission = Number(deal.totalCommission);
 
     for (const assignment of clientAssignments) {
       const userName = assignment.user.name ?? assignment.user.email;
-      const commission = grossProfit * COMMISSION_RATES[assignment.role];
+      const commission = totalCommission * COMMISSION_RATES[assignment.role];
       const commissionEntry = commissionStats.get(assignment.userId) ?? {
         userName,
         totalCommission: 0,

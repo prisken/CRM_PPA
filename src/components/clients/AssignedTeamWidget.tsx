@@ -1,7 +1,12 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { AssignmentRole } from '@prisma/client';
+import { useEffect, useMemo, useState } from 'react';
 import { X } from 'lucide-react';
+import {
+  countAssignmentsForRole,
+  getRoleOccupancyLimitMessage,
+} from '@/lib/constants';
 
 export type AssignedUser = {
   assignment_id: string;
@@ -54,6 +59,27 @@ export default function AssignedTeamWidget({
 
   const isSuperAdmin = currentUser?.role === 'SUPER_ADMIN';
 
+  const selectedRoleCount = useMemo(
+    () =>
+      countAssignmentsForRole(
+        assignedUsers,
+        selectedRole as AssignmentRole
+      ),
+    [assignedUsers, selectedRole]
+  );
+
+  const occupancyLimitMessage = useMemo(
+    () =>
+      getRoleOccupancyLimitMessage(
+        selectedRole as AssignmentRole,
+        selectedRoleCount
+      ),
+    [selectedRole, selectedRoleCount]
+  );
+
+  const isAssignDisabled =
+    isSubmitting || !selectedUserId || occupancyLimitMessage !== null;
+
   useEffect(() => {
     if (!isSuperAdmin) {
       return;
@@ -89,6 +115,11 @@ export default function AssignedTeamWidget({
   async function handleAssign() {
     if (!selectedUserId) {
       setError('Please select a user');
+      return;
+    }
+
+    if (occupancyLimitMessage) {
+      setError(occupancyLimitMessage);
       return;
     }
 
@@ -207,7 +238,10 @@ export default function AssignedTeamWidget({
                 <select
                   id="assign-role"
                   value={selectedRole}
-                  onChange={(event) => setSelectedRole(event.target.value)}
+                  onChange={(event) => {
+                    setSelectedRole(event.target.value);
+                    setError(null);
+                  }}
                   className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
                 >
                   {ROLE_OPTIONS.map((role) => (
@@ -216,8 +250,15 @@ export default function AssignedTeamWidget({
                     </option>
                   ))}
                 </select>
+                {occupancyLimitMessage && (
+                  <p className="mt-2 text-sm text-red-600">{occupancyLimitMessage}</p>
+                )}
               </div>
             </div>
+
+            {error && !occupancyLimitMessage && (
+              <p className="text-sm text-red-600">{error}</p>
+            )}
 
             <div className="mt-6 flex justify-end gap-3">
               <button
@@ -230,8 +271,8 @@ export default function AssignedTeamWidget({
               <button
                 type="button"
                 onClick={handleAssign}
-                disabled={isSubmitting}
-                className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-60"
+                disabled={isAssignDisabled}
+                className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {isSubmitting ? 'Assigning...' : 'Assign'}
               </button>

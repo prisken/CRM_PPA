@@ -15,7 +15,7 @@ type WorkspacePanelProps = {
   tasks: StrategyTask[];
   activityLog: ActivityLogEntry[];
   currentUser: StrategyCurrentUser | null;
-  assignedUsers: { user_id: string; role: string }[];
+  assignedUsers: { user_id: string; name: string; role: string }[];
   canPostNote?: boolean;
   onNotePosted?: () => void;
   onStrategyTasksUpdated?: () => void;
@@ -129,6 +129,11 @@ export default function WorkspacePanel({
           <ActivityLog
             clientId={clientId}
             activityLog={activityLog}
+            currentUser={
+              currentUser
+                ? { id: currentUser.id, role: currentUser.role }
+                : null
+            }
             canPostNote={canPostNote}
             onNotePosted={onNotePosted}
           />
