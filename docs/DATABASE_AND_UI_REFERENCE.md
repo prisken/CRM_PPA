@@ -1,6 +1,6 @@
 # Profit Pulse Ally CRM — Database & UI Reference
 
-**Last updated:** June 17, 2026 (user management + client lifecycle deletion)  
+**Last updated:** June 17, 2026 (lead creation expansion, account settings, Safari autofill fix)  
 **Repository:** [CRM_PPA](https://github.com/prisken/CRM_PPA)  
 **Deployment branch:** `deploy`  
 **Production URL:** `https://crm-ppa-nine.vercel.app`
@@ -33,6 +33,9 @@ This document describes the PostgreSQL database schema, API surface, and fronten
 | **DB performance indexes** | ✅ Composite indexes on deals, interactions, activity logs, read status |
 | **Client lifecycle management** | ✅ Super admin archive (soft) + permanent delete with password confirmation |
 | **User management** | ✅ Super admin deactivate + permanent delete; `/admin/users` UI |
+| **Enhanced lead creation** | ✅ Full client-detail fields at create time (`AddLeadModal`, `AddClientModal`) |
+| **Account settings** | ✅ `/dashboard/settings` — users can view/edit their name |
+| **Safari/iPad autofill fix** | ✅ Global `-webkit-autofill` override in `globals.css` |
 | Vercel deploy | ✅ `prisma generate` + `migrate deploy` on build |
 
 ---
@@ -105,7 +108,7 @@ docs/             # Documentation (this file)
 | Path | Unauthenticated | Authenticated |
 |------|-----------------|---------------|
 | `/` | → `/login` | → `/dashboard` |
-| `/dashboard`, `/my-statements`, `/admin/*`, `/clients/*` | → `/login` | Allowed |
+| `/dashboard`, `/dashboard/*`, `/my-statements`, `/admin/*`, `/clients/*` | → `/login` | Allowed |
 | `/login`, `/signup` | Allowed | → `/dashboard` |
 
 ### User roles
@@ -188,7 +191,7 @@ Standard users advance one stage at a time via **Move to Next Stage** + confirma
 | Mode | How it works | Used by |
 |------|--------------|---------|
 | Session cookie | Supabase session via `getAuthenticatedUser()` | Most Client 360 sub-routes (interactions, strategy, tasks, deals, assignments) |
-| Bearer or session | JWT in `Authorization` header **or** session via `getAuthenticatedUserFromRequest()` | Dashboard APIs, `PUT .../details`, employees endpoints, `POST /api/clients`, commission returnable APIs |
+| Bearer or session | JWT in `Authorization` header **or** session via `getAuthenticatedUserFromRequest()` | Dashboard APIs, `PATCH /api/user/profile`, `PUT .../details`, employees endpoints, `POST /api/clients`, commission returnable APIs |
 
 **Note:** Client-side fetches that only send Bearer tokens will fail on session-only routes unless cookies are also sent (`credentials: 'same-origin'`).
 
@@ -608,6 +611,7 @@ Edited via `PUT /api/clients/[id]/details` by super admins or `RELATIONSHIP` ass
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
 | POST | `/api/auth/register` | Public | Create user (name, email, password) |
+| PATCH | `/api/user/profile` | Bearer or session | Update authenticated user's `name`. Body: `{ name }` |
 | * | `/api/auth/[...nextauth]` | — | NextAuth route (legacy/auxiliary) |
 
 ### Dashboards
@@ -641,7 +645,7 @@ Edited via `PUT /api/clients/[id]/details` by super admins or `RELATIONSHIP` ass
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
-| POST | `/api/clients` | Bearer or session | Create lead/client. Standard users auto-assigned `RELATIONSHIP`. Body: `name`, `company`, `email`, `phone`, `contactInfo`, `status` |
+| POST | `/api/clients` | Bearer or session | Create lead/client. Standard users auto-assigned `RELATIONSHIP`. Body: `name` (required), `company`, `email`, `phone`, `lead_source`, `role_in_company`, `employee_count`, `expectations`, `status`, `contactInfo` (legacy). Returns created client including new detail fields |
 | GET | `/api/clients/[id]` | Session | **Core** Client 360 payload — client details, team, documents, strategy text. **No** deals, tasks, or activity log |
 | GET | `/api/clients/[id]/workspace` | Super admin or any client assignment (session) | Lazy tab data. Query: `?tab=strategy-tasks` or `?tab=activity-notes` (alias: `activity`) |
 | PATCH | `/api/clients/[id]` | Session | Super admin: any field; standard user: `status` only (role-based). Returns core payload. Stage changes log system activity |
@@ -924,6 +928,7 @@ Previously returned in a single `GET /api/clients/[id]` call. Now split across c
 /login                → Sign in
 /signup               → Register
 /dashboard            → User Dashboard (all authenticated users; role-based commission widgets)
+/dashboard/settings   → Account Settings (view/edit display name)
 /admin                → Super Admin Dashboard
 /admin/reconciliation → Global Reconciliation Dashboard (commission returnables audit)
 /admin/users          → User Management (deactivate / permanently delete users)
@@ -977,7 +982,7 @@ Previously returned in a single `GET /api/clients/[id]` call. Now split across c
 
 **Refresh:** `AddLeadModal` `onCreated` increments a shared `widgetRefreshKey` to re-fetch all widget endpoints.
 
-**Modals:** `AddLeadModal` — simplified lead form (name, company, email, phone) → `POST /api/clients`
+**Modals:** `AddLeadModal` — full lead form (name, company, email, phone, lead source, role in company, employee count, expectations) → `POST /api/clients`
 
 **Widgets (responsive grid: `grid-cols-1 md:grid-cols-2`):**
 
@@ -992,6 +997,22 @@ Previously returned in a single `GET /api/clients/[id]` call. Now split across c
 **Skeleton design:** Each skeleton mirrors its widget's exact section padding, heading, and content structure to prevent layout shift (CLS).
 
 **Unauthenticated state:** `AuthRequiredMessage` with “Back to Sign In” (signs out stale session, then → `/login`)
+
+---
+
+### Page: Account Settings (`/dashboard/settings`)
+
+**File:** `src/app/dashboard/settings/page.tsx` → `src/components/dashboard/UserProfileSettingsPage.tsx`
+
+**Auth:** Any authenticated active user (middleware protects `/dashboard/*`).
+
+**Data:** `useUserProfile` for initial load; `PATCH /api/user/profile` to save name changes.
+
+**Features:**
+- View display name and email (email read-only)
+- **Edit** toggles inline name input with **Save** / **Cancel**
+- Loading, saving, and error states
+- Header: logo, Back to Dashboard, Sign Out
 
 ---
 
@@ -1014,7 +1035,7 @@ Previously returned in a single `GET /api/clients/[id]` call. Now split across c
 | Recent Activity (all clients) | `CollapsibleActivityWidget` | `/api/dashboard/superadmin` |
 | Master pipeline | `MasterPipelineView` | `/api/admin/pipeline` — Kanban on `lg+`, grouped list on mobile |
 
-**Modals:** `AddClientModal` — scroll-safe centered overlay (`max-w-lg`)
+**Modals:** `AddClientModal` — same fields as `AddLeadModal` plus pipeline stage selector; scroll-safe overlay (`max-h-[90vh]`)
 
 ---
 
@@ -1143,6 +1164,7 @@ Deep link: `#activity-notes` opens Activity tab and scrolls into view.
 | `MyStatementsPage` | `src/components/dashboard/MyStatementsPage.tsx` |
 | `PerformanceSnapshotWidget` | `src/components/dashboard/PerformanceSnapshotWidget.tsx` |
 | `AddLeadModal` | `src/components/dashboard/AddLeadModal.tsx` |
+| `UserProfileSettingsPage` | `src/components/dashboard/UserProfileSettingsPage.tsx` |
 | `MyClientsWidgetSkeleton` | `src/components/dashboard/skeletons/MyClientsWidgetSkeleton.tsx` |
 | `MyTasksWidgetSkeleton` | `src/components/dashboard/skeletons/MyTasksWidgetSkeleton.tsx` |
 | `CollapsibleActivityWidgetSkeleton` | `src/components/dashboard/skeletons/CollapsibleActivityWidgetSkeleton.tsx` |
@@ -1220,6 +1242,14 @@ Deep link: `#activity-notes` opens Activity tab and scrolls into view.
 ```
 /signup → POST /api/auth/register → Supabase user + User row
        → JWT in localStorage → Supabase sign-in → /dashboard
+```
+
+### Standard user — edit display name
+
+```
+/dashboard/settings → view name + email
+                   → Edit → change name → Save
+                   → PATCH /api/user/profile { name }
 ```
 
 ### Standard user daily workflow
@@ -1373,6 +1403,14 @@ fixed inset-0 overflow-y-auto p-4
 ```
 
 Affected modals: `AddLeadModal`, `AddClientModal`, `ClientDetailsEditModal`, `PipelineStageAdvanceModal`, `ClientDeletionModal`, `UserManagementModal`.
+
+### Safari / iPadOS autofill
+
+`src/app/globals.css` includes a global override for `input:-webkit-autofill` to prevent white-on-white invisible text when Safari autofill is active on iPadOS:
+
+- `-webkit-text-fill-color: #1f2937` — forces dark text
+- `-webkit-box-shadow` inset trick — forces white background
+- Long `transition` on `background-color` — prevents Safari from reverting the override
 
 ---
 
