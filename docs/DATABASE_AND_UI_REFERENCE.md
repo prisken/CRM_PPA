@@ -1,6 +1,6 @@
 # Profit Pulse Ally CRM — Database & UI Reference
 
-**Last updated:** June 17, 2026 (lead creation expansion, account settings, Safari autofill fix)  
+**Last updated:** June 17, 2026 (account settings nav, doc cleanup)  
 **Repository:** [CRM_PPA](https://github.com/prisken/CRM_PPA)  
 **Deployment branch:** `deploy`  
 **Production URL:** `https://crm-ppa-nine.vercel.app`
@@ -34,7 +34,7 @@ This document describes the PostgreSQL database schema, API surface, and fronten
 | **Client lifecycle management** | ✅ Super admin archive (soft) + permanent delete with password confirmation |
 | **User management** | ✅ Super admin deactivate + permanent delete; `/admin/users` UI |
 | **Enhanced lead creation** | ✅ Full client-detail fields at create time (`AddLeadModal`, `AddClientModal`) |
-| **Account settings** | ✅ `/dashboard/settings` — users can view/edit their name |
+| **Account settings** | ✅ `/dashboard/settings` — edit display name; **Account Settings** link in dashboard headers |
 | **Safari/iPad autofill fix** | ✅ Global `-webkit-autofill` override in `globals.css` |
 | Vercel deploy | ✅ `prisma generate` + `migrate deploy` on build |
 
@@ -275,7 +275,7 @@ Doctor liability records generated when a deal transitions to `WON`.
 
 **Generation trigger:** When a deal's status changes to `WON` (via `PUT .../deals/[dealId]`) or is created as `WON` (via `POST .../deals`), one record is created per `DOCTOR` assignment on the client. Idempotent — skips if records already exist for that deal.
 
-**Amount formula:** `(deal.totalCommission / doctorCount) × (1 - COMMISSION_RATE_POOLS.DOCTOR)`.
+**Amount formula:** See [Commission returnables](#commission-returnables) below (`calculateDoctorCommissionReturnableAmount` in `lib/commissionReturnables.ts`).
 
 ---
 
@@ -611,8 +611,8 @@ Edited via `PUT /api/clients/[id]/details` by super admins or `RELATIONSHIP` ass
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
 | POST | `/api/auth/register` | Public | Create user (name, email, password) |
-| PATCH | `/api/user/profile` | Bearer or session | Update authenticated user's `name`. Body: `{ name }` |
-| * | `/api/auth/[...nextauth]` | — | NextAuth route (legacy/auxiliary) |
+| PATCH | `/api/user/profile` | Bearer or session | Update authenticated user's `name`. Body: `{ name }`. Returns `id`, `name`, `email`, `role`, `status`, timestamps |
+| * | `/api/auth/[...nextauth]` | — | Legacy/auxiliary; **not used** by live app (Supabase is primary auth) |
 
 ### Dashboards
 
@@ -690,7 +690,6 @@ Edited via `PUT /api/clients/[id]/details` by super admins or `RELATIONSHIP` ass
 | GET | `/api/admin/revenue-tracker` | Super admin | Revenue over time; requires `?groupBy=month\|quarter\|year` |
 | GET | `/api/admin/leaderboards` | Super admin | Commission & deals leaderboards |
 | GET | `/api/admin/pipeline` | Super admin | All clients for master pipeline |
-| GET | `/api/admin/users` | Super admin (Bearer or session) | User list — see [User management](#user-management) |
 
 ### Reports (alternate endpoints — require `?format=pdf|csv`)
 
@@ -818,46 +817,9 @@ Edited via `PUT /api/clients/[id]/details` by super admins or `RELATIONSHIP` ass
 }
 ```
 
-### Client 360 full response (legacy reference)
+### Client 360 full response (legacy)
 
-Previously returned in a single `GET /api/clients/[id]` call. Now split across core + workspace + deals endpoints.
-
-```json
-{
-  "client_id": "...",
-  "name": "...",
-  "company": "...",
-  "email": "...",
-  "phone": "...",
-  "lead_source": "...",
-  "roleInCompany": "CEO",
-  "employeeCount": 120,
-  "expectations": "Quarterly strategy reviews",
-  "importantDates": [
-    { "label": "Contract renewal", "date": "2026-12-01" }
-  ],
-  "committedValue": 1000000,
-  "potentialValue": 50000,
-  "equity": 0,
-  "status": "ACTIVE_CLIENT",
-  "strategyText": "...",
-  "deals": [
-    {
-      "id": "...",
-      "name": "TMP",
-      "dealValue": 1000000,
-      "totalCommission": 28000,
-      "status": "WON",
-      "createdAt": "...",
-      "updatedAt": "..."
-    }
-  ],
-  "assignedUsers": [{ "assignment_id": "...", "user_id": "...", "name": "...", "role": "DOCTOR" }],
-  "documents": [{ "id": "...", "fileName": "...", "downloadUrl": "...", "uploadedAt": "..." }],
-  "tasks": [{ "id": "...", "title": "...", "status": "PENDING", "dueDate": null, "assignee": null }],
-  "activityLog": [{ "id": "...", "type": "NOTE", "content": "...", "date": "...", "source": "manual", "userId": "...", "userName": "..." }]
-}
-```
+The monolithic payload (deals + tasks + activity in one response) is **no longer returned** by `GET /api/clients/[id]`. Use the split endpoints above: core `GET /api/clients/[id]`, `GET /api/clients/[id]/workspace?tab=...`, and `GET /api/clients/[id]/deals`.
 
 ### Commission returnable response shape
 
@@ -976,7 +938,7 @@ Previously returned in a single `GET /api/clients/[id]` call. Now split across c
 
 **File:** `src/components/dashboard/StandardUserDashboardPage.tsx`
 
-**Header:** Logo (links home), welcome message, **Add Lead** (standard users only), **Returnable Statements** link (if `DOCTOR` role), **Admin Dashboard** link (super admin), Sign Out
+**Header:** Logo (links home), welcome message, **Add Lead** (standard users only), **Returnable Statements** (if `DOCTOR` role), **Admin Dashboard** (super admin), **Account Settings**, Sign Out
 
 **Data loading:** Page shell (header + widget grid) renders immediately once profile is ready. Each widget fetches its own endpoint **in parallel**; dimension-matched **skeleton loaders** display until data arrives. Also fetches `/api/me/assignments` for doctor-role visibility (non-blocking).
 
@@ -1012,7 +974,7 @@ Previously returned in a single `GET /api/clients/[id]` call. Now split across c
 - View display name and email (email read-only)
 - **Edit** toggles inline name input with **Save** / **Cancel**
 - Loading, saving, and error states
-- Header: logo, Back to Dashboard, Sign Out
+- Header: logo, **Account Settings** (via dashboard headers), Back to Dashboard, Sign Out
 
 ---
 
@@ -1020,9 +982,9 @@ Previously returned in a single `GET /api/clients/[id]` call. Now split across c
 
 **File:** `src/components/admin/SuperAdminDashboardPage.tsx`
 
-**Header:** Logo, title, Add Lead/Client, User Dashboard link, **Reconciliation** link, **User Management** link, Sign Out
+**Header:** Logo, title, Add Lead/Client, User Dashboard, **Reconciliation**, **User Management**, **Account Settings**, Sign Out
 
-**Header:** Responsive — stacks on mobile (`flex-col`), horizontal from `sm` up; action buttons wrap.
+Responsive header — stacks on mobile (`flex-col`), horizontal from `sm` up; action buttons wrap.
 
 **Sections (vertical stack, `flex flex-col gap-6`):**
 
@@ -1147,7 +1109,7 @@ Deep link: `#activity-notes` opens Activity tab and scrolls into view.
 | `Logo` | `src/components/Logo.tsx` | Branded logo image |
 | `AuthRequiredMessage` | `src/components/auth/AuthRequiredMessage.tsx` | Unauthenticated fallback with sign-in CTA |
 | `SignUpPage` | `src/components/auth/SignUpPage.tsx` | Registration form |
-| `Providers` | `src/components/Providers.tsx` | App-level providers wrapper (NextAuth `SessionProvider`) |
+| `Providers` | `src/components/Providers.tsx` | App-level providers wrapper (legacy NextAuth `SessionProvider`; live auth is Supabase) |
 
 **Hook:** `useUserProfile` (`src/hooks/useUserProfile.ts`) — loads current user from Supabase `User` table; signs out users with `status === DEACTIVATED`.
 
@@ -1162,7 +1124,6 @@ Deep link: `#activity-notes` opens Activity tab and scrolls into view.
 | `MySecuredCommissionWidget` | `src/components/dashboard/MySecuredCommissionWidget.tsx` |
 | `MyCommissionReturnableWidget` | `src/components/dashboard/MyCommissionReturnableWidget.tsx` |
 | `MyStatementsPage` | `src/components/dashboard/MyStatementsPage.tsx` |
-| `PerformanceSnapshotWidget` | `src/components/dashboard/PerformanceSnapshotWidget.tsx` |
 | `AddLeadModal` | `src/components/dashboard/AddLeadModal.tsx` |
 | `UserProfileSettingsPage` | `src/components/dashboard/UserProfileSettingsPage.tsx` |
 | `MyClientsWidgetSkeleton` | `src/components/dashboard/skeletons/MyClientsWidgetSkeleton.tsx` |
@@ -1226,9 +1187,7 @@ Deep link: `#activity-notes` opens Activity tab and scrolls into view.
 | `commissionCalculations.ts` | Shared-role commission share + secured commission math |
 | `commissionReturnables.ts` | Returnable generation, formatting, period filters, backfill |
 | `dealCalculations.ts` | Committed/potential value, deal response formatting, money parsing |
-| `commissionRates.ts` | Legacy role labels (superseded by `constants.ts` for rates) |
-| `clientDeals.ts` | Legacy primary deal helpers |
-| `leadSources.ts` | Lead source combobox suggestions |
+| `leadSources.ts` | Lead source combobox suggestions (`ClientDetailsEditModal`) |
 | `reports.ts` | CSV/PDF export helpers for admin widgets |
 | `jwt.ts` | JWT sign/verify for Bearer auth (7-day expiry) |
 | `supabaseClient.ts` / `supabaseServer.ts` / `supabaseAdmin.ts` | Supabase clients; storage bucket via `SUPABASE_CLIENT_DOCUMENTS_BUCKET` |
@@ -1247,9 +1206,8 @@ Deep link: `#activity-notes` opens Activity tab and scrolls into view.
 ### Standard user — edit display name
 
 ```
-/dashboard/settings → view name + email
-                   → Edit → change name → Save
-                   → PATCH /api/user/profile { name }
+/dashboard → Account Settings (header link)
+/dashboard/settings → view name + email → Edit → Save → PATCH /api/user/profile { name }
 ```
 
 ### Standard user daily workflow
@@ -1394,12 +1352,12 @@ Tailwind breakpoints used throughout the app (`sm` 640px, `md` 768px, `lg` 1024p
 | **Workspace tabs** | Headless UI dropdown (`block md:hidden`) | Horizontal tab bar (`hidden md:flex`) |
 | **Modals** | Full width within `p-4` padding; stacked action buttons | `max-w-md` / `max-w-lg`; buttons row-aligned |
 
-**Modal pattern (all four modals):**
+**Modal pattern:**
 
 ```
 fixed inset-0 overflow-y-auto p-4
   └─ flex min-h-full items-center justify-center
-       └─ w-full max-w-{md|lg} rounded-xl (scrollable if tall)
+       └─ w-full max-w-{md|lg} rounded-xl (max-h-[90vh] overflow-y-auto on tall forms)
 ```
 
 Affected modals: `AddLeadModal`, `AddClientModal`, `ClientDetailsEditModal`, `PipelineStageAdvanceModal`, `ClientDeletionModal`, `UserManagementModal`.
@@ -1443,7 +1401,7 @@ Related: `lib/pipelinePermissions.ts` exports `getNextPipelineStage`, `canUserAd
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│  [Logo]  Welcome back, {name}        [Add Lead] [Sign Out]  │  Standard Dashboard
+│  [Logo]  Welcome back, {name}   [Add Lead] [Settings] [Out] │  Standard Dashboard
 ├──────────────────────────┬──────────────────────────────────┤
 │  My Assigned Clients     │  My Open Tasks                     │  skeletons → data
 ├──────────────────────────┼──────────────────────────────────┤
@@ -1454,7 +1412,7 @@ Related: `lib/pipelinePermissions.ts` exports `getNextPipelineStage`, `canUserAd
   (*)  if any assignment   (**) if DOCTOR role
 
 ┌─────────────────────────────────────────────────────────────┐
-│  [Logo]  Super Admin Dashboard    [+Add] [User Dash] [Out]  │
+│  [Logo]  Super Admin Dashboard  [+Add] [Users] [Settings]   │
 ├─────────────────────────────────────────────────────────────┤
 │  KPI Bar + Company Overhead Earnings                        │
 ├──────────────────────────┬──────────────────────────────────┤
@@ -1465,6 +1423,13 @@ Related: `lib/pipelinePermissions.ts` exports `getNextPipelineStage`, `canUserAd
 │  Recent Activity (All Clients) — CollapsibleActivityWidget  │
 ├─────────────────────────────────────────────────────────────┤
 │  Master Pipeline (desktop: kanban / mobile: grouped list)   │
+└─────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────┐
+│  Account Settings                    [Back to Dashboard]    │
+├─────────────────────────────────────────────────────────────┤
+│  Name: {display name}                          [Edit]       │
+│  Email: {email} (read-only)                                  │
 └─────────────────────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────────────────────┐
@@ -1521,6 +1486,5 @@ Related: `lib/pipelinePermissions.ts` exports `getNextPipelineStage`, `canUserAd
 | Activity read IDs | Polymorphic: `activity_read_status.activity_log_id` may reference `Interaction.id` or `ClientActivityLog.id` |
 | ARCHIVED pipeline stage | In enum but excluded from funnel charts and advance logic |
 | Legacy models | `Strategy` + `Document` coexist with `Client.strategyText`; Client 360 uses `strategyText` |
-| Legacy endpoint | `GET /api/get-dashboard-data` and `GET /api/dashboard/standard` still present; live UI uses per-widget routes |
-| Legacy commission rates | `lib/commissionRates.ts` retains old flat rates; active logic uses `lib/constants.ts` pools |
+| Legacy endpoints | `GET /api/get-dashboard-data` and `GET /api/dashboard/standard` — tests/backward compat only; live UI uses per-widget routes |
 | Skeleton loaders | Standard dashboard only; super admin and Client 360 use inline pulse placeholders |
