@@ -1,4 +1,5 @@
-import { AssignmentRole, ClientStatus, UserRole } from '@prisma/client';
+import { AssignmentRole, ClientStatus, UserRole, UserStatus } from '@prisma/client';
+import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
 import {
   canAssignmentRoleChangePipelineStatus,
@@ -22,11 +23,17 @@ export async function requireSuperAdmin() {
 
   const dbUser = await prisma.user.findUnique({
     where: { id: user.id },
-    select: { id: true, role: true },
+    select: { id: true, role: true, email: true, status: true },
   });
 
   if (!dbUser) {
     return { error: NextResponse.json({ error: 'User not found' }, { status: 404 }) };
+  }
+
+  if (dbUser.status !== UserStatus.ACTIVE) {
+    return {
+      error: NextResponse.json({ error: 'Account deactivated' }, { status: 403 }),
+    };
   }
 
   if (dbUser.role !== UserRole.SUPER_ADMIN) {
@@ -52,11 +59,17 @@ export async function getAuthenticatedUser() {
 
   const dbUser = await prisma.user.findUnique({
     where: { id: user.id },
-    select: { id: true, role: true, name: true, email: true },
+    select: { id: true, role: true, name: true, email: true, status: true },
   });
 
   if (!dbUser) {
     return { error: NextResponse.json({ error: 'User not found' }, { status: 404 }) };
+  }
+
+  if (dbUser.status !== UserStatus.ACTIVE) {
+    return {
+      error: NextResponse.json({ error: 'Account deactivated' }, { status: 403 }),
+    };
   }
 
   return { user: dbUser };
@@ -73,10 +86,16 @@ export async function getAuthenticatedUserFromRequest(request: Request) {
 
       const dbUser = await prisma.user.findUnique({
         where: { id: payload.id },
-        select: { id: true, role: true, name: true, email: true },
+        select: { id: true, role: true, name: true, email: true, status: true },
       });
 
       if (dbUser) {
+        if (dbUser.status !== UserStatus.ACTIVE) {
+          return {
+            error: NextResponse.json({ error: 'Account deactivated' }, { status: 403 }),
+          };
+        }
+
         return { user: dbUser };
       }
     } catch {
@@ -226,6 +245,37 @@ export async function logClientSystemEvent(
       userId: userId ?? null,
     },
   });
+}
+
+export async function verifyAdminPassword(email: string, password: string) {
+  if (!password?.trim()) {
+    return { valid: false as const, error: 'Password is required' };
+  }
+
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+  if (!url || !anonKey) {
+    return { valid: false as const, error: 'Auth is not configured' };
+  }
+
+  const supabase = createClient(url, anonKey, {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+    },
+  });
+
+  const { error } = await supabase.auth.signInWithPassword({
+    email,
+    password,
+  });
+
+  if (error) {
+    return { valid: false as const, error: 'Incorrect password' };
+  }
+
+  return { valid: true as const };
 }
 
 export { canAssignmentRoleChangePipelineStatus } from '@/lib/pipelinePermissions';

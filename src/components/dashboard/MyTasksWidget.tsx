@@ -3,10 +3,11 @@
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import type { OpenTaskRow } from '@/lib/dashboardTypes';
+import { authenticatedFetch } from '@/lib/authenticatedFetch';
 
 type MyTasksWidgetProps = {
   openTasks: OpenTaskRow[];
-  onTaskCompleted?: (taskId: string) => void;
+  error?: string | null;
 };
 
 function formatDueDate(dueDate: string | null) {
@@ -33,11 +34,11 @@ function isOverdue(dueDate: string | null) {
 
 export default function MyTasksWidget({
   openTasks,
-  onTaskCompleted,
+  error = null,
 }: MyTasksWidgetProps) {
   const [tasks, setTasks] = useState(openTasks);
   const [completingTaskId, setCompletingTaskId] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   useEffect(() => {
     setTasks(openTasks);
@@ -60,14 +61,11 @@ export default function MyTasksWidget({
 
   async function handleComplete(taskId: string) {
     setCompletingTaskId(taskId);
-    setError(null);
+    setActionError(null);
 
     try {
-      const token = localStorage.getItem('token');
-      const res = await fetch(`/api/tasks/${taskId}/complete`, {
+      const res = await authenticatedFetch(`/api/tasks/${taskId}/complete`, {
         method: 'PUT',
-        credentials: 'same-origin',
-        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
       });
 
       if (!res.ok) {
@@ -78,19 +76,20 @@ export default function MyTasksWidget({
       }
 
       setTasks((current) => current.filter((task) => task.taskId !== taskId));
-      onTaskCompleted?.(taskId);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to complete task');
+      setActionError(err instanceof Error ? err.message : 'Failed to complete task');
     } finally {
       setCompletingTaskId(null);
     }
   }
 
+  const displayError = actionError ?? error;
+
   return (
     <section className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
       <h2 className="text-lg font-semibold text-gray-900">My Open Tasks</h2>
 
-      {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
+      {displayError && <p className="mt-3 text-sm text-red-600">{displayError}</p>}
 
       {sortedTasks.length === 0 ? (
         <p className="mt-4 text-sm text-gray-500">No open tasks. You&apos;re all caught up!</p>

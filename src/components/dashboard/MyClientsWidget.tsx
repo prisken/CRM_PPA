@@ -14,9 +14,13 @@ function formatMoney(value: number) {
 
 type MyClientsWidgetProps = {
   assignedClients: AssignedClientRow[];
+  error?: string | null;
 };
 
-export default function MyClientsWidget({ assignedClients }: MyClientsWidgetProps) {
+export default function MyClientsWidget({
+  assignedClients,
+  error = null,
+}: MyClientsWidgetProps) {
   const router = useRouter();
   const [search, setSearch] = useState('');
 
@@ -43,7 +47,9 @@ export default function MyClientsWidget({ assignedClients }: MyClientsWidgetProp
         className="mt-4 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
       />
 
-      {filteredClients.length === 0 ? (
+      {error ? (
+        <p className="mt-4 text-sm text-red-600">{error}</p>
+      ) : filteredClients.length === 0 ? (
         <p className="mt-4 text-sm text-gray-500">No clients match your search.</p>
       ) : (
         <div className="mt-4 overflow-x-auto">

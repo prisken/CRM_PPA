@@ -1,13 +1,13 @@
 # Profit Pulse Ally CRM — Database & UI Reference
 
-**Last updated:** June 16, 2026 (post commission engine + returnables)  
+**Last updated:** June 17, 2026 (user management + client lifecycle deletion)  
 **Repository:** [CRM_PPA](https://github.com/prisken/CRM_PPA)  
 **Deployment branch:** `deploy`  
 **Production URL:** `https://crm-ppa-nine.vercel.app`
 
 This document describes the PostgreSQL database schema, API surface, and frontend UI structure for handoff to developers, designers, and stakeholders.
 
-### Shipped features (as of June 16, 2026)
+### Shipped features (as of June 17, 2026)
 
 | Area | Status |
 |------|--------|
@@ -21,12 +21,18 @@ This document describes the PostgreSQL database schema, API surface, and fronten
 | Standard user lead creation | ✅ Add Lead on dashboard with auto-assignment |
 | RELATIONSHIP client details edit | ✅ API + Edit button on Client 360 |
 | Mobile-responsive UI | ✅ Dashboards, Client 360, pipeline, modals, workspace tabs |
-| Auth UX | ✅ Stale-session sign-out before login redirect |
+| Auth UX | ✅ Stale-session sign-out; deactivated-account block on login + API |
 | **Commission engine** | ✅ Shared-role pools, `totalCommission`, secured commission |
 | **Team occupancy limits** | ✅ Max 2 Doctors, 1 Relationship, 1 Account Service per client |
 | **Multi-deal system** | ✅ CRUD per client; committed/potential value aggregation |
-| **Commission returnables** | ✅ Doctor liabilities on WON deals; statements + reconciliation |
+| **Commission returnables** | ✅ Doctor liabilities on WON deals; multi-role credit; statements + reconciliation |
 | **Role-based dashboard widgets** | ✅ Secured commission + returnables by assignment role (all users) |
+| **Performance refactor — dashboard widgets** | ✅ Per-widget API endpoints; skeleton loaders; parallel fetch |
+| **Performance refactor — Client 360** | ✅ Lightweight `GET /api/clients/[id]`; lazy workspace tabs |
+| **Query optimizations** | ✅ Activity feed SQL `UNION ALL`; commission `groupBy` aggregation |
+| **DB performance indexes** | ✅ Composite indexes on deals, interactions, activity logs, read status |
+| **Client lifecycle management** | ✅ Super admin archive (soft) + permanent delete with password confirmation |
+| **User management** | ✅ Super admin deactivate + permanent delete; `/admin/users` UI |
 | Vercel deploy | ✅ `prisma generate` + `migrate deploy` on build |
 
 ---
@@ -77,15 +83,21 @@ public/assets/    # Logo, favicon
 docs/             # Documentation (this file)
 ```
 
+**Performance architecture (June 2026):**
+
+- **Standard dashboard** — each widget has its own API route; the page fetches in parallel and shows dimension-matched skeleton loaders while data loads.
+- **Client 360** — initial load returns core client data only; workspace tabs and deal info fetch on demand.
+- **Activity feed** — single PostgreSQL query via `UNION ALL` (Interactions + activity logs), sorted and limited in the database.
+
 ---
 
 ## 2. Authentication & Authorization
 
 ### Auth flow
 
-1. **Sign up** — `POST /api/auth/register` creates a Supabase Auth user + `User` row in Postgres (`STANDARD_USER` by default). Returns a JWT stored in `localStorage` as `token`.
-2. **Sign in** — Supabase `signInWithPassword` sets session cookies.
-3. **API access** — Session cookies (server) or `Authorization: Bearer <token>` (client fetch).
+1. **Sign up** — `POST /api/auth/register` creates a Supabase Auth user + `User` row in Postgres (`STANDARD_USER`, `status: ACTIVE` by default). Returns a JWT stored in `localStorage` as `token`.
+2. **Sign in** — Supabase `signInWithPassword` sets session cookies. After sign-in, the app queries `User.status` from Supabase; **`DEACTIVATED` users are signed out immediately** with an error message.
+3. **API access** — Session cookies (server) or `Authorization: Bearer <token>` (client fetch). All authenticated API helpers reject users with `status !== ACTIVE` (`403 Account deactivated`).
 4. **Middleware** (`src/middleware.ts`) protects routes at the edge (session check only; **no role check** on `/admin` — role enforced client-side and via API 403s).
 
 ### Route protection (middleware)
@@ -100,8 +112,17 @@ docs/             # Documentation (this file)
 
 | Role | Enum value | Access |
 |------|------------|--------|
-| Super Admin | `SUPER_ADMIN` | Full system: admin dashboard, all clients, assignments, unrestricted pipeline stage changes |
+| Super Admin | `SUPER_ADMIN` | Full system: admin dashboard, user management, all clients, assignments, unrestricted pipeline stage changes |
 | Standard User | `STANDARD_USER` | Own dashboard, assigned clients, create leads (auto-assigned as Relationship), role-based pipeline advances |
+
+### User account status
+
+| Status | Enum value | Behavior |
+|--------|------------|----------|
+| Active | `ACTIVE` | Default; can sign in and use all APIs |
+| Deactivated | `DEACTIVATED` | Cannot sign in; existing sessions rejected by API; data retained in database |
+
+Super Admins manage user lifecycle at `/admin/users` (deactivate or permanently delete). Self-deactivation/deletion is blocked.
 
 ### Assignment roles (per client)
 
@@ -195,6 +216,7 @@ Standard users advance one stage at a time via **Move to Next Stage** + confirma
 | Enum | Values | Used by |
 |------|--------|---------|
 | `UserRole` | `SUPER_ADMIN`, `STANDARD_USER` | `User.role` |
+| `UserStatus` | `ACTIVE`, `DEACTIVATED` | `User.status` (account lifecycle) |
 | `AssignmentRole` | `RELATIONSHIP`, `DOCTOR`, `ACCOUNT_SERVICE` | `ClientAssignment.role` |
 | `ClientStatus` | `NEW_LEAD`, `CONTACTED`, `NURTURING`, `STRATEGY_SESSION`, `ACTIVE_CLIENT`, `ARCHIVED` | `Client.status` (pipeline stages) |
 | `InteractionType` | `CALL`, `EMAIL`, `MEETING`, `NOTE` | `Interaction.type` |
@@ -227,6 +249,7 @@ Standard users advance one stage at a time via **Move to Next Stage** + confirma
 | `email` | TEXT UNIQUE | Login email |
 | `password_hash` | TEXT | Bcrypt hash (registration backup; Supabase holds primary credentials) |
 | `role` | UserRole | `SUPER_ADMIN` or `STANDARD_USER` |
+| `status` | UserStatus | `ACTIVE` (default) or `DEACTIVATED` |
 | `createdAt`, `updatedAt` | TIMESTAMP | Audit |
 
 **Relations:** assignments, interactions, tasks (assignee), activity logs, read statuses, notifications (sent/received), strategies (author), **commission returnables**.
@@ -446,6 +469,8 @@ erDiagram
 | `20260615024217_add_client_360_fields` | `role_in_company`, `employee_count`, `expectations`, `important_dates` on Client |
 | `20260615120000_rename_gross_profit_to_total_commission` | Renamed `Deal.grossProfit` → `Deal.totalCommission` |
 | `20260616004617_add_commission_returnable_model` | `CommissionReturnable` table + relations on User and Deal |
+| `20260617003208_add_performance_indexes` | Composite indexes: `Deal(clientId, status)`, `Interaction(clientId, date)`, `client_activity_logs(client_id, created_at)`, `activity_read_status(user_id)` |
+| `20260617120000_add_user_status` | `UserStatus` enum + `status` column on `User` (default `ACTIVE`) |
 
 **Deploy note:** `package.json` runs `prisma generate` on `postinstall` and `prisma generate && prisma migrate deploy && next build` on production build so Vercel applies migrations and has an up-to-date Prisma client.
 
@@ -507,9 +532,12 @@ Enforced in `AssignedTeamWidget` (UI) and `POST /api/clients/[id]/assignments` (
 When a deal becomes `WON`, each assigned Doctor receives a liability:
 
 ```
-returnableAmount = (deal.totalCommission / doctorCount) × (1 - COMMISSION_RATE_POOLS.DOCTOR)
+baseLiability = (deal.totalCommission / doctorCount) × (1 - COMMISSION_RATE_POOLS.DOCTOR)
+userCredit    = Σ (deal.totalCommission × poolShare) for RELATIONSHIP / ACCOUNT_SERVICE roles held by the same doctor on this client
+returnableAmount = max(0, baseLiability - userCredit)
 ```
 
+- Doctors who also hold `RELATIONSHIP` or `ACCOUNT_SERVICE` on the client receive a **credit** against their returnable (multi-role occupancy)
 - `period` = first day of the current month at generation time
 - `status` starts as `UNPAID`; doctors mark as `PAID` via statements page
 - Creation is idempotent (no duplicates per deal)
@@ -535,14 +563,14 @@ Returned by `GET /api/admin/dashboard-kpis` and displayed in `CompanyEarningsWid
 
 ### Activity feed
 
-Merges two sources, sorted by date descending:
+Merges two sources via a **single raw SQL query** (`prisma.$queryRaw`) using `UNION ALL` on `Interaction` and `client_activity_logs`, with `ORDER BY` date and `LIMIT` applied in PostgreSQL (`lib/activityFeed.ts`).
 
-- **Manual:** `Interaction` rows
-- **System:** `ClientActivityLog` rows
+- **Manual:** `Interaction` rows — formatted as user actions (notes, calls, etc.)
+- **System:** `ClientActivityLog` rows — displayed as-is
 
 Grouped by client for dashboard widgets. `isUnread` = no row in `activity_read_status` for `(activityId, userId)`.
 
-**Feed limits:** Standard dashboard — ~15 recent items; super admin dashboard — ~100 items.
+**Feed limits:** Standard dashboard widget — 15 recent items; super admin dashboard — ~100 items.
 
 ### Activity ID note
 
@@ -586,7 +614,11 @@ Edited via `PUT /api/clients/[id]/details` by super admins or `RELATIONSHIP` ass
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
-| GET | `/api/dashboard/standard` | Any authenticated user (Bearer or session) | Assigned clients, open tasks, grouped recent activity, performance metrics |
+| GET | `/api/dashboard/standard` | Any authenticated user (Bearer or session) | **Legacy** monolithic payload — still available; composes all widget builders for tests/backward compatibility |
+| GET | `/api/dashboard/widgets/assigned-clients` | Bearer or session | Assigned clients table data |
+| GET | `/api/dashboard/widgets/open-tasks` | Bearer or session | Open tasks for current user on assigned clients |
+| GET | `/api/dashboard/widgets/activity-feed` | Bearer or session | Grouped recent activity (~15 items) on assigned clients |
+| GET | `/api/dashboard/widgets/performance-metrics` | Bearer or session | `hasAnyAssignment`, `performanceMetrics` (incl. `mySecuredCommission` with role-pool splits) |
 | GET | `/api/dashboard/superadmin` | Super admin (Bearer or session) | System-wide grouped recent activity (last ~100 items) |
 | GET | `/api/me/assignments` | Any authenticated user (Bearer or session) | User's client assignments; returns `roles`, `hasAnyAssignment`, `hasDoctorRole` |
 | POST | `/api/activity/mark-read` | Bearer or session | Body: `{ activityLogIds: string[] }` — upsert read status |
@@ -610,8 +642,9 @@ Edited via `PUT /api/clients/[id]/details` by super admins or `RELATIONSHIP` ass
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
 | POST | `/api/clients` | Bearer or session | Create lead/client. Standard users auto-assigned `RELATIONSHIP`. Body: `name`, `company`, `email`, `phone`, `contactInfo`, `status` |
-| GET | `/api/clients/[id]` | Session | Full Client 360 payload (**any authenticated user**) |
-| PATCH | `/api/clients/[id]` | Session | Super admin: any field; standard user: `status` only (role-based). Stage changes log system activity |
+| GET | `/api/clients/[id]` | Session | **Core** Client 360 payload — client details, team, documents, strategy text. **No** deals, tasks, or activity log |
+| GET | `/api/clients/[id]/workspace` | Super admin or any client assignment (session) | Lazy tab data. Query: `?tab=strategy-tasks` or `?tab=activity-notes` (alias: `activity`) |
+| PATCH | `/api/clients/[id]` | Session | Super admin: any field; standard user: `status` only (role-based). Returns core payload. Stage changes log system activity |
 | PUT | `/api/clients/[id]/details` | Super admin or `RELATIONSHIP` assignee (Bearer or session) | Name, company, email, phone, lead source, `roleInCompany`, `employeeCount`, `expectations`, `importantDates` |
 | GET | `/api/clients/[id]/deals` | Super admin or `DOCTOR` assignment (session) | List all deals for client |
 | POST | `/api/clients/[id]/deals` | Super admin or `DOCTOR` assignment (session) | Create deal. Body: `name`, `dealValue`, `totalCommission`, `status`. Creates returnables if status is `WON` |
@@ -630,6 +663,18 @@ Edited via `PUT /api/clients/[id]/details` by super admins or `RELATIONSHIP` ass
 | DELETE | `/api/clients/[id]/assignments/[assignmentId]` | Super admin (session) | Remove assignment |
 | POST | `/api/clients/[id]/documents` | Super admin or any assignment (session) | Upload document (Supabase Storage, 10MB, MIME whitelist) |
 | DELETE | `/api/clients/[id]/documents/[documentId]` | Super admin (session) | Delete document |
+| POST | `/api/clients/[id]/archive` | Super admin (Bearer or session) | Soft delete: sets `status` to `ARCHIVED`. Body: `{ confirmName }` (must match client name) |
+| DELETE | `/api/clients/[id]` | Super admin (Bearer or session) | Permanent delete. Body: `{ confirmName, password }` — verifies admin password via Supabase Auth, deletes commission returnables for client's deals, then `prisma.client.delete()` |
+
+### User management
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| GET | `/api/admin/users` | Super admin (Bearer or session) | All users: `user_id`, `userName`, `email`, `role`, `status`, `createdAt` |
+| POST | `/api/users/[id]/deactivate` | Super admin (Bearer or session) | Sets `status` to `DEACTIVATED`. Body: `{ confirmName }` (must match user's display name). Cannot deactivate self |
+| DELETE | `/api/users/[id]` | Super admin (Bearer or session) | Permanent delete. Body: `{ confirmName, password }` — verifies admin password, deletes Supabase Auth user, removes commission returnables + authored strategies, then `prisma.user.delete()`. Cannot delete self |
+
+**Display name for confirmation:** `user.name` if set, otherwise `user.email`.
 
 ### Admin analytics
 
@@ -641,7 +686,7 @@ Edited via `PUT /api/clients/[id]/details` by super admins or `RELATIONSHIP` ass
 | GET | `/api/admin/revenue-tracker` | Super admin | Revenue over time; requires `?groupBy=month\|quarter\|year` |
 | GET | `/api/admin/leaderboards` | Super admin | Commission & deals leaderboards |
 | GET | `/api/admin/pipeline` | Super admin | All clients for master pipeline |
-| GET | `/api/admin/users` | Super admin | User list |
+| GET | `/api/admin/users` | Super admin (Bearer or session) | User list — see [User management](#user-management) |
 
 ### Reports (alternate endpoints — require `?format=pdf|csv`)
 
@@ -668,6 +713,8 @@ Edited via `PUT /api/clients/[id]/details` by super admins or `RELATIONSHIP` ass
 ---
 
 ### Standard dashboard response shape
+
+**Legacy monolithic endpoint** (`GET /api/dashboard/standard`) — still returns the full shape below. The **live UI** uses per-widget endpoints instead.
 
 ```json
 {
@@ -711,7 +758,65 @@ Edited via `PUT /api/clients/[id]/details` by super admins or `RELATIONSHIP` ass
 }
 ```
 
-### Client 360 response (abbreviated)
+### Per-widget endpoint responses
+
+| Endpoint | Top-level keys |
+|----------|----------------|
+| `GET .../widgets/assigned-clients` | `{ assignedClients: [...] }` |
+| `GET .../widgets/open-tasks` | `{ openTasks: [...] }` |
+| `GET .../widgets/activity-feed` | `{ recentActivity: [...] }` |
+| `GET .../widgets/performance-metrics` | `{ hasAnyAssignment: boolean, performanceMetrics: { totalActiveClients, totalPipelineValue, mySecuredCommission } }` |
+
+**Secured commission query optimization:** `buildPerformanceMetricsWidget` uses `deal.groupBy` with `_sum: { totalCommission }` (WON) and `_sum: { dealValue }` (PROPOSED) per client, then applies role-pool / occupancy splits in memory — no per-assignment deal loading.
+
+### Client 360 core response (`GET /api/clients/[id]`)
+
+```json
+{
+  "client_id": "...",
+  "name": "...",
+  "company": "...",
+  "email": "...",
+  "phone": "...",
+  "lead_source": "...",
+  "roleInCompany": "CEO",
+  "employeeCount": 120,
+  "expectations": "Quarterly strategy reviews",
+  "importantDates": [
+    { "label": "Contract renewal", "date": "2026-12-01" }
+  ],
+  "equity": 0,
+  "status": "ACTIVE_CLIENT",
+  "strategyText": "...",
+  "assignedUsers": [{ "assignment_id": "...", "user_id": "...", "name": "...", "role": "DOCTOR" }],
+  "documents": [{ "id": "...", "fileName": "...", "downloadUrl": "...", "uploadedAt": "..." }]
+}
+```
+
+### Client 360 workspace response (`GET /api/clients/[id]/workspace?tab=...`)
+
+**Tab `strategy-tasks`:**
+
+```json
+{
+  "tab": "strategy-tasks",
+  "strategyText": "...",
+  "tasks": [{ "id": "...", "title": "...", "status": "PENDING", "dueDate": null, "assignee": null }]
+}
+```
+
+**Tab `activity-notes`:**
+
+```json
+{
+  "tab": "activity-notes",
+  "activityLog": [{ "id": "...", "type": "NOTE", "content": "...", "date": "...", "source": "manual", "userId": "...", "userName": "..." }]
+}
+```
+
+### Client 360 full response (legacy reference)
+
+Previously returned in a single `GET /api/clients/[id]` call. Now split across core + workspace + deals endpoints.
 
 ```json
 {
@@ -821,6 +926,7 @@ Edited via `PUT /api/clients/[id]/details` by super admins or `RELATIONSHIP` ass
 /dashboard            → User Dashboard (all authenticated users; role-based commission widgets)
 /admin                → Super Admin Dashboard
 /admin/reconciliation → Global Reconciliation Dashboard (commission returnables audit)
+/admin/users          → User Management (deactivate / permanently delete users)
 /my-statements        → Returnable Statements (doctors mark liabilities as paid)
 /clients/[id]         → Client 360 page
 ```
@@ -846,7 +952,8 @@ Edited via `PUT /api/clients/[id]/details` by super admins or `RELATIONSHIP` ass
 **File:** `src/app/login/page.tsx`
 
 - Profit Pulse Ally logo (centered)
-- Email + password form → Supabase sign-in → `/dashboard`
+- Email + password form → Supabase sign-in → checks `User.status` → `/dashboard`
+- Deactivated accounts: signed out with *"Your account has been deactivated. Contact an administrator."*
 - Link to `/signup`
 
 ---
@@ -866,19 +973,23 @@ Edited via `PUT /api/clients/[id]/details` by super admins or `RELATIONSHIP` ass
 
 **Header:** Logo (links home), welcome message, **Add Lead** (standard users only), **Returnable Statements** link (if `DOCTOR` role), **Admin Dashboard** link (super admin), Sign Out
 
-**Data loading:** Fetches `/api/dashboard/standard` + `/api/me/assignments` in parallel.
+**Data loading:** Page shell (header + widget grid) renders immediately once profile is ready. Each widget fetches its own endpoint **in parallel**; dimension-matched **skeleton loaders** display until data arrives. Also fetches `/api/me/assignments` for doctor-role visibility (non-blocking).
+
+**Refresh:** `AddLeadModal` `onCreated` increments a shared `widgetRefreshKey` to re-fetch all widget endpoints.
 
 **Modals:** `AddLeadModal` — simplified lead form (name, company, email, phone) → `POST /api/clients`
 
 **Widgets (responsive grid: `grid-cols-1 md:grid-cols-2`):**
 
-| Widget | Component | Visibility | Data source |
-|--------|-----------|------------|-------------|
-| My Assigned Clients | `MyClientsWidget` | Always | `assignedClients` — searchable table, links to Client 360 |
-| My Open Tasks | `MyTasksWidget` | Always | `openTasks` — checkbox to complete via API |
-| Recent Activity | `CollapsibleActivityWidget` | Always | `recentActivity` — grouped by client, unread badges, mark-read on expand |
-| My Secured Commission | `MySecuredCommissionWidget` | If `hasAnyAssignment` | `performanceMetrics.mySecuredCommission` — WON-deal earnings with shared-role splits |
-| Current Month Commission Returnable | `MyCommissionReturnableWidget` | If `hasDoctorRole` | `GET /api/me/commission-returnable?status=UNPAID&period=YYYY-MM` — sum of current-month unpaid liabilities |
+| Widget | Component | Skeleton | Visibility | Data source |
+|--------|-----------|----------|------------|-------------|
+| My Assigned Clients | `MyClientsWidget` | `MyClientsWidgetSkeleton` | Always | `GET /api/dashboard/widgets/assigned-clients` |
+| My Open Tasks | `MyTasksWidget` | `MyTasksWidgetSkeleton` | Always | `GET /api/dashboard/widgets/open-tasks` |
+| Recent Activity | `CollapsibleActivityWidget` | `CollapsibleActivityWidgetSkeleton` | Always | `GET /api/dashboard/widgets/activity-feed` |
+| My Secured Commission | `MySecuredCommissionWidget` | `MySecuredCommissionWidgetSkeleton` | If `hasAnyAssignment` from performance-metrics | `GET /api/dashboard/widgets/performance-metrics` |
+| Current Month Commission Returnable | `MyCommissionReturnableWidget` | *(inline pulse)* | If `hasDoctorRole` from `/api/me/assignments` | `GET /api/me/commission-returnable?status=UNPAID&period=YYYY-MM` |
+
+**Skeleton design:** Each skeleton mirrors its widget's exact section padding, heading, and content structure to prevent layout shift (CLS).
 
 **Unauthenticated state:** `AuthRequiredMessage` with “Back to Sign In” (signs out stale session, then → `/login`)
 
@@ -888,7 +999,7 @@ Edited via `PUT /api/clients/[id]/details` by super admins or `RELATIONSHIP` ass
 
 **File:** `src/components/admin/SuperAdminDashboardPage.tsx`
 
-**Header:** Logo, title, Add Lead/Client, User Dashboard link, **Reconciliation** link, Sign Out
+**Header:** Logo, title, Add Lead/Client, User Dashboard link, **Reconciliation** link, **User Management** link, Sign Out
 
 **Header:** Responsive — stacks on mobile (`flex-col`), horizontal from `sm` up; action buttons wrap.
 
@@ -904,6 +1015,26 @@ Edited via `PUT /api/clients/[id]/details` by super admins or `RELATIONSHIP` ass
 | Master pipeline | `MasterPipelineView` | `/api/admin/pipeline` — Kanban on `lg+`, grouped list on mobile |
 
 **Modals:** `AddClientModal` — scroll-safe centered overlay (`max-w-lg`)
+
+---
+
+### Page: User Management (`/admin/users`)
+
+**File:** `src/app/admin/users/page.tsx` → `src/components/admin/UserManagementPage.tsx`
+
+**Auth:** Super admin only (non-admins redirected to `/dashboard`).
+
+**Data:** `GET /api/admin/users`
+
+**Features:**
+- Table: Name, Email, Role, Status (Active / Deactivated badge), Joined date
+- Per-row **actions menu** (`UserActionsMenu`): Deactivate, Permanently Delete
+- Cannot manage your own account (menu disabled)
+- **`UserManagementModal`** — two tabs (same pattern as client deletion):
+  - **Deactivate** — type user's display name to confirm → `POST /api/users/[id]/deactivate`
+  - **Permanently Delete** — severe warning, name confirmation + admin password → `DELETE /api/users/[id]`
+
+**Navigation:** Link back to Admin Dashboard in header.
 
 ---
 
@@ -943,7 +1074,9 @@ Edited via `PUT /api/clients/[id]/details` by super admins or `RELATIONSHIP` ass
 **File:** `src/components/clients/Client360Page.tsx`  
 **Route:** `dynamic = 'force-dynamic'`
 
-**Header:** Logo, back to pipeline link, client name, pipeline stage control:
+**Initial load:** `GET /api/clients/[id]` — core client data only (fast). Workspace tabs and deal info load on demand.
+
+**Header:** Logo, back to pipeline link, **Archive Client** button (super admin only), client name, pipeline stage control:
 
 | Role | UI control |
 |------|------------|
@@ -952,14 +1085,22 @@ Edited via `PUT /api/clients/[id]/details` by super admins or `RELATIONSHIP` ass
 
 **Pipeline advance modal:** `PipelineStageAdvanceModal` — confirmation message + non-interactive checklist reminders; **Confirm** calls `PATCH /api/clients/[id]`.
 
+**Archive / delete modal:** `ClientDeletionModal` — super admin only. Two tabs:
+- **Archive** — type client name → `POST /api/clients/[id]/archive` (sets `ARCHIVED`, refreshes page)
+- **Permanently Delete** — warning, client name + admin password → `DELETE /api/clients/[id]` (redirects to `/admin#master-pipeline`)
+
+**Refresh coordination:** `refreshKey` + `triggerDataRefresh()` passed to mutating widgets so core client data reloads in the background after edits.
+
 **Layout:** Responsive — stacks on mobile (`flex-col`), side-by-side from `md` up (`md:flex-row`, 2:1 ratio)
 
 **Left — Workspace (`WorkspacePanel`):**
 
-| Tab | Component | Features |
-|-----|-----------|----------|
-| Strategy & Tasks | `StrategyAndTasks` | Edit strategy text, create/edit/complete/delete tasks (super admin or `DOCTOR`) |
-| Activity & Notes | `ActivityLog` | View merged activity, add/edit/delete interactions, filter by type |
+Lazy-loads tab content via `GET /api/clients/[id]/workspace?tab=...` when a tab is selected (default: Strategy & Tasks on first visit). Shows inline pulse placeholder while tab data loads. Refreshes active tab after note posted or strategy/tasks updated.
+
+| Tab | Query param | Component | Features |
+|-----|-------------|-----------|----------|
+| Strategy & Tasks | `strategy-tasks` | `StrategyAndTasks` | Edit strategy text, create/edit/complete/delete tasks (super admin or `DOCTOR`) |
+| Activity & Notes | `activity-notes` | `ActivityLog` | View merged activity, add/edit/delete interactions, filter by type |
 
 **Tab navigation:** Horizontal tabs on `md+` (`hidden md:flex`); Headless UI dropdown on mobile (`block md:hidden`).
 
@@ -970,7 +1111,7 @@ Deep link: `#activity-notes` opens Activity tab and scrolls into view.
 | Widget | Component | Who can edit |
 |--------|-----------|--------------|
 | Client Details | `ClientDetailsWidget` + `ClientDetailsEditModal` | Super admin **or** `RELATIONSHIP` assignee |
-| Deal Info | `DealInfoWidget` + `DealEditModal` | Super admin **or** `DOCTOR` assignee — multi-deal CRUD, committed/potential values, personal commission share % |
+| Deal Info | `DealInfoWidget` + `DealEditModal` | Visible to super admin **or** `DOCTOR` assignee only — self-fetches `GET /api/clients/[id]/deals`; multi-deal CRUD, committed/potential values, personal commission share % |
 | Assigned Team | `AssignedTeamWidget` | Super admin manages assignments (occupancy limits enforced) |
 | Company Hierarchy | `CompanyHierarchyWidget` | All authenticated — view colleagues, add employee leads |
 
@@ -987,7 +1128,7 @@ Deep link: `#activity-notes` opens Activity tab and scrolls into view.
 | `SignUpPage` | `src/components/auth/SignUpPage.tsx` | Registration form |
 | `Providers` | `src/components/Providers.tsx` | App-level providers wrapper (NextAuth `SessionProvider`) |
 
-**Hook:** `useUserProfile` (`src/hooks/useUserProfile.ts`) — loads current user from Supabase `User` table.
+**Hook:** `useUserProfile` (`src/hooks/useUserProfile.ts`) — loads current user from Supabase `User` table; signs out users with `status === DEACTIVATED`.
 
 ### Dashboard (standard user)
 
@@ -1002,6 +1143,11 @@ Deep link: `#activity-notes` opens Activity tab and scrolls into view.
 | `MyStatementsPage` | `src/components/dashboard/MyStatementsPage.tsx` |
 | `PerformanceSnapshotWidget` | `src/components/dashboard/PerformanceSnapshotWidget.tsx` |
 | `AddLeadModal` | `src/components/dashboard/AddLeadModal.tsx` |
+| `MyClientsWidgetSkeleton` | `src/components/dashboard/skeletons/MyClientsWidgetSkeleton.tsx` |
+| `MyTasksWidgetSkeleton` | `src/components/dashboard/skeletons/MyTasksWidgetSkeleton.tsx` |
+| `CollapsibleActivityWidgetSkeleton` | `src/components/dashboard/skeletons/CollapsibleActivityWidgetSkeleton.tsx` |
+| `MySecuredCommissionWidgetSkeleton` | `src/components/dashboard/skeletons/MySecuredCommissionWidgetSkeleton.tsx` |
+| `skeletonUtils` | `src/components/dashboard/skeletons/skeletonUtils.tsx` — shared `SkeletonPulse`, section classes |
 
 ### Admin
 
@@ -1016,6 +1162,9 @@ Deep link: `#activity-notes` opens Activity tab and scrolls into view.
 | `Leaderboards` | `src/components/admin/Leaderboards.tsx` |
 | `MasterPipelineView` | `src/components/admin/MasterPipelineView.tsx` |
 | `AddClientModal` | `src/components/admin/AddClientModal.tsx` |
+| `UserManagementPage` | `src/components/admin/UserManagementPage.tsx` |
+| `UserManagementModal` | `src/components/admin/UserManagementModal.tsx` |
+| `UserActionsMenu` | `src/components/admin/UserActionsMenu.tsx` |
 | `WidgetDownloadMenu` | `src/components/admin/WidgetDownloadMenu.tsx` |
 
 ### Client 360
@@ -1034,18 +1183,21 @@ Deep link: `#activity-notes` opens Activity tab and scrolls into view.
 | `AssignedTeamWidget` | `src/components/clients/AssignedTeamWidget.tsx` |
 | `CompanyHierarchyWidget` | `src/components/clients/CompanyHierarchyWidget.tsx` |
 | `PipelineStageAdvanceModal` | `src/components/clients/PipelineStageAdvanceModal.tsx` |
+| `ClientDeletionModal` | `src/components/clients/ClientDeletionModal.tsx` |
 
 ### Server-side libraries (`lib/`)
 
 | Module | Purpose |
 |--------|---------|
 | `prisma.ts` | Prisma client singleton |
-| `authHelpers.ts` | Auth guards (`authorizeClientDetailsEdit`, `authorizePipelineStatusChange`, etc.), client access checks, system event logging |
-| `client360.ts` | Client 360 query includes + response builder (deals, committed/potential values) |
+| `authHelpers.ts` | Auth guards, `verifyAdminPassword()` (Supabase re-auth for destructive actions), `ACTIVE` status checks, client access checks, system event logging |
+| `client360.ts` | Client 360 query includes + response builders: `client360CoreInclude`, workspace tab builders, legacy full response |
 | `pipelinePermissions.ts` | Pipeline stage advance rules + advance checklists (shared by API + UI) |
-| `standardDashboard.ts` | User dashboard data with shared-role secured commission |
+| `standardDashboard.ts` | Composes legacy monolithic dashboard from widget builders |
+| `standardDashboardWidgets.ts` | Per-widget data builders (assigned clients, tasks, activity, performance metrics) |
 | `superAdminDashboard.ts` | Super admin activity feed data (~100 items) |
-| `activityFeed.ts` | Grouped activity + mark-as-read |
+| `activityFeed.ts` | SQL `UNION ALL` activity fetch, grouped activity + mark-as-read |
+| `authenticatedFetch.ts` | Client-side fetch helper with Bearer token + `credentials: 'same-origin'` |
 | `dashboardTypes.ts` | TypeScript types for dashboard payloads |
 | `clientStages.ts` | Pipeline stage labels and badge styles |
 | `constants.ts` | Commission pools, company overhead, role occupancy limits |
@@ -1125,6 +1277,29 @@ Deep link: `#activity-notes` opens Activity tab and scrolls into view.
       → scan system-wide activity feed
       → master pipeline → filter by status/user → open Client 360
       → change pipeline stage, edit details, manage team assignments
+      → archive or permanently delete client (Client 360 → Archive Client modal)
+/admin/users → deactivate or permanently delete user accounts
+```
+
+### Super admin — client lifecycle
+
+```
+/clients/[id] → Archive Client (header button)
+             → ClientDeletionModal
+                Archive tab: confirm client name → POST /api/clients/[id]/archive
+                Delete tab: confirm name + admin password → DELETE /api/clients/[id]
+             → archive: page refreshes in place
+             → delete: redirect to /admin#master-pipeline
+```
+
+### Super admin — user lifecycle
+
+```
+/admin/users → view all users (name, email, role, status)
+            → actions menu → Deactivate or Permanently Delete
+            → UserManagementModal (name confirm; password required for delete)
+            → deactivate: POST /api/users/[id]/deactivate
+            → delete: DELETE /api/users/[id] (Supabase Auth + Prisma)
 ```
 
 ### Stale session recovery
@@ -1163,7 +1338,8 @@ npm run dev          # http://localhost:3000
 
 ```bash
 npx tsx scripts/test-activity-apis.ts       # Activity feed + dashboard APIs
-npx tsx scripts/test-commission-system.ts     # Commission engine + returnables
+npx tsx scripts/test-commission-system.ts   # Commission engine + returnables
+npx tsx scripts/test-user-management.ts     # User deactivate/delete + auth status checks
 ```
 
 **Build (matches Vercel):**
@@ -1181,7 +1357,7 @@ Tailwind breakpoints used throughout the app (`sm` 640px, `md` 768px, `lg` 1024p
 | Area | Mobile behavior | Desktop behavior |
 |------|-----------------|------------------|
 | **Root layout** | Viewport meta tag in `<head>` | Same |
-| **Standard dashboard** | Single-column widget grid; header stacks vertically | `md:grid-cols-2`; header horizontal |
+| **Standard dashboard** | Single-column widget grid; header stacks vertically; per-widget skeleton loaders until data streams in | `md:grid-cols-2`; header horizontal |
 | **Super admin dashboard** | Sections stack vertically; charts single column | Charts `lg:grid-cols-2`; header horizontal |
 | **Master pipeline** | Grouped list by status (`block lg:hidden`) | Horizontal Kanban columns (`hidden lg:block`) |
 | **Client 360 layout** | Workspace above widgets (`flex-col`) | Side-by-side `md:flex-row` (2:1 ratio) |
@@ -1196,7 +1372,7 @@ fixed inset-0 overflow-y-auto p-4
        └─ w-full max-w-{md|lg} rounded-xl (scrollable if tall)
 ```
 
-Affected modals: `AddLeadModal`, `AddClientModal`, `ClientDetailsEditModal`, `PipelineStageAdvanceModal`.
+Affected modals: `AddLeadModal`, `AddClientModal`, `ClientDetailsEditModal`, `PipelineStageAdvanceModal`, `ClientDeletionModal`, `UserManagementModal`.
 
 ---
 
@@ -1206,10 +1382,11 @@ All exported functions in `lib/authHelpers.ts`:
 
 | Function | Purpose |
 |----------|---------|
-| `requireSuperAdmin()` | Session → must be `SUPER_ADMIN` |
-| `getAuthenticatedUser()` | Session → returns user profile |
-| `getAuthenticatedUserFromRequest(request)` | Bearer JWT **or** session fallback |
-| `requireSuperAdminFromRequest(request?)` | Bearer or session → must be `SUPER_ADMIN` |
+| `requireSuperAdmin()` | Session → must be `SUPER_ADMIN` and `ACTIVE` |
+| `getAuthenticatedUser()` | Session → returns user profile; rejects `DEACTIVATED` |
+| `getAuthenticatedUserFromRequest(request)` | Bearer JWT **or** session fallback; rejects `DEACTIVATED` |
+| `requireSuperAdminFromRequest(request?)` | Bearer or session → must be `SUPER_ADMIN` and `ACTIVE` |
+| `verifyAdminPassword(email, password)` | Ephemeral Supabase `signInWithPassword` to confirm admin identity before permanent deletes |
 | `authorizeClientDetailsEdit(request, clientId)` | Super admin **or** `RELATIONSHIP` assignee |
 | `requireStandardUser(request?)` | Bearer or session → must be `STANDARD_USER` |
 | `getClientOr404(clientId)` | Client existence check (no auth) |
@@ -1230,7 +1407,7 @@ Related: `lib/pipelinePermissions.ts` exports `getNextPipelineStage`, `canUserAd
 ┌─────────────────────────────────────────────────────────────┐
 │  [Logo]  Welcome back, {name}        [Add Lead] [Sign Out]  │  Standard Dashboard
 ├──────────────────────────┬──────────────────────────────────┤
-│  My Assigned Clients     │  My Open Tasks                     │
+│  My Assigned Clients     │  My Open Tasks                     │  skeletons → data
 ├──────────────────────────┼──────────────────────────────────┤
 │  Recent Activity         │  My Secured Commission (*)       │
 │  ▼ Client A  [!]         │                                    │
@@ -1265,8 +1442,8 @@ Related: `lib/pipelinePermissions.ts` exports `getNextPipelineStage`, `canUserAd
 │  [Logo]                              ← Back to list         │  Client 360 (desktop)
 │  {Client Name}  [Stage badge ▼ or Move to Next Stage]       │
 ├──────────────────────────────┬──────────────────────────────┤
-│  WORKSPACE                   │  Client Details              │
-│  [Strategy & Tasks] [Activity]│  Deal Info (committed/potential + commission share %)       │
+│  WORKSPACE (lazy tabs)       │  Client Details              │
+│  [Strategy & Tasks] [Activity]│  Deal Info (self-fetch deals) │
 │  ...                         │  Assigned Team               │
 │                              │  Company Hierarchy           │
 └──────────────────────────────┴──────────────────────────────┘
@@ -1294,6 +1471,8 @@ Related: `lib/pipelinePermissions.ts` exports `getNextPipelineStage`, `canUserAd
 | Item | Notes |
 |------|-------|
 | Client 360 read access | `GET /api/clients/[id]` allows any authenticated user (not restricted to assignees) |
+| User reactivation | No UI/API to restore `DEACTIVATED` → `ACTIVE`; requires direct DB update |
+| Client restore from ARCHIVED | No dedicated un-archive API; super admin can change stage via `PATCH` |
 | Company hierarchy APIs | `GET/POST .../employees` — any authenticated user, no assignment check |
 | Bearer vs session split | Dashboard/returnable/details/employees accept Bearer+session; interactions, strategy, tasks, deals use session-only helpers |
 | Returnable backfill | WON deals marked before returnable feature require manual backfill (`backfillCommissionReturnablesForWonDeals`) |
@@ -1304,5 +1483,6 @@ Related: `lib/pipelinePermissions.ts` exports `getNextPipelineStage`, `canUserAd
 | Activity read IDs | Polymorphic: `activity_read_status.activity_log_id` may reference `Interaction.id` or `ClientActivityLog.id` |
 | ARCHIVED pipeline stage | In enum but excluded from funnel charts and advance logic |
 | Legacy models | `Strategy` + `Document` coexist with `Client.strategyText`; Client 360 uses `strategyText` |
-| Legacy endpoint | `GET /api/get-dashboard-data` still present |
+| Legacy endpoint | `GET /api/get-dashboard-data` and `GET /api/dashboard/standard` still present; live UI uses per-widget routes |
 | Legacy commission rates | `lib/commissionRates.ts` retains old flat rates; active logic uses `lib/constants.ts` pools |
+| Skeleton loaders | Standard dashboard only; super admin and Client 360 use inline pulse placeholders |

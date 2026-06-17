@@ -21,7 +21,7 @@ type ClientDetailsWidgetProps = {
   importantDates: ImportantDate[];
   isSuperAdmin?: boolean;
   isRelationshipSpecialist?: boolean;
-  onSaved?: () => void;
+  onMutationSuccess?: () => void;
 };
 
 function DetailField({ label, value }: { label: string; value: string }) {
@@ -74,7 +74,7 @@ export default function ClientDetailsWidget({
   importantDates,
   isSuperAdmin = false,
   isRelationshipSpecialist = false,
-  onSaved,
+  onMutationSuccess,
 }: ClientDetailsWidgetProps) {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const displayDates = normalizeImportantDates(importantDates);
@@ -149,7 +149,7 @@ export default function ClientDetailsWidget({
         initialImportantDates={importantDates}
         isOpen={isEditModalOpen}
         onClose={() => setIsEditModalOpen(false)}
-        onSaved={() => onSaved?.()}
+        onSaved={() => onMutationSuccess?.()}
       />
     </>
   );

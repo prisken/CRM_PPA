@@ -1,10 +1,15 @@
 import { ClientStatus } from '@prisma/client';
 import { NextResponse } from 'next/server';
-import { buildClient360Response, client360Include } from '@/lib/client360';
+import {
+  buildClient360CoreResponse,
+  client360CoreInclude,
+} from '@/lib/client360';
 import { prisma } from '@/lib/prisma';
 import {
   authorizePipelineStatusChange,
   getAuthenticatedUser,
+  requireSuperAdminFromRequest,
+  verifyAdminPassword,
 } from '@/lib/authHelpers';
 
 const PATCH_CLIENT_NON_STATUS_FIELDS = [
@@ -35,14 +40,14 @@ export async function GET(
 
   const client = await prisma.client.findUnique({
     where: { id },
-    include: client360Include,
+    include: client360CoreInclude,
   });
 
   if (!client) {
     return NextResponse.json({ error: 'Client not found' }, { status: 404 });
   }
 
-  return NextResponse.json(buildClient360Response(client));
+  return NextResponse.json(buildClient360CoreResponse(client));
 }
 
 export async function PATCH(
@@ -140,12 +145,68 @@ export async function PATCH(
 
   const refreshedClient = await prisma.client.findUnique({
     where: { id },
-    include: client360Include,
+    include: client360CoreInclude,
   });
 
   if (!refreshedClient) {
     return NextResponse.json({ error: 'Client not found' }, { status: 404 });
   }
 
-  return NextResponse.json(buildClient360Response(refreshedClient));
+  return NextResponse.json(buildClient360CoreResponse(refreshedClient));
+}
+
+function normalizeConfirmName(value: unknown) {
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+export async function DELETE(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const { id } = await params;
+  const auth = await requireSuperAdminFromRequest(request);
+  if (auth.error) {
+    return auth.error;
+  }
+
+  const body = await request.json().catch(() => ({}));
+  const password = typeof body.password === 'string' ? body.password : '';
+  const confirmName = normalizeConfirmName(body.confirmName);
+
+  const existing = await prisma.client.findUnique({ where: { id } });
+  if (!existing) {
+    return NextResponse.json({ error: 'Client not found' }, { status: 404 });
+  }
+
+  if (confirmName !== existing.name) {
+    return NextResponse.json(
+      { error: 'Client name confirmation does not match' },
+      { status: 400 }
+    );
+  }
+
+  const passwordCheck = await verifyAdminPassword(auth.user.email, password);
+  if (!passwordCheck.valid) {
+    return NextResponse.json(
+      { error: passwordCheck.error },
+      { status: 403 }
+    );
+  }
+
+  const dealIds = (
+    await prisma.deal.findMany({
+      where: { clientId: id },
+      select: { id: true },
+    })
+  ).map((deal) => deal.id);
+
+  if (dealIds.length > 0) {
+    await prisma.commissionReturnable.deleteMany({
+      where: { dealId: { in: dealIds } },
+    });
+  }
+
+  await prisma.client.delete({ where: { id } });
+
+  return NextResponse.json({ success: true, client_id: id });
 }

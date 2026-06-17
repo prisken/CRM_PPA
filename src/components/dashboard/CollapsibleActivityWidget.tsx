@@ -7,12 +7,14 @@ import {
 } from '@headlessui/react';
 import { ChevronDown } from 'lucide-react';
 import Link from 'next/link';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { GroupedClientActivity } from '@/lib/dashboardTypes';
+import { authenticatedFetch } from '@/lib/authenticatedFetch';
 
 type CollapsibleActivityWidgetProps = {
-  recentActivity: GroupedClientActivity[];
+  recentActivity?: GroupedClientActivity[];
   title?: string;
+  refreshKey?: number;
 };
 
 function UnreadIndicator() {
@@ -41,10 +43,63 @@ function groupHasUnread(group: GroupedClientActivity) {
 }
 
 export default function CollapsibleActivityWidget({
-  recentActivity,
+  recentActivity: recentActivityProp,
   title = 'Recent Activity',
+  refreshKey = 0,
 }: CollapsibleActivityWidgetProps) {
+  const [fetchedActivity, setFetchedActivity] = useState<GroupedClientActivity[]>([]);
+  const [loading, setLoading] = useState(recentActivityProp === undefined);
+  const [error, setError] = useState<string | null>(null);
   const [readActivityIds, setReadActivityIds] = useState<Set<string>>(() => new Set());
+
+  const recentActivity = recentActivityProp ?? fetchedActivity;
+
+  useEffect(() => {
+    if (recentActivityProp !== undefined) {
+      return;
+    }
+
+    let cancelled = false;
+
+    async function loadActivityFeed() {
+      setLoading(true);
+      setError(null);
+
+      try {
+        const res = await authenticatedFetch('/api/dashboard/widgets/activity-feed');
+
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          throw new Error(
+            typeof data.error === 'string'
+              ? data.error
+              : 'Failed to load recent activity'
+          );
+        }
+
+        const data = await res.json();
+        if (!cancelled) {
+          setFetchedActivity(data.recentActivity ?? []);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setError(
+            err instanceof Error ? err.message : 'Failed to load recent activity'
+          );
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    }
+
+    loadActivityFeed();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [recentActivityProp, refreshKey]);
 
   const activityGroups = useMemo(
     () =>
@@ -77,14 +132,9 @@ export default function CollapsibleActivityWidget({
       return;
     }
 
-    const token = localStorage.getItem('token');
-    const res = await fetch('/api/activity/mark-read', {
+    const res = await authenticatedFetch('/api/activity/mark-read', {
       method: 'POST',
-      credentials: 'same-origin',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ activityLogIds: unreadIds }),
     });
 
@@ -107,7 +157,24 @@ export default function CollapsibleActivityWidget({
     <section className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
       <h2 className="text-lg font-semibold text-gray-900">{title}</h2>
 
-      {!hasActivity ? (
+      {recentActivityProp === undefined && loading ? (
+        <div className="mt-4 divide-y divide-gray-200 rounded-lg border border-gray-200">
+          {Array.from({ length: 4 }).map((_, index) => (
+            <div
+              key={index}
+              className="flex w-full items-center justify-between gap-3 px-4 py-3"
+            >
+              <div className="h-4 w-40 max-w-full animate-pulse rounded bg-gray-200" />
+              <ChevronDown
+                className="h-4 w-4 shrink-0 text-gray-300"
+                aria-hidden="true"
+              />
+            </div>
+          ))}
+        </div>
+      ) : error ? (
+        <p className="mt-4 text-sm text-red-600">{error}</p>
+      ) : !hasActivity ? (
         <p className="mt-4 text-sm text-gray-500">No recent activity yet.</p>
       ) : (
         <div className="mt-4 divide-y divide-gray-200 rounded-lg border border-gray-200">

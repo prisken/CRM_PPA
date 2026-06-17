@@ -69,7 +69,9 @@ function normalizeImportantDates(value: Client['importantDates']) {
     }));
 }
 
-function buildActivityLog(client: ClientWithRelations): ActivityLogEntry[] {
+function buildActivityLog(
+  client: Pick<ClientWithRelations, 'interactions' | 'activityLogs'>
+): ActivityLogEntry[] {
   const manualEntries: ActivityLogEntry[] = client.interactions.map((interaction) => ({
     id: interaction.id,
     type: interaction.type,
@@ -92,6 +94,104 @@ function buildActivityLog(client: ClientWithRelations): ActivityLogEntry[] {
   return [...manualEntries, ...systemEntries].sort(
     (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
   );
+}
+
+export function buildClient360CoreResponse(
+  client: Client360CoreRecord
+) {
+  const assignedUsers = client.clientAssignments.map((assignment) => ({
+    assignment_id: assignment.assignmentId,
+    user_id: assignment.user.id,
+    name: assignment.user.name ?? assignment.user.email,
+    role: assignment.role,
+  }));
+
+  const documents = client.documents.map((document) => ({
+    id: document.id,
+    fileName: document.fileName,
+    downloadUrl: document.url,
+    uploadedAt: document.uploadedAt.toISOString(),
+  }));
+
+  return {
+    client_id: client.id,
+    name: client.name,
+    company: client.company,
+    contactInfo: client.contactInfo,
+    email: client.email,
+    phone: client.phone,
+    lead_source: client.leadSource,
+    roleInCompany: client.roleInCompany,
+    employeeCount: client.employeeCount,
+    expectations: client.expectations,
+    importantDates: normalizeImportantDates(client.importantDates),
+    equity: client.equity !== null && client.equity !== undefined ? Number(client.equity) : 0,
+    status: client.status,
+    pendingNotifications: client.pendingNotifications,
+    createdAt: client.createdAt.toISOString(),
+    lastModified: client.lastModified.toISOString(),
+    assignedUsers,
+    documents,
+    strategyText: resolveStrategyText(client.strategyText, client.strategies),
+    assignments: client.clientAssignments.map((assignment) => ({
+      assignment_id: assignment.assignmentId,
+      user_id: assignment.user.id,
+      userName: assignment.user.name ?? assignment.user.email,
+      role: assignment.role,
+    })),
+  };
+}
+
+function mapTasks(client: Pick<ClientWithRelations, 'tasks'>) {
+  return client.tasks.map((task) => ({
+    id: task.id,
+    title: task.title,
+    description: task.description,
+    status: task.status,
+    dueDate: task.dueDate?.toISOString() ?? null,
+    assignee: task.assignee
+      ? {
+          user_id: task.assignee.id,
+          name: task.assignee.name ?? task.assignee.email,
+        }
+      : null,
+    createdAt: task.createdAt.toISOString(),
+    updatedAt: task.updatedAt.toISOString(),
+  }));
+}
+
+export function buildStrategyTasksWorkspace(
+  client: Prisma.ClientGetPayload<{ include: typeof client360StrategyTasksInclude }>
+) {
+  return {
+    tab: 'strategy-tasks' as const,
+    strategyText: resolveStrategyText(client.strategyText, client.strategies),
+    tasks: mapTasks(client),
+  };
+}
+
+export function buildActivityNotesWorkspace(
+  client: Prisma.ClientGetPayload<{ include: typeof client360ActivityInclude }>
+) {
+  return {
+    tab: 'activity-notes' as const,
+    activityLog: buildActivityLog(client),
+  };
+}
+
+export function buildClient360WorkspaceResponse(
+  client: Client360WorkspaceRecord,
+  tab: string
+) {
+  if (tab === 'strategy-tasks') {
+    return buildStrategyTasksWorkspace(client);
+  }
+
+  if (tab === 'activity' || tab === 'activity-notes') {
+    return buildActivityNotesWorkspace(client);
+  }
+
+  return null;
 }
 
 export function buildClient360Response(client: ClientWithRelations) {
@@ -177,6 +277,60 @@ export function buildClient360Response(client: ClientWithRelations) {
   };
 }
 
+export const client360CoreInclude = {
+  clientAssignments: {
+    include: {
+      user: {
+        select: { id: true, name: true, email: true },
+      },
+    },
+  },
+  documents: {
+    orderBy: { uploadedAt: 'desc' },
+  },
+  strategies: {
+    select: {
+      id: true,
+      name: true,
+      description: true,
+      status: true,
+      updatedAt: true,
+    },
+    orderBy: { updatedAt: 'desc' },
+  },
+} satisfies Prisma.ClientInclude;
+
+export const client360StrategyTasksInclude = {
+  strategies: client360CoreInclude.strategies,
+  tasks: {
+    orderBy: [{ status: 'asc' }, { dueDate: 'asc' }],
+    include: {
+      assignee: {
+        select: { id: true, name: true, email: true },
+      },
+    },
+  },
+} satisfies Prisma.ClientInclude;
+
+export const client360ActivityInclude = {
+  interactions: {
+    orderBy: { date: 'desc' },
+    include: {
+      user: {
+        select: { name: true, email: true },
+      },
+    },
+  },
+  activityLogs: {
+    orderBy: { createdAt: 'desc' },
+    include: {
+      user: {
+        select: { name: true, email: true },
+      },
+    },
+  },
+} satisfies Prisma.ClientInclude;
+
 export const client360Include = {
   clientAssignments: {
     include: {
@@ -237,3 +391,19 @@ export const client360Include = {
 } satisfies Prisma.ClientInclude;
 
 type Client360Record = Prisma.ClientGetPayload<{ include: typeof client360Include }>;
+type Client360CoreRecord = Prisma.ClientGetPayload<{ include: typeof client360CoreInclude }>;
+type Client360WorkspaceRecord = Prisma.ClientGetPayload<{
+  include: typeof client360StrategyTasksInclude & typeof client360ActivityInclude;
+}>;
+
+export function getClient360WorkspaceInclude(tab: string): Prisma.ClientInclude {
+  if (tab === 'strategy-tasks') {
+    return client360StrategyTasksInclude;
+  }
+
+  if (tab === 'activity' || tab === 'activity-notes') {
+    return client360ActivityInclude;
+  }
+
+  return {};
+}

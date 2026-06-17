@@ -1,10 +1,12 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useMemo, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import ClientDetailsWidget from '@/components/clients/ClientDetailsWidget';
 import AssignedTeamWidget from '@/components/clients/AssignedTeamWidget';
 import CompanyHierarchyWidget from '@/components/clients/CompanyHierarchyWidget';
+import ClientDeletionModal from '@/components/clients/ClientDeletionModal';
 import DealInfoWidget from '@/components/clients/DealInfoWidget';
 import PipelineStageAdvanceModal from '@/components/clients/PipelineStageAdvanceModal';
 import WorkspacePanel from '@/components/clients/WorkspacePanel';
@@ -35,18 +37,6 @@ type Client360Data = {
   employeeCount: number | null;
   expectations: string | null;
   importantDates: ImportantDate[];
-  committedValue: number;
-  potentialValue: number;
-  deals: {
-    id: string;
-    name: string;
-    dealValue: number;
-    totalCommission: number;
-    status: string;
-    createdAt: string;
-    updatedAt: string;
-  }[];
-  strategyText: string;
   assignedUsers: {
     assignment_id: string;
     user_id: string;
@@ -59,26 +49,10 @@ type Client360Data = {
     downloadUrl: string;
     uploadedAt: string;
   }[];
-  tasks: {
-    id: string;
-    title: string;
-    description: string | null;
-    status: string;
-    dueDate: string | null;
-    assignee: { user_id: string; name: string } | null;
-  }[];
-  activityLog: {
-    id: string;
-    type: string;
-    content: string;
-    date: string;
-    source: 'manual' | 'system';
-    userId?: string | null;
-    userName: string | null;
-  }[];
 };
 
 export default function Client360Page({ clientId }: { clientId: string }) {
+  const router = useRouter();
   const { profile } = useUserProfile();
   const [client, setClient] = useState<Client360Data | null>(null);
   const [loading, setLoading] = useState(true);
@@ -87,12 +61,29 @@ export default function Client360Page({ clientId }: { clientId: string }) {
   const [isUpdatingStage, setIsUpdatingStage] = useState(false);
   const [stageError, setStageError] = useState<string | null>(null);
   const [isAdvanceModalOpen, setIsAdvanceModalOpen] = useState(false);
+  const [isDeletionModalOpen, setIsDeletionModalOpen] = useState(false);
+  const clientRef = useRef<Client360Data | null>(null);
+
+  clientRef.current = client;
+
+  const triggerDataRefresh = () => {
+    setRefreshKey((prevKey) => prevKey + 1);
+  };
+
+  useEffect(() => {
+    setClient(null);
+    setLoading(true);
+    setError(null);
+  }, [clientId]);
 
   useEffect(() => {
     let cancelled = false;
 
     async function loadClient() {
-      setLoading(true);
+      const showFullPageLoader = clientRef.current === null;
+      if (showFullPageLoader) {
+        setLoading(true);
+      }
       setError(null);
 
       try {
@@ -124,7 +115,7 @@ export default function Client360Page({ clientId }: { clientId: string }) {
           setError(err instanceof Error ? err.message : 'Failed to load client');
         }
       } finally {
-        if (!cancelled) {
+        if (!cancelled && showFullPageLoader) {
           setLoading(false);
         }
       }
@@ -136,22 +127,6 @@ export default function Client360Page({ clientId }: { clientId: string }) {
       cancelled = true;
     };
   }, [clientId, refreshKey]);
-
-  function handleClientDetailsSaved() {
-    setRefreshKey((key) => key + 1);
-  }
-
-  function handleAssignmentsChange() {
-    setRefreshKey((key) => key + 1);
-  }
-
-  function handleNotePosted() {
-    setRefreshKey((key) => key + 1);
-  }
-
-  function handleStrategyTasksUpdated() {
-    setRefreshKey((key) => key + 1);
-  }
 
   async function handleStageChange(newStatus: string) {
     if (!client || newStatus === client.status) {
@@ -181,7 +156,7 @@ export default function Client360Page({ clientId }: { clientId: string }) {
       }
 
       setIsAdvanceModalOpen(false);
-      setRefreshKey((key) => key + 1);
+      triggerDataRefresh();
     } catch (err) {
       setStageError(err instanceof Error ? err.message : 'Failed to update status');
     } finally {
@@ -297,12 +272,23 @@ export default function Client360Page({ clientId }: { clientId: string }) {
             <Link href="/" aria-label="Go to homepage">
               <Logo className="h-8 w-auto" />
             </Link>
-            <Link
-              href="/admin#master-pipeline"
-              className="text-sm text-blue-600 hover:underline"
-            >
-              ← Back to list
-            </Link>
+            <div className="flex flex-wrap items-center gap-3">
+              <Link
+                href="/admin#master-pipeline"
+                className="text-sm text-blue-600 hover:underline"
+              >
+                ← Back to list
+              </Link>
+              {isSuperAdmin && (
+                <button
+                  type="button"
+                  onClick={() => setIsDeletionModalOpen(true)}
+                  className="rounded-lg border border-red-200 px-3 py-1.5 text-sm font-medium text-red-700 hover:bg-red-50"
+                >
+                  Archive Client
+                </button>
+              )}
+            </div>
           </div>
 
           <div className="mt-3 flex flex-wrap items-center gap-3">
@@ -359,9 +345,6 @@ export default function Client360Page({ clientId }: { clientId: string }) {
         <div className="min-w-0 md:flex-[2]">
           <WorkspacePanel
             clientId={clientId}
-            strategyText={client.strategyText}
-            tasks={client.tasks}
-            activityLog={client.activityLog}
             currentUser={
               profile
                 ? {
@@ -374,8 +357,8 @@ export default function Client360Page({ clientId }: { clientId: string }) {
             }
             assignedUsers={client.assignedUsers}
             canPostNote={hasClientAccess}
-            onNotePosted={handleNotePosted}
-            onStrategyTasksUpdated={handleStrategyTasksUpdated}
+            refreshKey={refreshKey}
+            onMutationSuccess={triggerDataRefresh}
           />
         </div>
 
@@ -393,17 +376,17 @@ export default function Client360Page({ clientId }: { clientId: string }) {
             importantDates={client.importantDates}
             isSuperAdmin={isSuperAdmin}
             isRelationshipSpecialist={isRelationshipSpecialist}
-            onSaved={handleClientDetailsSaved}
+            onMutationSuccess={triggerDataRefresh}
           />
-          <DealInfoWidget
-            clientId={clientId}
-            deals={client.deals}
-            committedValue={client.committedValue}
-            potentialValue={client.potentialValue}
-            myClientCommissionPercentage={myClientCommissionPercentage}
-            canManage={isSuperAdmin || isDoctorSpecialist}
-            onUpdated={handleClientDetailsSaved}
-          />
+          {(isSuperAdmin || isDoctorSpecialist) && (
+            <DealInfoWidget
+              clientId={clientId}
+              myClientCommissionPercentage={myClientCommissionPercentage}
+              canManage={isSuperAdmin || isDoctorSpecialist}
+              refreshKey={refreshKey}
+              onMutationSuccess={triggerDataRefresh}
+            />
+          )}
           <AssignedTeamWidget
             clientId={clientId}
             assignedUsers={client.assignedUsers}
@@ -417,12 +400,12 @@ export default function Client360Page({ clientId }: { clientId: string }) {
                   }
                 : null
             }
-            onAssignmentsChange={handleAssignmentsChange}
+            onMutationSuccess={triggerDataRefresh}
           />
           <CompanyHierarchyWidget
             clientId={clientId}
             refreshKey={refreshKey}
-            onEmployeeCreated={handleClientDetailsSaved}
+            onMutationSuccess={triggerDataRefresh}
           />
         </aside>
       </div>
@@ -444,6 +427,17 @@ export default function Client360Page({ clientId }: { clientId: string }) {
           onConfirm={handleConfirmAdvance}
         />
       ) : null}
+
+      {isSuperAdmin && (
+        <ClientDeletionModal
+          isOpen={isDeletionModalOpen}
+          clientId={clientId}
+          clientName={client.name}
+          onClose={() => setIsDeletionModalOpen(false)}
+          onArchived={triggerDataRefresh}
+          onDeleted={() => router.push('/admin#master-pipeline')}
+        />
+      )}
     </main>
   );
 }

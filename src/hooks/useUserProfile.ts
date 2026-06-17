@@ -8,6 +8,7 @@ type UserProfile = {
   name: string | null;
   email: string;
   role: string;
+  status?: string;
   createdAt: string;
   updatedAt: string;
 };
@@ -48,6 +49,11 @@ export function useUserProfile() {
 
       if (profileError) {
         setError(profileError.message);
+        setProfile(null);
+      } else if (data?.status === 'DEACTIVATED') {
+        await supabase.auth.signOut();
+        localStorage.removeItem('token');
+        setError('Your account has been deactivated. Contact an administrator.');
         setProfile(null);
       } else {
         setProfile(data);

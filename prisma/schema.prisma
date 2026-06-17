@@ -18,6 +18,11 @@ enum UserRole {
   STANDARD_USER
 }
 
+enum UserStatus {
+  ACTIVE
+  DEACTIVATED
+}
+
 enum AssignmentRole {
   RELATIONSHIP
   DOCTOR
@@ -78,6 +83,7 @@ model User {
   email              String             @unique
   passwordHash       String?            @map("password_hash")
   role               UserRole
+  status             UserStatus         @default(ACTIVE)
   createdAt          DateTime           @default(now())
   updatedAt          DateTime           @updatedAt
 
@@ -149,6 +155,8 @@ model Interaction {
   // Relation to User who logged it
   userId String
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([clientId, date])
 }
 
 model Deal {
@@ -165,6 +173,8 @@ model Deal {
   client   Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
 
   commissionReturnables CommissionReturnable[]
+
+  @@index([clientId, status])
 }
 
 model Strategy {
@@ -256,6 +266,7 @@ model ClientActivityLog {
   userId String? @map("user_id")
   user   User?   @relation("ActivityLogAuthor", fields: [userId], references: [id], onDelete: SetNull)
 
+  @@index([clientId, createdAt])
   @@map("client_activity_logs")
 }
 
@@ -267,6 +278,7 @@ model ActivityReadStatus {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@id([activityLogId, userId])
+  @@index([userId])
   @@map("activity_read_status")
 }
 

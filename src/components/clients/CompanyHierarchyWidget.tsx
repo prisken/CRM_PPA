@@ -20,13 +20,13 @@ type CompanyHierarchyData = {
 type CompanyHierarchyWidgetProps = {
   clientId: string;
   refreshKey?: number;
-  onEmployeeCreated?: () => void;
+  onMutationSuccess?: () => void;
 };
 
 export default function CompanyHierarchyWidget({
   clientId,
   refreshKey = 0,
-  onEmployeeCreated,
+  onMutationSuccess,
 }: CompanyHierarchyWidgetProps) {
   const [data, setData] = useState<CompanyHierarchyData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -117,7 +117,7 @@ export default function CompanyHierarchyWidget({
       setFullName('');
       setRoleInCompany('');
       await loadHierarchy();
-      onEmployeeCreated?.();
+      onMutationSuccess?.();
     } catch (err) {
       setFormError(err instanceof Error ? err.message : 'Failed to add employee lead');
     } finally {

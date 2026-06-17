@@ -41,14 +41,14 @@ type AssignedTeamWidgetProps = {
   clientId: string;
   assignedUsers: AssignedUser[];
   currentUser: CurrentUserInfo | null;
-  onAssignmentsChange?: () => void;
+  onMutationSuccess?: () => void;
 };
 
 export default function AssignedTeamWidget({
   clientId,
   assignedUsers,
   currentUser,
-  onAssignmentsChange,
+  onMutationSuccess,
 }: AssignedTeamWidgetProps) {
   const [users, setUsers] = useState<UserOption[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -109,7 +109,7 @@ export default function AssignedTeamWidget({
       return;
     }
 
-    onAssignmentsChange?.();
+    onMutationSuccess?.();
   }
 
   async function handleAssign() {
@@ -144,7 +144,7 @@ export default function AssignedTeamWidget({
       setIsModalOpen(false);
       setSelectedUserId('');
       setSelectedRole('RELATIONSHIP');
-      onAssignmentsChange?.();
+      onMutationSuccess?.();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to assign user');
     } finally {

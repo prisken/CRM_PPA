@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 
 type ActivitySource = 'manual' | 'system';
@@ -8,6 +9,19 @@ type RawActivityItem = {
   clientName: string;
   log: string;
   timestamp: string;
+};
+
+type UnifiedActivityRow = {
+  activity_id: string;
+  client_id: string;
+  client_name: string;
+  client_display_name: string;
+  content: string;
+  activity_type: string;
+  source: ActivitySource;
+  activity_date: Date;
+  user_name: string | null;
+  user_email: string | null;
 };
 
 export type ActivityFeedItem = {
@@ -44,62 +58,77 @@ function formatActivityLog(
   return `${actor} logged a ${action} on ${clientName}.`;
 }
 
-async function fetchRawActivities(clientIds?: string[], perSourceLimit = 100) {
-  const clientFilter = clientIds ? { clientId: { in: clientIds } } : undefined;
+async function fetchRawActivities(clientIds?: string[], limit = 100) {
+  if (clientIds && clientIds.length === 0) {
+    return [];
+  }
 
-  const [interactions, activityLogs] = await Promise.all([
-    prisma.interaction.findMany({
-      where: clientFilter,
-      orderBy: { date: 'desc' },
-      take: perSourceLimit,
-      include: {
-        user: { select: { name: true, email: true } },
-        client: { select: { id: true, name: true, company: true } },
-      },
-    }),
-    prisma.clientActivityLog.findMany({
-      where: clientFilter,
-      orderBy: { createdAt: 'desc' },
-      take: perSourceLimit,
-      include: {
-        user: { select: { name: true, email: true } },
-        client: { select: { id: true, name: true, company: true } },
-      },
-    }),
-  ]);
+  const clientFilter =
+    clientIds && clientIds.length > 0
+      ? Prisma.sql`AND i."clientId" IN (${Prisma.join(clientIds)})`
+      : Prisma.empty;
 
-  const interactionItems: RawActivityItem[] = interactions.map((interaction) => ({
-    activityId: interaction.id,
-    clientId: interaction.client.id,
-    clientName: interaction.client.company ?? interaction.client.name,
+  const systemClientFilter =
+    clientIds && clientIds.length > 0
+      ? Prisma.sql`AND cal.client_id IN (${Prisma.join(clientIds)})`
+      : Prisma.empty;
+
+  const rows = await prisma.$queryRaw<UnifiedActivityRow[]>(Prisma.sql`
+    SELECT *
+    FROM (
+      SELECT
+        i.id AS activity_id,
+        i."clientId" AS client_id,
+        COALESCE(c.company, c.name) AS client_name,
+        c.name AS client_display_name,
+        i.content,
+        i.type::text AS activity_type,
+        'manual'::text AS source,
+        i.date AS activity_date,
+        u.name AS user_name,
+        u.email AS user_email
+      FROM "Interaction" i
+      INNER JOIN "Client" c ON c.id = i."clientId"
+      INNER JOIN "User" u ON u.id = i."userId"
+      WHERE 1 = 1
+      ${clientFilter}
+
+      UNION ALL
+
+      SELECT
+        cal.id AS activity_id,
+        cal.client_id AS client_id,
+        COALESCE(c.company, c.name) AS client_name,
+        c.name AS client_display_name,
+        cal.content,
+        cal.type::text AS activity_type,
+        'system'::text AS source,
+        cal.created_at AS activity_date,
+        u.name AS user_name,
+        u.email AS user_email
+      FROM client_activity_logs cal
+      INNER JOIN "Client" c ON c.id = cal.client_id
+      LEFT JOIN "User" u ON u.id = cal.user_id
+      WHERE 1 = 1
+      ${systemClientFilter}
+    ) AS combined
+    ORDER BY activity_date DESC
+    LIMIT ${limit}
+  `);
+
+  return rows.map((row) => ({
+    activityId: row.activity_id,
+    clientId: row.client_id,
+    clientName: row.client_name,
     log: formatActivityLog(
-      interaction.content,
-      interaction.user.name ?? interaction.user.email,
-      interaction.client.name,
-      interaction.type,
-      'manual'
+      row.content,
+      row.user_name ?? row.user_email,
+      row.client_display_name,
+      row.activity_type,
+      row.source
     ),
-    timestamp: interaction.date.toISOString(),
+    timestamp: row.activity_date.toISOString(),
   }));
-
-  const systemItems: RawActivityItem[] = activityLogs.map((entry) => ({
-    activityId: entry.id,
-    clientId: entry.client.id,
-    clientName: entry.client.company ?? entry.client.name,
-    log: formatActivityLog(
-      entry.content,
-      entry.user?.name ?? entry.user?.email ?? null,
-      entry.client.name,
-      entry.type,
-      'system'
-    ),
-    timestamp: entry.createdAt.toISOString(),
-  }));
-
-  return [...interactionItems, ...systemItems]
-    .sort(
-      (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
-    );
 }
 
 async function loadReadActivityIds(userId: string, activityIds: string[]) {
@@ -123,14 +152,11 @@ export async function buildGroupedRecentActivity(
   options: {
     clientIds?: string[];
     totalLimit?: number;
-    perSourceLimit?: number;
   } = {}
 ) {
-  const { clientIds, totalLimit = 50, perSourceLimit = 100 } = options;
+  const { clientIds, totalLimit = 50 } = options;
 
-  const rawActivities = await fetchRawActivities(clientIds, perSourceLimit).then(
-    (items) => items.slice(0, totalLimit)
-  );
+  const rawActivities = await fetchRawActivities(clientIds, totalLimit);
 
   const readActivityIds = await loadReadActivityIds(
     userId,

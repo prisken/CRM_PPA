@@ -18,7 +18,7 @@ export default function LoginPage() {
     setIsLoading(true);
 
     try {
-      const { error: signInError } = await supabase.auth.signInWithPassword({
+      const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
@@ -26,6 +26,31 @@ export default function LoginPage() {
       if (signInError) {
         console.error(signInError);
         setError(signInError.message);
+        return;
+      }
+
+      const userId = signInData.user?.id;
+      if (!userId) {
+        setError('Unable to verify account. Please try again.');
+        return;
+      }
+
+      const { data: profile, error: profileError } = await supabase
+        .from('User')
+        .select('status')
+        .eq('id', userId)
+        .single();
+
+      if (profileError) {
+        console.error(profileError);
+        await supabase.auth.signOut();
+        setError('Unable to verify account status. Please try again.');
+        return;
+      }
+
+      if (profile?.status === 'DEACTIVATED') {
+        await supabase.auth.signOut();
+        setError('Your account has been deactivated. Contact an administrator.');
         return;
       }
 

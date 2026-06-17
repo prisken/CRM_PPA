@@ -8,17 +8,15 @@ import StrategyAndTasks, {
   type StrategyCurrentUser,
   type StrategyTask,
 } from '@/components/clients/StrategyAndTasks';
+import { authenticatedFetch } from '@/lib/authenticatedFetch';
 
 type WorkspacePanelProps = {
   clientId: string;
-  strategyText: string;
-  tasks: StrategyTask[];
-  activityLog: ActivityLogEntry[];
   currentUser: StrategyCurrentUser | null;
   assignedUsers: { user_id: string; name: string; role: string }[];
   canPostNote?: boolean;
-  onNotePosted?: () => void;
-  onStrategyTasksUpdated?: () => void;
+  refreshKey?: number;
+  onMutationSuccess?: () => void;
 };
 
 const TABS = [
@@ -28,18 +26,25 @@ const TABS = [
 
 type TabId = (typeof TABS)[number]['id'];
 
+type StrategyTasksData = {
+  strategyText: string;
+  tasks: StrategyTask[];
+};
+
 export default function WorkspacePanel({
   clientId,
-  strategyText,
-  tasks,
-  activityLog,
   currentUser,
   assignedUsers,
   canPostNote = false,
-  onNotePosted,
-  onStrategyTasksUpdated,
+  refreshKey = 0,
+  onMutationSuccess,
 }: WorkspacePanelProps) {
   const [activeTab, setActiveTab] = useState<TabId>('strategy-tasks');
+  const [loadedTabs, setLoadedTabs] = useState<Set<TabId>>(() => new Set(['strategy-tasks']));
+  const [strategyTasksData, setStrategyTasksData] = useState<StrategyTasksData | null>(null);
+  const [activityLog, setActivityLog] = useState<ActivityLogEntry[]>([]);
+  const [loadingTab, setLoadingTab] = useState<TabId | null>('strategy-tasks');
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -48,12 +53,78 @@ export default function WorkspacePanel({
 
     if (window.location.hash === '#activity-notes') {
       setActiveTab('activity-notes');
+      setLoadedTabs((current) => new Set([...current, 'activity-notes']));
       document.getElementById('workspace-panel')?.scrollIntoView({
         behavior: 'smooth',
         block: 'start',
       });
     }
   }, []);
+
+  useEffect(() => {
+    if (!loadedTabs.has(activeTab)) {
+      return;
+    }
+
+    let cancelled = false;
+
+    async function loadWorkspaceTab() {
+      setLoadingTab(activeTab);
+      setError(null);
+
+      try {
+        const res = await authenticatedFetch(
+          `/api/clients/${clientId}/workspace?tab=${activeTab}`
+        );
+
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          throw new Error(
+            typeof data.error === 'string'
+              ? data.error
+              : 'Failed to load workspace data'
+          );
+        }
+
+        const data = await res.json();
+        if (cancelled) {
+          return;
+        }
+
+        if (activeTab === 'strategy-tasks') {
+          setStrategyTasksData({
+            strategyText: data.strategyText ?? '',
+            tasks: data.tasks ?? [],
+          });
+        } else {
+          setActivityLog(data.activityLog ?? []);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : 'Failed to load workspace data');
+        }
+      } finally {
+        if (!cancelled) {
+          setLoadingTab(null);
+        }
+      }
+    }
+
+    loadWorkspaceTab();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTab, clientId, loadedTabs, refreshKey]);
+
+  function handleTabChange(tabId: TabId) {
+    setActiveTab(tabId);
+    setLoadedTabs((current) => new Set([...current, tabId]));
+  }
+
+  function handleMutationSuccess() {
+    onMutationSuccess?.();
+  }
 
   const activeTabLabel =
     TABS.find((tab) => tab.id === activeTab)?.label ?? TABS[0].label;
@@ -68,7 +139,7 @@ export default function WorkspacePanel({
             <button
               key={tab.id}
               type="button"
-              onClick={() => setActiveTab(tab.id)}
+              onClick={() => handleTabChange(tab.id)}
               className={`border-b-2 pb-3 text-sm font-medium transition-colors ${
                 activeTab === tab.id
                   ? 'border-blue-600 text-blue-600'
@@ -97,7 +168,7 @@ export default function WorkspacePanel({
                 <MenuItem key={tab.id}>
                   <button
                     type="button"
-                    onClick={() => setActiveTab(tab.id)}
+                    onClick={() => handleTabChange(tab.id)}
                     className={`block w-full px-3 py-2 text-left text-sm data-focus:bg-gray-100 ${
                       activeTab === tab.id
                         ? 'font-semibold text-blue-600'
@@ -114,18 +185,20 @@ export default function WorkspacePanel({
       </div>
 
       <div className="p-6">
-        {activeTab === 'strategy-tasks' && (
+        {error && <p className="mb-4 text-sm text-red-600">{error}</p>}
+
+        {loadingTab === activeTab ? (
+          <div className="h-48 animate-pulse rounded-lg bg-gray-100" />
+        ) : activeTab === 'strategy-tasks' ? (
           <StrategyAndTasks
             clientId={clientId}
-            strategyText={strategyText}
-            tasks={tasks}
+            strategyText={strategyTasksData?.strategyText ?? ''}
+            tasks={strategyTasksData?.tasks ?? []}
             currentUser={currentUser}
             assignedUsers={assignedUsers}
-            onUpdated={onStrategyTasksUpdated}
+            onUpdated={handleMutationSuccess}
           />
-        )}
-
-        {activeTab === 'activity-notes' && (
+        ) : (
           <ActivityLog
             clientId={clientId}
             activityLog={activityLog}
@@ -135,7 +208,7 @@ export default function WorkspacePanel({
                 : null
             }
             canPostNote={canPostNote}
-            onNotePosted={onNotePosted}
+            onNotePosted={handleMutationSuccess}
           />
         )}
       </div>
