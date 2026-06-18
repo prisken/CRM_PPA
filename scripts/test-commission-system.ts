@@ -20,6 +20,7 @@ import {
 } from '../lib/constants';
 import { buildClient360Response, client360Include } from '../lib/client360';
 import { buildStandardDashboard } from '../lib/standardDashboard';
+import { calculateDoctorCommissionReturnableAmount } from '../lib/commissionReturnables';
 import { prisma } from '../lib/prisma';
 
 import { signAuthToken } from '../lib/jwt';
@@ -100,6 +101,37 @@ function runUnitTests() {
     'calculateAssignmentSecuredCommission (WON deals only)',
     assertClose(securedCommission, 30000),
     `expected 30000, got ${securedCommission}`
+  );
+
+  const multiRoleReturnable = calculateDoctorCommissionReturnableAmount(
+    100,
+    1,
+    'user-a',
+    [
+      { userId: 'user-a', role: AssignmentRole.DOCTOR },
+      { userId: 'user-a', role: AssignmentRole.RELATIONSHIP },
+      { userId: 'user-a', role: AssignmentRole.ACCOUNT_SERVICE },
+    ]
+  );
+  record(
+    'calculateDoctorCommissionReturnableAmount (Doctor + Relationship + Account Service)',
+    assertClose(multiRoleReturnable, 20),
+    `expected 20 (20% of commission), got ${multiRoleReturnable}`
+  );
+
+  const relationshipOnlyCredit = calculateDoctorCommissionReturnableAmount(
+    100,
+    1,
+    'user-a',
+    [
+      { userId: 'user-a', role: AssignmentRole.DOCTOR },
+      { userId: 'user-a', role: AssignmentRole.RELATIONSHIP },
+    ]
+  );
+  record(
+    'calculateDoctorCommissionReturnableAmount (Doctor + Relationship only)',
+    assertClose(relationshipOnlyCredit, 30),
+    `expected 30 (30% of commission), got ${relationshipOnlyCredit}`
   );
 
   const occupancyMap = buildRoleOccupancyMap([

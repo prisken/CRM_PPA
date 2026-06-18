@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { logClientSystemEvent, requireSuperAdmin } from '@/lib/authHelpers';
+import { recalculateReturnablesForUserOnClient } from '@/lib/commissionReturnables';
 import { prisma } from '@/lib/prisma';
 
 export async function DELETE(
@@ -25,9 +26,20 @@ export async function DELETE(
     return NextResponse.json({ error: 'Assignment not found' }, { status: 404 });
   }
 
+  const userId = assignment.userId;
+
   await prisma.clientAssignment.delete({
     where: { assignmentId },
   });
+
+  try {
+    await recalculateReturnablesForUserOnClient(userId, clientId);
+  } catch (error) {
+    console.error(
+      `Failed to recalculate commission returnables for user ${userId} on client ${clientId} after removing assignment.`,
+      error
+    );
+  }
 
   await logClientSystemEvent(
     clientId,

@@ -1,4 +1,5 @@
 import { AssignmentRole, DealStatus } from '@prisma/client';
+import { calculateIndividualRoleShare } from '@/lib/commissionCalculations';
 import { COMMISSION_RATE_POOLS } from '@/lib/constants';
 import { prisma } from '@/lib/prisma';
 
@@ -33,34 +34,27 @@ export function calculateDoctorCommissionReturnableAmount(
   const doctorPortionOfCommission = totalCommission / doctorCount;
   const baseLiability = doctorPortionOfCommission * (1 - doctorPoolRate);
 
-  let userCredit = 0;
-  const userRoles = allAssignmentsForClient
-    .filter((assignment) => assignment.userId === doctorUserId)
-    .map((assignment) => assignment.role);
+  const userNonDoctorAssignments = allAssignmentsForClient.filter(
+    (assignment) =>
+      assignment.userId === doctorUserId &&
+      (assignment.role === AssignmentRole.RELATIONSHIP ||
+        assignment.role === AssignmentRole.ACCOUNT_SERVICE)
+  );
 
-  if (userRoles.includes(AssignmentRole.RELATIONSHIP)) {
-    const relationshipOccupancy = allAssignmentsForClient.filter(
-      (assignment) => assignment.role === AssignmentRole.RELATIONSHIP
+  const userCredit = userNonDoctorAssignments.reduce((totalCredit, assignment) => {
+    const occupancy = allAssignmentsForClient.filter(
+      (clientAssignment) => clientAssignment.role === assignment.role
     ).length;
 
-    if (relationshipOccupancy > 0) {
-      userCredit +=
-        totalCommission *
-        (COMMISSION_RATE_POOLS.RELATIONSHIP / relationshipOccupancy);
+    if (occupancy <= 0) {
+      return totalCredit;
     }
-  }
 
-  if (userRoles.includes(AssignmentRole.ACCOUNT_SERVICE)) {
-    const accountServiceOccupancy = allAssignmentsForClient.filter(
-      (assignment) => assignment.role === AssignmentRole.ACCOUNT_SERVICE
-    ).length;
+    const creditForThisRole =
+      totalCommission * calculateIndividualRoleShare(assignment.role, occupancy);
 
-    if (accountServiceOccupancy > 0) {
-      userCredit +=
-        totalCommission *
-        (COMMISSION_RATE_POOLS.ACCOUNT_SERVICE / accountServiceOccupancy);
-    }
-  }
+    return totalCredit + creditForThisRole;
+  }, 0);
 
   return Math.max(0, baseLiability - userCredit);
 }
@@ -123,6 +117,75 @@ export async function createCommissionReturnablesForWonDeal({
   );
 
   return returnables;
+}
+
+/**
+ * Recalculates and updates all commission returnable amounts for a specific user on a specific client.
+ * Trigger when a user's assignments change for a client.
+ */
+export async function recalculateReturnablesForUserOnClient(
+  userId: string,
+  clientId: string
+) {
+  const wonDeals = await prisma.deal.findMany({
+    where: {
+      clientId,
+      status: DealStatus.WON,
+    },
+    select: {
+      id: true,
+      totalCommission: true,
+    },
+  });
+
+  if (wonDeals.length === 0) {
+    return;
+  }
+
+  const allAssignmentsForClient = await prisma.clientAssignment.findMany({
+    where: { clientId },
+    select: { userId: true, role: true },
+  });
+
+  const isUserStillDoctor = allAssignmentsForClient.some(
+    (assignment) =>
+      assignment.userId === userId && assignment.role === AssignmentRole.DOCTOR
+  );
+
+  const doctorCount = allAssignmentsForClient.filter(
+    (assignment) => assignment.role === AssignmentRole.DOCTOR
+  ).length;
+
+  for (const deal of wonDeals) {
+    const existingReturnable = await prisma.commissionReturnable.findFirst({
+      where: {
+        dealId: deal.id,
+        userId,
+      },
+    });
+
+    if (!existingReturnable) {
+      continue;
+    }
+
+    const newAmount = isUserStillDoctor
+      ? calculateDoctorCommissionReturnableAmount(
+          Number(deal.totalCommission),
+          doctorCount,
+          userId,
+          allAssignmentsForClient
+        )
+      : 0;
+
+    const previousAmount = Number(existingReturnable.amount);
+
+    if (Math.abs(previousAmount - newAmount) > 0.005) {
+      await prisma.commissionReturnable.update({
+        where: { id: existingReturnable.id },
+        data: { amount: newAmount },
+      });
+    }
+  }
 }
 
 export type CommissionReturnableRecalculationChange = {

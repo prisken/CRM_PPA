@@ -4,6 +4,7 @@ import { logClientSystemEvent, requireSuperAdmin } from '@/lib/authHelpers';
 import {
   getRoleOccupancyLimitMessage,
 } from '@/lib/constants';
+import { recalculateReturnablesForUserOnClient } from '@/lib/commissionReturnables';
 import { prisma } from '@/lib/prisma';
 
 export async function POST(
@@ -73,6 +74,15 @@ export async function POST(
       },
     },
   });
+
+  try {
+    await recalculateReturnablesForUserOnClient(userId, clientId);
+  } catch (error) {
+    console.error(
+      `Failed to recalculate commission returnables for user ${userId} on client ${clientId} after adding assignment.`,
+      error
+    );
+  }
 
   await logClientSystemEvent(
     clientId,

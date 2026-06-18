@@ -1,13 +1,13 @@
 # Profit Pulse Ally CRM — Database & UI Reference
 
-**Last updated:** June 17, 2026 (account settings nav, doc cleanup)  
+**Last updated:** June 18, 2026 (assignment-triggered returnable recalculation)  
 **Repository:** [CRM_PPA](https://github.com/prisken/CRM_PPA)  
 **Deployment branch:** `deploy`  
 **Production URL:** `https://crm-ppa-nine.vercel.app`
 
 This document describes the PostgreSQL database schema, API surface, and frontend UI structure for handoff to developers, designers, and stakeholders.
 
-### Shipped features (as of June 17, 2026)
+### Shipped features (as of June 18, 2026)
 
 | Area | Status |
 |------|--------|
@@ -26,6 +26,8 @@ This document describes the PostgreSQL database schema, API surface, and fronten
 | **Team occupancy limits** | ✅ Max 2 Doctors, 1 Relationship, 1 Account Service per client |
 | **Multi-deal system** | ✅ CRUD per client; committed/potential value aggregation |
 | **Commission returnables** | ✅ Doctor liabilities on WON deals; multi-role credit; statements + reconciliation |
+| **Commission returnable multi-role credit fix** | ✅ Sums all RELATIONSHIP + ACCOUNT_SERVICE credits per doctor (not just one role); unit tests in `test-commission-system.ts` |
+| **Assignment-triggered returnable recalculation** | ✅ `recalculateReturnablesForUserOnClient()` on `POST`/`DELETE` `/api/clients/[id]/assignments`; errors logged, assignment succeeds |
 | **Role-based dashboard widgets** | ✅ Secured commission + returnables by assignment role (all users) |
 | **Performance refactor — dashboard widgets** | ✅ Per-widget API endpoints; skeleton loaders; parallel fetch |
 | **Performance refactor — Client 360** | ✅ Lightweight `GET /api/clients/[id]`; lazy workspace tabs |
@@ -275,7 +277,7 @@ Doctor liability records generated when a deal transitions to `WON`.
 
 **Generation trigger:** When a deal's status changes to `WON` (via `PUT .../deals/[dealId]`) or is created as `WON` (via `POST .../deals`), one record is created per `DOCTOR` assignment on the client. Idempotent — skips if records already exist for that deal.
 
-**Amount formula:** See [Commission returnables](#commission-returnables) below (`calculateDoctorCommissionReturnableAmount` in `lib/commissionReturnables.ts`).
+**Amount formula:** See [Commission returnables](#commission-returnables) below. Uses `calculateDoctorCommissionReturnableAmount()` — sums all RELATIONSHIP and ACCOUNT_SERVICE credits for the doctor via `calculateIndividualRoleShare()`.
 
 ---
 
@@ -536,16 +538,32 @@ When a deal becomes `WON`, each assigned Doctor receives a liability:
 
 ```
 baseLiability = (deal.totalCommission / doctorCount) × (1 - COMMISSION_RATE_POOLS.DOCTOR)
-userCredit    = Σ (deal.totalCommission × poolShare) for RELATIONSHIP / ACCOUNT_SERVICE roles held by the same doctor on this client
+userCredit    = Σ (deal.totalCommission × calculateIndividualRoleShare(role, occupancy))
+                for each RELATIONSHIP / ACCOUNT_SERVICE assignment held by the same doctor on this client
 returnableAmount = max(0, baseLiability - userCredit)
 ```
 
 - Doctors who also hold `RELATIONSHIP` or `ACCOUNT_SERVICE` on the client receive a **credit** against their returnable (multi-role occupancy)
+- **Implementation:** `calculateDoctorCommissionReturnableAmount()` in `lib/commissionReturnables.ts` filters the doctor's non-doctor assignments and **sums** credits via `.reduce()` — a doctor with both Relationship and Account Service gets credit for **both** pools
 - `period` = first day of the current month at generation time
 - `status` starts as `UNPAID`; doctors mark as `PAID` via statements page
 - Creation is idempotent (no duplicates per deal)
 
-**Recalculate:** Run `npx tsx scripts/recalculate-commission-returnables.ts` to fix historical amounts via `backfillCommissionReturnablesForWonDeals()` in `lib/commissionReturnables.ts`.
+**Worked examples** (sole doctor on client, `totalCommission = $100`):
+
+| Doctor also holds | userCredit | returnableAmount |
+|-------------------|------------|------------------|
+| Relationship only | $10 (10% pool) | $30 (40% base − 10%) |
+| Relationship + Account Service | $20 (10% + 10%) | $20 (40% base − 20%) |
+| Neither | $0 | $40 (40% base) |
+
+**Recalculate (bulk):** Run `npx tsx scripts/recalculate-commission-returnables.ts` to correct all historical amounts via `backfillCommissionReturnablesForWonDeals()`.
+
+**Recalculate (per user/client):** `recalculateReturnablesForUserOnClient(userId, clientId)` updates existing `CommissionReturnable` rows for all WON deals on that client when assignments change. Called automatically (non-blocking) after:
+- `POST /api/clients/[id]/assignments` — new role added
+- `DELETE /api/clients/[id]/assignments/[assignmentId]` — role removed
+
+If the user is no longer a doctor on the client, existing returnables for that user are set to **0** (record retained for audit). Recalculation failures are logged but do not fail the assignment API response.
 
 ### Deal value aggregation (`lib/dealCalculations.ts`)
 
@@ -663,8 +681,8 @@ Edited via `PUT /api/clients/[id]/details` by super admins or `RELATIONSHIP` ass
 | DELETE | `/api/clients/[id]/interactions/[interactionId]` | Author or super admin (session) | Delete interaction |
 | GET | `/api/clients/[id]/employees` | Bearer or session | Company hierarchy: `employeeCount`, colleagues with same `company` |
 | POST | `/api/clients/[id]/employees` | Bearer or session | Create employee as new lead. Body: `fullName`, `roleInCompany`. Auto-assigns creator as `RELATIONSHIP` |
-| POST | `/api/clients/[id]/assignments` | Super admin (session) | Assign user to client. Enforces `ROLE_OCCUPANCY_LIMITS` |
-| DELETE | `/api/clients/[id]/assignments/[assignmentId]` | Super admin (session) | Remove assignment |
+| POST | `/api/clients/[id]/assignments` | Super admin (session) | Assign user to client. Enforces `ROLE_OCCUPANCY_LIMITS`. On success, calls `recalculateReturnablesForUserOnClient(userId, clientId)` (errors logged, non-blocking) |
+| DELETE | `/api/clients/[id]/assignments/[assignmentId]` | Super admin (session) | Remove assignment. Fetches assignment first; on success, calls `recalculateReturnablesForUserOnClient(userId, clientId)` (errors logged, non-blocking) |
 | POST | `/api/clients/[id]/documents` | Super admin or any assignment (session) | Upload document (Supabase Storage, 10MB, MIME whitelist) |
 | DELETE | `/api/clients/[id]/documents/[documentId]` | Super admin (session) | Delete document |
 | POST | `/api/clients/[id]/archive` | Super admin (Bearer or session) | Soft delete: sets `status` to `ARCHIVED`. Body: `{ confirmName }` (must match client name) |
@@ -1185,7 +1203,7 @@ Deep link: `#activity-notes` opens Activity tab and scrolls into view.
 | `clientStages.ts` | Pipeline stage labels and badge styles |
 | `constants.ts` | Commission pools, company overhead, role occupancy limits |
 | `commissionCalculations.ts` | Shared-role commission share + secured commission math |
-| `commissionReturnables.ts` | Returnable generation, formatting, period filters, backfill |
+| `commissionReturnables.ts` | Returnable generation, `recalculateReturnablesForUserOnClient`, `backfillCommissionReturnablesForWonDeals`, formatting, period filters |
 | `dealCalculations.ts` | Committed/potential value, deal response formatting, money parsing |
 | `leadSources.ts` | Lead source combobox suggestions (`ClientDetailsEditModal`) |
 | `reports.ts` | CSV/PDF export helpers for admin widgets |
@@ -1233,6 +1251,12 @@ Deep link: `#activity-notes` opens Activity tab and scrolls into view.
           → check "Mark as Paid" → PATCH /api/commission-returnable/[id]
 ```
 
+**Multi-role credit:** If the doctor also holds Relationship and/or Account Service on the same client, those pool shares reduce the returnable (e.g. all three roles → 20% of commission, not 30%).
+
+**Live updates:** When a super admin adds or removes team assignments on Client 360, returnables for that user on that client's WON deals are recalculated automatically.
+
+**One-time backfill:** Run `npx tsx scripts/recalculate-commission-returnables.ts` to correct amounts created before the multi-role credit fix.
+
 ### Super admin — reconciliation
 
 ```
@@ -1256,6 +1280,15 @@ Deep link: `#activity-notes` opens Activity tab and scrolls into view.
              → view colleagues at same company
              → Add Employee Lead → POST /api/clients/[id]/employees
              → new lead created with shared company + RELATIONSHIP assignment
+```
+
+### Super admin — team assignment & returnables
+
+```
+/clients/[id] → Assigned Team widget → add or remove assignment
+             → POST /api/clients/[id]/assignments or DELETE .../assignments/[assignmentId]
+             → recalculateReturnablesForUserOnClient(userId, clientId)
+             → existing CommissionReturnable rows on WON deals updated (e.g. Doctor+Relationship 30% → add Account Service → 20%)
 ```
 
 ### Super admin workflow
@@ -1326,8 +1359,9 @@ npm run dev          # http://localhost:3000
 
 ```bash
 npx tsx scripts/test-activity-apis.ts       # Activity feed + dashboard APIs
-npx tsx scripts/test-commission-system.ts   # Commission engine + returnables
+npx tsx scripts/test-commission-system.ts   # Commission engine + returnables (incl. multi-role credit unit tests)
 npx tsx scripts/test-user-management.ts     # User deactivate/delete + auth status checks
+npx tsx scripts/recalculate-commission-returnables.ts  # Backfill/correct returnable amounts after formula changes
 ```
 
 **Build (matches Vercel):**
@@ -1478,7 +1512,7 @@ Related: `lib/pipelinePermissions.ts` exports `getNextPipelineStage`, `canUserAd
 | Client restore from ARCHIVED | No dedicated un-archive API; super admin can change stage via `PATCH` |
 | Company hierarchy APIs | `GET/POST .../employees` — any authenticated user, no assignment check |
 | Bearer vs session split | Dashboard/returnable/details/employees accept Bearer+session; interactions, strategy, tasks, deals use session-only helpers |
-| Returnable backfill | WON deals marked before returnable feature require manual backfill (`backfillCommissionReturnablesForWonDeals`) |
+| Returnable backfill | WON deals from before the returnable feature, or amounts computed before the June 2026 multi-role credit fix, require `npx tsx scripts/recalculate-commission-returnables.ts` |
 | Pipeline checklist in modal | Display-only reminders in `PipelineStageAdvanceModal`; not persisted or server-validated |
 | Admin route protection | `/admin/*` middleware checks session only; role enforced client-side + API 403 |
 | Duplicate auth in admin routes | Several `/api/admin/*` routes inline their own `requireSuperAdmin()` instead of shared helper |
