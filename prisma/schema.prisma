@@ -74,6 +74,13 @@ enum ActivityLogType {
   SYSTEM
 }
 
+enum LeadSourceType {
+  GOOGLE_FORMS
+  PROFIT_PULSE_ALLY
+  MANUAL
+  OTHER
+}
+
 
 // --- CORE MODELS ---
 
@@ -128,6 +135,7 @@ model Client {
   documents            ClientDocument[]
   tasks                Task[]
   activityLogs         ClientActivityLog[]
+  sourceRecords        ClientSourceRecord[]
 }
 
 model ClientAssignment {
@@ -301,4 +309,39 @@ model CommissionReturnable {
   updatedAt DateTime @updatedAt
 
   @@index([userId, status, period])
+}
+
+model ClientSourceRecord {
+  id              String         @id @default(cuid())
+  clientId        String         @map("client_id")
+  source          LeadSourceType
+  externalId      String?        @map("external_id")
+  normalizedEmail String?        @map("normalized_email")
+  normalizedPhone String?        @map("normalized_phone")
+  payload         Json           @db.JsonB
+  receivedAt      DateTime       @default(now()) @map("received_at")
+  createdAt       DateTime       @default(now()) @map("created_at")
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@unique([source, externalId])
+  @@index([clientId])
+  @@index([source])
+  @@index([normalizedEmail])
+  @@index([normalizedPhone])
+  @@map("client_source_records")
+}
+
+model LeadMergeAudit {
+  id                String   @id @default(cuid())
+  canonicalClientId String   @map("canonical_client_id")
+  mergedClientId    String?  @map("merged_client_id")
+  mergedByUserId    String?  @map("merged_by_user_id")
+  mergeType         String   @map("merge_type")
+  reason            String?
+  fieldChanges      Json?    @db.JsonB @map("field_changes")
+  conflicts         Json?    @db.JsonB
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  @@map("lead_merge_audits")
 }

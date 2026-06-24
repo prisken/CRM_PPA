@@ -7,6 +7,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import ClientDetailsWidget from '@/components/clients/ClientDetailsWidget';
 import AssignedTeamWidget from '@/components/clients/AssignedTeamWidget';
 import CompanyHierarchyWidget from '@/components/clients/CompanyHierarchyWidget';
+import ClientSourceRecordsWidget from '@/components/clients/ClientSourceRecordsWidget';
 import DealInfoWidget, { type ClientDeal } from '@/components/clients/DealInfoWidget';
 import WorkspacePanel from '@/components/clients/WorkspacePanel';
 import Logo from '@/components/Logo';
@@ -331,6 +332,7 @@ export default function Client360PageClient({
             hierarchy={hierarchy}
             onMutationSuccess={triggerDataRefresh}
           />
+          <ClientSourceRecordsWidget clientId={clientId} />
         </aside>
       </div>
 

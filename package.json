@@ -7,6 +7,8 @@
     "build": "prisma generate && prisma migrate deploy && next build",
     "start": "next start",
     "lint": "eslint",
+    "find:duplicate-clients": "npx tsx scripts/find-duplicate-clients.ts",
+    "test:lead-ingestion": "npx tsx scripts/test-lead-ingestion.ts",
     "postinstall": "prisma generate"
   },
   "dependencies": {

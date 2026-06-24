@@ -1,12 +1,11 @@
 # Profit Pulse Ally CRM — Database & UI Reference
 
-**Last updated:** June 24, 2026 (performance refactor complete; route timing instrumentation)  
+**Last updated:** June 24, 2026 (unified lead ingestion, source records, Client 360 widget)  
 **Repository:** [CRM_PPA](https://github.com/prisken/CRM_PPA)  
 **Deployment branch:** `deploy`  
-**Last deployed commit:** `21324e9` (production — pre–performance-refactor)  
-**Local (uncommitted):** Full performance refactor — query optimization, safe admin caching, frontend memoization/lazy-load, DB indexes migration, route timing logs  
+**Last deployed commit:** `deploy` — unified lead ingestion, source records, Client 360 widget (June 24, 2026)  
 **Production URL:** `https://crm-ppa-nine.vercel.app`  
-**Local dev server:** `http://localhost:3000` (run `PERF_LOGGING_ENABLED=true npm run dev`)
+**Local dev server:** `http://localhost:3000` (run `npm run dev`; add `PERF_LOGGING_ENABLED=true` for route timing logs)
 
 This document describes the PostgreSQL database schema, API surface, and frontend UI structure for handoff to developers, designers, and stakeholders.
 
@@ -31,14 +30,22 @@ This document describes the PostgreSQL database schema, API surface, and fronten
 | Commission returnables | ✅ Doctor liabilities on WON deals; multi-role credit sum; statements + reconciliation |
 | Assignment-triggered returnable recalculation | ✅ Fire-and-forget via `POST /api/tasks/recalculate-returnables` on assignment add/remove |
 | Role-based dashboard widgets | ✅ Secured commission + returnables by assignment role (all users) |
-| Performance — standard dashboard | ✅ Per-widget API endpoints; skeleton loaders; parallel client fetch |
+| Performance — standard dashboard | ✅ Per-widget API endpoints; shared `loadStandardDashboardContext` for legacy monolith; SQL deal aggregates; skeleton loaders |
+| Performance — dashboard pass 2 | ✅ `lib/standardDashboardContext.ts` + `lib/dashboardDealAggregates.ts`; fewer duplicate DB round-trips; open tasks `clientId IN` filter |
 | Performance — Client 360 | ✅ Server `Promise.all` for core + deals + hierarchy; lazy workspace tabs only |
 | Performance — admin analytics cache | ✅ `unstable_cache` (600s) for org-wide aggregates after `requireSuperAdminFromRequest`; routes `force-dynamic` |
 | Performance — frontend render | ✅ `memo`/`useMemo`/`useCallback`; `next/dynamic` for charts, pipeline, modals |
 | Performance — route timing logs | ✅ Opt-in `[perf]` logs via `PERF_LOGGING_ENABLED=true` (`lib/performance.ts`) |
 | DB performance indexes (phase 2) | ✅ `20260624084311_add_performance_indexes_phase_2` — assignments, tasks, deals, returnables |
-| Query optimizations | ✅ Activity feed SQL `UNION ALL`; commission `groupBy` aggregation; narrower Prisma selects |
+| Query optimizations | ✅ Activity feed SQL `UNION ALL`; conditional deal aggregation SQL; narrower Prisma selects |
 | DB performance indexes (phase 1) | ✅ `20260617003208_add_performance_indexes` — deals, interactions, activity logs, read status |
+| Unified lead ingestion | ✅ `lib/leadIngestion.ts` — shared `ingestExternalLead()` for webhooks; match by source+externalId → email → phone; safe merge on update |
+| Client source records | ✅ `client_source_records` table — raw webhook payloads per ingest; `@@unique([source, externalId])` dedupes repeat submissions |
+| Google Forms lead webhook | ✅ `POST /api/integrations/google-forms/leads` — uses `ingestExternalLead`; `201` created / `200` updated; optional RELATIONSHIP assign on create only |
+| Profit Pulse Ally member webhook | ✅ `POST /api/integrations/profit-pulse-ally/members` — uses `ingestExternalLead`; upsert by email or `memberId` as externalId |
+| Client 360 source records widget | ✅ `ClientSourceRecordsWidget` — collapsible payload history; `GET /api/clients/[id]/source-records` |
+| Duplicate client scan | ✅ `npm run find:duplicate-clients` — `scripts/find-duplicate-clients.ts` |
+| Lead ingestion integration test | ✅ `npx tsx scripts/test-lead-ingestion.ts` — direct `ingestExternalLead` tests (no webhooks/secrets) |
 | Client lifecycle management | ✅ Super admin archive (soft) + permanent delete with password confirmation |
 | User management | ✅ Super admin deactivate + permanent delete; `/admin/users` UI |
 | Enhanced lead creation | ✅ Full client-detail fields at create time (`AddLeadModal`, `AddClientModal`) |
@@ -87,16 +94,16 @@ This document describes the PostgreSQL database schema, API surface, and fronten
 
 ```
 prisma/           # Schema + migrations
-lib/              # Server helpers (auth, dashboards, client360, activity feed)
-src/app/          # Next.js routes (pages + API)
+lib/              # Server helpers (auth, dashboards, client360, activity feed, integrations)
+src/app/          # Next.js routes (pages + API, incl. api/integrations/* webhooks)
 src/components/   # React UI components
 public/assets/    # Logo, favicon
-docs/             # Documentation (this file)
+docs/             # Documentation (this file, google-forms-integration.md)
 ```
 
 **Performance architecture:**
 
-- **Standard dashboard** — each widget has its own API route; the page fetches in parallel and shows dimension-matched skeleton loaders while data loads.
+- **Standard dashboard** — each widget has its own API route; the page fetches in parallel and shows dimension-matched skeleton loaders. The **legacy** `GET /api/dashboard/standard` loads shared context once (`loadStandardDashboardContext`) then builds all widgets in parallel (no duplicate assignment/deal queries per widget).
 - **Client 360** — server component loads core client data, deals, and company hierarchy in parallel via `loadClient360PageData()`; workspace tabs still lazy-load on demand. Mutations call `router.refresh()` to re-fetch server data.
 - **Admin analytics** — super-admin org-wide aggregates (funnel, KPIs, revenue tracker, leaderboards) use `unstable_cache` with 600s revalidation in `lib/adminAnalyticsCache.ts`. Auth (`requireSuperAdminFromRequest`) runs on every request before cache lookup. Routes export `dynamic = 'force-dynamic'` so session-scoped responses are not globally cached. User-specific dashboard, Client 360, and `/api/me/*` routes are also `force-dynamic`.
 - **Activity feed** — single PostgreSQL query via `UNION ALL` (Interactions + activity logs), sorted and limited in the database.
@@ -113,19 +120,19 @@ PERF_LOGGING_ENABLED=true npm run dev
 npx tsx scripts/profile-api-routes.ts   # client round-trip summary
 ```
 
-**Slowest routes (optimize first if still feeling slow in production):**
+**Typical server timings (after performance pass 2, warm runs):**
 
 | Route / operation | Server time | Notes |
 |-------------------|------------|-------|
-| `GET /api/dashboard/standard` | **540–1213 ms** | Legacy monolith; runs all widgets sequentially. UI now uses per-widget routes in parallel instead. |
-| `widget:buildPerformanceMetricsWidget` | **538–1294 ms** | Secured commission aggregation across assignments + deals |
-| `widget:buildAssignedClientsWidget` | **516–1213 ms** | `deal.groupBy` + assignment join |
-| `GET /api/admin/pipeline` | **~410 ms** | All clients + assignments (live; not cached) |
-| `widget:buildActivityFeedWidget` | **418–470 ms** | Includes `activityFeed:fetchRawActivities` ~207–248 ms |
-| `widget:buildOpenTasksWidget` | **222–607 ms** | Relational task filter |
-| `GET /api/dashboard/superadmin` | **234–265 ms** | All-client activity feed (`limit=100`) |
-| `GET /api/admin/all-commission-returnable` | **~220–247 ms** | Full reconciliation list |
-| `GET /api/admin/users` | **~220 ms** | All users |
+| `GET /api/dashboard/standard` | **~540–880 ms** | Legacy monolith; shared context + parallel widgets. Live UI uses per-widget routes instead. |
+| `widget:buildPerformanceMetricsWidget` | **~1 ms** (with context) / **~250–670 ms** (standalone) | Secured commission via shared deal aggregates + role occupancy |
+| `widget:buildAssignedClientsWidget` | **~1 ms** (with context) / **~500–600 ms** (standalone) | Single SQL aggregate per client deal values |
+| `GET /api/admin/pipeline` | **~410–450 ms** | All clients + assignments (live; not cached) |
+| `widget:buildActivityFeedWidget` | **~246–470 ms** | Includes `activityFeed:fetchRawActivities` ~207–260 ms |
+| `widget:buildOpenTasksWidget` | **~222–515 ms** | `assigneeId` + `clientId IN` assigned clients |
+| `GET /api/dashboard/superadmin` | **~234–297 ms** | All-client activity feed (`limit=100`) |
+| `GET /api/admin/all-commission-returnable` | **~220–250 ms** | Full reconciliation list |
+| `GET /api/admin/users` | **~220–253 ms** | All users |
 
 **Admin analytics cache (org-wide, 600s TTL):**
 
@@ -145,6 +152,7 @@ Client round-trip on cache hit is still ~220 ms (auth + network); server DB work
 | `route:GET /api/...` | API route handlers (`timeRouteHandler`) |
 | `cache:admin-*` | Admin analytics cache loaders on miss |
 | `widget:build*` | Standard dashboard widget builders |
+| `dashboard:loadContext` / `dashboard:buildStandard` | Shared dashboard context + legacy monolith compose |
 | `activityFeed:*` | Activity feed SQL + grouping |
 | `builder:buildSuperAdminDashboard` | Super admin activity feed builder |
 | `client360:*` | Client 360 server loaders |
@@ -266,10 +274,11 @@ Standard users advance one stage at a time via **Move to Next Stage** + confirma
 
 1. **Users & access** — `User`, `ClientAssignment`
 2. **Clients & pipeline** — `Client`, `Deal`
-3. **Client 360 workspace** — `Task`, `ClientDocument`, `Strategy`, `Interaction`, `ClientActivityLog`
-4. **Activity & notifications** — `ActivityReadStatus`, `Notification`
-5. **Commission & liabilities** — `CommissionReturnable`
-6. **Legacy strategy docs** — `Strategy`, `Document` (strategy-linked; Client 360 also uses `Client.strategyText`)
+3. **Lead ingestion** — `ClientSourceRecord`, `LeadMergeAudit` (audit table reserved for future merge UI)
+4. **Client 360 workspace** — `Task`, `ClientDocument`, `Strategy`, `Interaction`, `ClientActivityLog`
+5. **Activity & notifications** — `ActivityReadStatus`, `Notification`
+6. **Commission & liabilities** — `CommissionReturnable`
+7. **Legacy strategy docs** — `Strategy`, `Document` (strategy-linked; Client 360 also uses `Client.strategyText`)
 
 ---
 
@@ -286,6 +295,7 @@ Standard users advance one stage at a time via **Move to Next Stage** + confirma
 | `StrategyStatus` | `DRAFT`, `READY_FOR_REVIEW`, `APPROVED`, `NEEDS_REVISION` | `Strategy.status` |
 | `TaskStatus` | `PENDING`, `IN_PROGRESS`, `COMPLETED`, `CANCELLED` | `Task.status` |
 | `ActivityLogType` | `NOTE`, `CALL`, `EMAIL`, `MEETING`, `SYSTEM` | `ClientActivityLog.type` |
+| `LeadSourceType` | `GOOGLE_FORMS`, `PROFIT_PULSE_ALLY`, `MANUAL`, `OTHER` | `ClientSourceRecord.source` |
 
 ### Pipeline stage labels (UI)
 
@@ -346,7 +356,7 @@ Doctor liability records generated when a deal transitions to `WON`.
 | `name` | TEXT | Primary display name |
 | `company` | TEXT | Optional |
 | `contactInfo` | TEXT | Legacy / general contact |
-| `email`, `phone` | TEXT | Contact fields |
+| `email`, `phone` | TEXT | Contact fields; **email is not unique** at DB level — dedupe is app-level via `ingestExternalLead` |
 | `lead_source` | TEXT | e.g. referral, website |
 | `deal_value` | DECIMAL(12,2) | Legacy client-level deal value (Client 360 uses aggregated deals) |
 | `equity` | DECIMAL(12,2) | Equity stake |
@@ -359,7 +369,45 @@ Doctor liability records generated when a deal transitions to `WON`.
 | `pendingNotifications` | BOOLEAN | Flag for notification workflows |
 | `createdAt`, `lastModified` | TIMESTAMP | |
 
-**Relations:** assignments, interactions, deals, strategies, documents, tasks, activity logs, notifications.
+**Relations:** assignments, interactions, deals, strategies, documents, tasks, activity logs, notifications, **source records**.
+
+---
+
+### `client_source_records` (`ClientSourceRecord`)
+
+Immutable audit of each external lead ingest. One row per unique `(source, externalId)` when `externalId` is set; multiple rows with `NULL` externalId are allowed (Postgres unique constraint).
+
+| Column | Type | Notes |
+|--------|------|-------|
+| `id` | TEXT PK | |
+| `client_id` | TEXT FK → Client | CASCADE delete |
+| `source` | LeadSourceType | `GOOGLE_FORMS`, `PROFIT_PULSE_ALLY`, etc. |
+| `external_id` | TEXT | Optional — e.g. Google `submissionId`, PPA `memberId` |
+| `normalized_email` | TEXT | Lowercased trimmed email at ingest time |
+| `normalized_phone` | TEXT | Normalized phone at ingest time |
+| `payload` | JSONB | Raw webhook body |
+| `received_at` | TIMESTAMP | When the ingest occurred |
+| `created_at` | TIMESTAMP | Row creation |
+
+**Unique:** `@@unique([source, externalId])` — repeat ingests with the same source + externalId skip creating a duplicate row (`skipSourceRecordCreate` in `ingestExternalLead`).
+
+---
+
+### `lead_merge_audits` (`LeadMergeAudit`)
+
+Reserved for future manual merge UI. Not yet written by ingestion code.
+
+| Column | Type | Notes |
+|--------|------|-------|
+| `id` | TEXT PK | |
+| `canonical_client_id` | TEXT | Surviving client |
+| `merged_client_id` | TEXT | Optional merged-away client |
+| `merged_by_user_id` | TEXT | Optional actor |
+| `merge_type` | TEXT | e.g. manual, auto |
+| `reason` | TEXT | Optional |
+| `field_changes` | JSONB | Optional diff |
+| `conflicts` | JSONB | Optional unresolved fields |
+| `created_at` | TIMESTAMP | |
 
 ---
 
@@ -504,6 +552,7 @@ erDiagram
     Client ||--o{ ClientDocument : "has"
     Client ||--o{ ClientActivityLog : "has"
     Client ||--o{ Strategy : "has"
+    Client ||--o{ ClientSourceRecord : "has"
     Client ||--o{ Notification : "linked"
     User ||--o{ Interaction : "logs"
     User ||--o{ Task : "assigned"
@@ -534,6 +583,7 @@ erDiagram
 | `20260617003208_add_performance_indexes` | Composite indexes: `Deal(clientId, status)`, `Interaction(clientId, date)`, `client_activity_logs(client_id, created_at)`, `activity_read_status(user_id)` |
 | `20260617120000_add_user_status` | `UserStatus` enum + `status` column on `User` (default `ACTIVE`) |
 | `20260624084311_add_performance_indexes_phase_2` | Non-destructive indexes: `client_assignments(userId)`, `tasks(assigneeId, status, dueDate)`, `Deal(status, updatedAt)`, `CommissionReturnable(userId, status, period)` |
+| `20260624184022_add_lead_source_records` | `LeadSourceType` enum; `client_source_records` (payload JSONB, unique `source+externalId`); `lead_merge_audits` (future merge UI) |
 
 **Deploy note:** `package.json` runs `prisma generate` on `postinstall` and `prisma generate && prisma migrate deploy && next build` on production build so Vercel applies migrations and has an up-to-date Prisma client.
 
@@ -680,6 +730,35 @@ Stored as JSONB array on `Client.important_dates`:
 
 Edited via `PUT /api/clients/[id]/details` by super admins or `RELATIONSHIP` assignees; displayed on `ClientDetailsWidget`.
 
+### External lead ingestion (`lib/leadIngestion.ts`)
+
+Shared by Google Forms and Profit Pulse Ally webhooks. Entry point: `ingestExternalLead(input)`.
+
+**Match order** (first hit wins):
+
+1. Existing `ClientSourceRecord` with same `source` + `externalId` (when `externalId` provided)
+2. Client with matching normalized **email** (case-insensitive)
+3. Client with matching normalized **phone**
+
+**On create:** New `Client` with `status: NEW_LEAD`, one `ClientSourceRecord`, and a SYSTEM activity log (*"Lead created from …"*).
+
+**On update (safe merge):**
+
+- Does **not** downgrade `status` (e.g. will not move `ACTIVE_CLIENT` → `NEW_LEAD`)
+- Does **not** overwrite non-empty fields with differing values (empty fields may be filled)
+- Creates a new `ClientSourceRecord` unless the same `source+externalId` already exists
+- Writes SYSTEM activity log (*"Lead information received from … matched by …"*)
+
+**Webhook response shape** (both integration routes):
+
+```json
+{ "ok": true, "action": "created" | "updated", "clientId": "...", "matchedBy": "none" | "email" | "phone" | "source_external_id" }
+```
+
+Google Forms returns `201` on create, `200` on update. Optional `GOOGLE_FORMS_DEFAULT_RELATIONSHIP_USER_ID` auto-assigns RELATIONSHIP **only when action is `created`**.
+
+**Normalization** (`lib/leadNormalization.ts`): `normalizeEmail`, `normalizePhone`, `normalizeName`, `normalizeCompany`, `compactString`.
+
 ---
 
 ## 9. API Reference
@@ -696,7 +775,7 @@ Edited via `PUT /api/clients/[id]/details` by super admins or `RELATIONSHIP` ass
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
-| GET | `/api/dashboard/standard` | Any authenticated user (Bearer or session) | **Legacy** monolithic payload — still available; composes all widget builders for tests/backward compatibility |
+| GET | `/api/dashboard/standard` | Any authenticated user (Bearer or session) | **Legacy** monolithic payload — loads shared context once, then all widget builders in parallel (tests/backward compatibility). Live UI uses per-widget routes |
 | GET | `/api/dashboard/widgets/assigned-clients` | Bearer or session | Assigned clients table data |
 | GET | `/api/dashboard/widgets/open-tasks` | Bearer or session | Open tasks for current user on assigned clients |
 | GET | `/api/dashboard/widgets/activity-feed` | Bearer or session | Grouped recent activity (~15 items) on assigned clients |
@@ -740,6 +819,7 @@ Edited via `PUT /api/clients/[id]/details` by super admins or `RELATIONSHIP` ass
 | PUT | `/api/clients/[id]/interactions/[interactionId]` | Author or super admin (session) | Edit interaction |
 | DELETE | `/api/clients/[id]/interactions/[interactionId]` | Author or super admin (session) | Delete interaction |
 | GET | `/api/clients/[id]/employees` | Bearer or session | Company hierarchy: `employeeCount`, colleagues with same `company` |
+| GET | `/api/clients/[id]/source-records` | Super admin or any client assignment (session) | Lead source history — newest `receivedAt` first; includes raw `payload` JSON |
 | POST | `/api/clients/[id]/employees` | Bearer or session | Create employee as new lead. Body: `fullName`, `roleInCompany`. Auto-assigns creator as `RELATIONSHIP` |
 | POST | `/api/clients/[id]/assignments` | Super admin (session) | Assign user to client. Enforces `ROLE_OCCUPANCY_LIMITS`. Schedules background returnable recalculation via `scheduleReturnableRecalculation()` |
 | DELETE | `/api/clients/[id]/assignments/[assignmentId]` | Super admin (session) | Remove assignment. Schedules background returnable recalculation via `scheduleReturnableRecalculation()` |
@@ -762,12 +842,25 @@ Edited via `PUT /api/clients/[id]/details` by super admins or `RELATIONSHIP` ass
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
-| GET | `/api/admin/dashboard-kpis` | Super admin | KPI summary incl. `companyOverheadEarnings` |
-| GET | `/api/admin/all-commission-returnable` | Super admin | All commission returnables (see above) |
-| GET | `/api/admin/funnel-data` | Super admin | Conversion funnel chart data. **Cached:** org-wide `unstable_cache` 600s (auth every request) |
-| GET | `/api/admin/revenue-tracker` | Super admin | Revenue over time; requires `?groupBy=month\|quarter\|year`. **Cached:** org-wide `unstable_cache` 600s |
-| GET | `/api/admin/leaderboards` | Super admin | Commission & deals leaderboards. **Cached:** org-wide `unstable_cache` 600s |
-| GET | `/api/admin/pipeline` | Super admin | All clients for master pipeline |
+| GET | `/api/admin/dashboard-kpis` | Super admin (Bearer or session) | KPI summary incl. `companyOverheadEarnings`. **Cached:** org-wide `unstable_cache` 600s |
+| GET | `/api/admin/all-commission-returnable` | Super admin (Bearer or session) | All commission returnables (see above) |
+| GET | `/api/admin/funnel-data` | Super admin (Bearer or session) | Conversion funnel chart data. **Cached:** org-wide `unstable_cache` 600s (auth every request) |
+| GET | `/api/admin/revenue-tracker` | Super admin (Bearer or session) | Revenue over time; requires `?groupBy=month\|quarter\|year`. **Cached:** org-wide `unstable_cache` 600s |
+| GET | `/api/admin/leaderboards` | Super admin (Bearer or session) | Commission & deals leaderboards. **Cached:** org-wide `unstable_cache` 600s |
+| GET | `/api/admin/pipeline` | Super admin (Bearer or session) | All clients for master pipeline |
+
+### External integrations (webhooks)
+
+No CRM login required. All webhook routes validate header `x-webhook-secret` against a dedicated env var (timing-safe compare). Missing server env → `500`; missing/invalid secret → `401`.
+
+| Method | Path | Secret env var | Description |
+|--------|------|----------------|-------------|
+| POST | `/api/integrations/google-forms/leads` | `GOOGLE_FORMS_WEBHOOK_SECRET` | Ingest via `ingestExternalLead`. `name` required. Default `lead_source`: `"Google Form"`. `externalId` from `submissionId` / `responseId` / `rowId` / `timestamp`. Optional auto-assign via `GOOGLE_FORMS_DEFAULT_RELATIONSHIP_USER_ID` (create only). Returns `{ ok, action, clientId, matchedBy }` — `201` created / `200` updated. See `docs/google-forms-integration.md` |
+| GET | `/api/integrations/google-forms/health` | — | `{ ok: true, route: "google-forms-health" }` — deployment check |
+| POST | `/api/integrations/profit-pulse-ally/members` | `PROFIT_PULSE_ALLY_WEBHOOK_SECRET` | Ingest via `ingestExternalLead`. `email` required. `externalId` = `memberId`. Default source: `"Profit Pulse Ally Member Signup"`. Extra fields (`memberId`, `signedUpAt`, `provider`) in payload and `contactInfo`. Returns `{ ok, action, clientId, matchedBy }` — `201` created / `200` updated |
+| GET | `/api/integrations/profit-pulse-ally/members` | — | `{ ok: true, route: "profit-pulse-ally-members" }` — deployment check |
+
+**Note:** `GOOGLE_FORMS_WEBHOOK_SECRET` and `PROFIT_PULSE_ALLY_WEBHOOK_SECRET` are independent — setting one does not configure the other.
 
 ### Background tasks
 
@@ -854,7 +947,7 @@ Edited via `PUT /api/clients/[id]/details` by super admins or `RELATIONSHIP` ass
 | `GET .../widgets/activity-feed` | `{ recentActivity: [...] }` |
 | `GET .../widgets/performance-metrics` | `{ hasAnyAssignment: boolean, performanceMetrics: { totalActiveClients, totalPipelineValue, mySecuredCommission } }` |
 
-**Secured commission query optimization:** `buildPerformanceMetricsWidget` uses `deal.groupBy` with `_sum: { totalCommission }` (WON) and `_sum: { dealValue }` (PROPOSED) per client, then applies role-pool / occupancy splits in memory — no per-assignment deal loading.
+**Secured commission query optimization:** `buildPerformanceMetricsWidget` uses `fetchDealAggregatesByClientIds` (single parameterized SQL: WON `totalCommission` + deal values, PROPOSED pipeline value per client) plus `loadStandardDashboardContext` role occupancy map — then applies role-pool / occupancy splits in memory. Legacy monolith passes shared context so assigned/performance widgets avoid duplicate DB work.
 
 ### Client 360 core response (`GET /api/clients/[id]`)
 
@@ -1188,6 +1281,7 @@ Deep link: `#activity-notes` opens Activity tab and scrolls into view.
 | Deal Info | `DealInfoWidget` + `DealEditModal` | Visible to super admin **or** `DOCTOR` assignee — receives `deals` prop from server; multi-deal CRUD via API, committed/potential values, personal commission share % |
 | Assigned Team | `AssignedTeamWidget` | Super admin manages assignments (occupancy limits enforced) |
 | Company Hierarchy | `CompanyHierarchyWidget` | Receives `hierarchy` prop from server; add employee leads via `POST /api/clients/[id]/employees` |
+| Lead Source Records | `ClientSourceRecordsWidget` | Fetches `GET /api/clients/[id]/source-records` on mount; collapsible raw payload per ingest |
 
 ---
 
@@ -1257,6 +1351,7 @@ Deep link: `#activity-notes` opens Activity tab and scrolls into view.
 | `TaskEditModal` | `src/components/clients/TaskEditModal.tsx` |
 | `AssignedTeamWidget` | `src/components/clients/AssignedTeamWidget.tsx` |
 | `CompanyHierarchyWidget` | `src/components/clients/CompanyHierarchyWidget.tsx` |
+| `ClientSourceRecordsWidget` | `src/components/clients/ClientSourceRecordsWidget.tsx` |
 | `PipelineStageAdvanceModal` | `src/components/clients/PipelineStageAdvanceModal.tsx` |
 | `ClientDeletionModal` | `src/components/clients/ClientDeletionModal.tsx` |
 
@@ -1268,18 +1363,26 @@ Deep link: `#activity-notes` opens Activity tab and scrolls into view.
 | `authHelpers.ts` | Auth guards, `verifyAdminPassword()` (Supabase re-auth for destructive actions), `ACTIVE` status checks, client access checks, system event logging |
 | `client360.ts` | Client 360 includes, response builders, server loaders (`getClient360CoreData`, `getClient360DealsData`, `getClient360CompanyHierarchyData`, `loadClient360PageData`) |
 | `pipelinePermissions.ts` | Pipeline stage advance rules + advance checklists (shared by API + UI) |
-| `standardDashboard.ts` | Composes legacy monolithic dashboard from widget builders |
+| `standardDashboard.ts` | Composes legacy monolithic dashboard from widget builders (shared context) |
 | `standardDashboardWidgets.ts` | Per-widget data builders (assigned clients, tasks, activity, performance metrics) |
+| `standardDashboardContext.ts` | One-shot assignment + deal aggregate + occupancy load for dashboard widgets |
+| `dashboardDealAggregates.ts` | Parameterized SQL: per-client WON commission/value + PROPOSED pipeline value |
 | `superAdminDashboard.ts` | Super admin activity feed data (~100 items) |
 | `activityFeed.ts` | SQL `UNION ALL` activity fetch, grouped activity + mark-as-read |
+| `adminAnalyticsCache.ts` | `unstable_cache` loaders for admin funnel, KPIs, revenue, leaderboards |
+| `performance.ts` | Opt-in `timeRouteHandler` / `timeAsync` route timing (`PERF_LOGGING_ENABLED`) |
 | `authenticatedFetch.ts` | Client-side fetch helper with Bearer token + `credentials: 'same-origin'` |
 | `dashboardTypes.ts` | TypeScript types for dashboard payloads |
 | `clientStages.ts` | Pipeline stage labels and badge styles |
 | `constants.ts` | Commission pools, company overhead, role occupancy limits |
 | `commissionCalculations.ts` | Shared-role commission share + secured commission math |
+| `commissionRates.ts` | Role label formatting (`formatAssignmentRole`) |
 | `commissionReturnables.ts` | Returnable generation, `recalculateReturnablesForUserOnClient`, `scheduleReturnableRecalculation`, `backfillCommissionReturnablesForWonDeals`, formatting, period filters |
+| `clientDeals.ts` | Deal CRUD helpers for Client 360 |
 | `dealCalculations.ts` | Committed/potential value, deal response formatting, money parsing |
 | `leadSources.ts` | Lead source combobox suggestions (`ClientDetailsEditModal`) |
+| `leadNormalization.ts` | Email/phone/name/company normalization for ingestion |
+| `leadIngestion.ts` | `ingestExternalLead()` — shared webhook ingest, dedupe, safe merge, source records |
 | `reports.ts` | CSV/PDF export helpers for admin widgets |
 | `jwt.ts` | JWT sign/verify for Bearer auth (7-day expiry) |
 | `supabaseClient.ts` / `supabaseServer.ts` / `supabaseAdmin.ts` | Supabase clients; storage bucket via `SUPABASE_CLIENT_DOCUMENTS_BUCKET` |
@@ -1402,6 +1505,37 @@ Deep link: `#activity-notes` opens Activity tab and scrolls into view.
                        → "Back to Sign In" → signOut + clear token → /login
 ```
 
+### External lead capture (webhooks)
+
+```
+Google Form submit → Apps Script onFormSubmit
+                  → POST /api/integrations/google-forms/leads
+                  → x-webhook-secret header
+                  → ingestExternalLead (GOOGLE_FORMS)
+                  → Client + ClientSourceRecord (+ optional RELATIONSHIP on create)
+
+Profit Pulse Ally member signup → website backend
+                               → POST /api/integrations/profit-pulse-ally/members
+                               → x-webhook-secret header
+                               → ingestExternalLead (PROFIT_PULSE_ALLY)
+                               → match by memberId or email; merge into existing Client when matched
+                               → ClientSourceRecord per unique source+memberId
+```
+
+Setup details: `docs/google-forms-integration.md` (Google Forms). Profit Pulse Ally uses `PROFIT_PULSE_ALLY_WEBHOOK_SECRET` (independent from Google Forms secret).
+
+**Verify ingestion without webhooks:**
+
+```bash
+npx tsx scripts/test-lead-ingestion.ts
+```
+
+**Scan for duplicate clients (email/phone):**
+
+```bash
+npm run find:duplicate-clients
+```
+
 ---
 
 ## 13. Environment Variables
@@ -1417,6 +1551,9 @@ Deep link: `#activity-notes` opens Activity tab and scrolls into view.
 | `SUPABASE_CLIENT_DOCUMENTS_BUCKET` | Supabase Storage bucket for client uploads (default: `client-documents`) |
 | `TEST_BASE_URL` | Optional override for integration test scripts (default: `http://localhost:3000`) |
 | `PERF_LOGGING_ENABLED` | Set to `true` to log `[perf]` route/builder timings to the server console (dev/staging only) |
+| `GOOGLE_FORMS_WEBHOOK_SECRET` | Shared secret for `POST /api/integrations/google-forms/leads` (`x-webhook-secret` header). **Required** for Google Forms webhook |
+| `GOOGLE_FORMS_DEFAULT_RELATIONSHIP_USER_ID` | Optional CRM user `id` — auto-assign new Google Form leads as `RELATIONSHIP` |
+| `PROFIT_PULSE_ALLY_WEBHOOK_SECRET` | Shared secret for `POST /api/integrations/profit-pulse-ally/members` (`x-webhook-secret` header). **Required** for PPA member webhook |
 
 ---
 
@@ -1434,6 +1571,8 @@ PERF_LOGGING_ENABLED=true npm run dev   # http://localhost:3000
 npx tsx scripts/test-activity-apis.ts       # Activity feed + dashboard APIs
 npx tsx scripts/test-commission-system.ts   # Commission engine + returnables (incl. multi-role credit unit tests)
 npx tsx scripts/test-user-management.ts     # User deactivate/delete + auth status checks
+npx tsx scripts/test-lead-ingestion.ts      # ingestExternalLead integration (no webhooks/secrets)
+npx tsx scripts/find-duplicate-clients.ts   # Report duplicate email/phone client groups
 npx tsx scripts/profile-api-routes.ts       # Client round-trip timings; pair with PERF_LOGGING for server `[perf]` logs
 npx tsx scripts/recalculate-commission-returnables.ts  # Backfill/correct returnable amounts after formula changes
 ```
@@ -1591,7 +1730,8 @@ Related: `lib/pipelinePermissions.ts` exports `getNextPipelineStage`, `canUserAd
 | Admin analytics cache | Funnel, revenue, leaderboards cached 10 min — new data may lag briefly after pipeline/deal changes |
 | Pipeline checklist in modal | Display-only reminders in `PipelineStageAdvanceModal`; not persisted or server-validated |
 | Admin route protection | `/admin/*` middleware checks session only; role enforced client-side + API 403 |
-| Duplicate auth in admin routes | Several `/api/admin/*` routes inline their own `requireSuperAdmin()` instead of shared helper |
+| Lead merge audit UI | `LeadMergeAudit` table exists; ingestion does not write merge audits yet |
+| Duplicate client prevention | App-level only via `ingestExternalLead`; manual `POST /api/clients` can still create duplicate emails |
 | NextAuth legacy route | `/api/auth/[...nextauth]` exists with placeholder credentials; primary auth is Supabase |
 | Activity read IDs | Polymorphic: `activity_read_status.activity_log_id` may reference `Interaction.id` or `ClientActivityLog.id` |
 | ARCHIVED pipeline stage | In enum but excluded from funnel charts and advance logic |
