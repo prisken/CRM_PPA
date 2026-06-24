@@ -1,19 +1,25 @@
 import {
   AssignmentRole,
   ClientStatus,
-  DealStatus,
   TaskStatus,
 } from '@prisma/client';
 import { buildGroupedRecentActivity } from '@/lib/activityFeed';
 import {
-  buildRoleOccupancyMap,
   calculateIndividualRoleShare,
   getRoleOccupancy,
 } from '@/lib/commissionCalculations';
 import { formatAssignmentRole } from '@/lib/commissionRates';
 import { formatClientStage } from '@/lib/clientStages';
+import {
+  fetchDealAggregatesByClientIds,
+  getClientDealAggregates,
+} from '@/lib/dashboardDealAggregates';
 import { prisma } from '@/lib/prisma';
 import { timeAsync } from '@/lib/performance';
+import {
+  loadStandardDashboardContext,
+  type StandardDashboardContext,
+} from '@/lib/standardDashboardContext';
 
 const RECENT_ACTIVITY_LIMIT = 15;
 const OPEN_TASK_STATUSES: TaskStatus[] = [
@@ -21,101 +27,98 @@ const OPEN_TASK_STATUSES: TaskStatus[] = [
   TaskStatus.IN_PROGRESS,
 ];
 
-async function userHasClientAssignments(userId: string) {
-  const assignment = await prisma.clientAssignment.findFirst({
+async function fetchAssignedClientIds(userId: string) {
+  const rows = await prisma.clientAssignment.findMany({
     where: { userId },
-    select: { assignmentId: true },
+    select: { clientId: true },
+    distinct: ['clientId'],
   });
 
-  return assignment !== null;
+  return rows.map((row) => row.clientId);
 }
 
-function buildDealValueMaps(
-  wonDealTotals: { clientId: string; _sum: { dealValue: unknown } }[],
-  proposedDealTotals: { clientId: string; _sum: { dealValue: unknown } }[]
+async function loadAssignedClientsSource(userId: string) {
+  const assignmentRows = await prisma.clientAssignment.findMany({
+    where: { userId },
+    select: {
+      role: true,
+      clientId: true,
+      client: {
+        select: {
+          name: true,
+          status: true,
+        },
+      },
+    },
+    orderBy: { client: { name: 'asc' } },
+  });
+
+  if (assignmentRows.length === 0) {
+    return null;
+  }
+
+  const clientIds = [...new Set(assignmentRows.map((row) => row.clientId))];
+  const dealAggregates = await fetchDealAggregatesByClientIds(clientIds);
+
+  return {
+    assignments: assignmentRows.map((row) => ({
+      clientId: row.clientId,
+      role: row.role,
+      clientName: row.client.name,
+      clientStatus: row.client.status,
+    })),
+    dealAggregates,
+  };
+}
+
+export async function buildAssignedClientsWidget(
+  userId: string,
+  context?: StandardDashboardContext
 ) {
-  const committedValueByClient = new Map(
-    wonDealTotals.map((entry) => [
-      entry.clientId,
-      Number(entry._sum.dealValue ?? 0),
-    ])
-  );
-  const potentialValueByClient = new Map(
-    proposedDealTotals.map((entry) => [
-      entry.clientId,
-      Number(entry._sum.dealValue ?? 0),
-    ])
-  );
-
-  return { committedValueByClient, potentialValueByClient };
-}
-
-export async function buildAssignedClientsWidget(userId: string) {
   return timeAsync(
     'widget:buildAssignedClientsWidget',
     async () => {
-      const assignments = await prisma.clientAssignment.findMany({
-        where: { userId },
-        select: {
-          role: true,
-          client: {
-            select: {
-              id: true,
-              name: true,
-              status: true,
-            },
-          },
-        },
-        orderBy: { client: { name: 'asc' } },
-      });
+      if (context) {
+        if (context.assignments.length === 0) {
+          return { assignedClients: [] };
+        }
 
-      if (assignments.length === 0) {
+        return {
+          assignedClients: context.assignments.map((assignment) => {
+            const aggregates = getClientDealAggregates(
+              context.dealAggregates,
+              assignment.clientId
+            );
+
+            return {
+              clientId: assignment.clientId,
+              clientName: assignment.clientName,
+              myRole: formatAssignmentRole(assignment.role),
+              clientStatus: formatClientStage(assignment.clientStatus),
+              dealValue: aggregates.wonDealValue + aggregates.proposedDealValue,
+            };
+          }),
+        };
+      }
+
+      const source = await loadAssignedClientsSource(userId);
+      if (!source) {
         return { assignedClients: [] };
       }
 
-      const clientIds = [...new Set(assignments.map((assignment) => assignment.client.id))];
-
-      const [wonDealTotals, proposedDealTotals] = await Promise.all([
-        prisma.deal.groupBy({
-          by: ['clientId'],
-          where: {
-            clientId: { in: clientIds },
-            status: DealStatus.WON,
-          },
-          _sum: {
-            dealValue: true,
-          },
-        }),
-        prisma.deal.groupBy({
-          by: ['clientId'],
-          where: {
-            clientId: { in: clientIds },
-            status: DealStatus.PROPOSED,
-          },
-          _sum: {
-            dealValue: true,
-          },
-        }),
-      ]);
-
-      const { committedValueByClient, potentialValueByClient } = buildDealValueMaps(
-        wonDealTotals,
-        proposedDealTotals
-      );
-
       return {
-        assignedClients: assignments.map((assignment) => {
-          const committedValue =
-            committedValueByClient.get(assignment.client.id) ?? 0;
-          const potentialValue =
-            potentialValueByClient.get(assignment.client.id) ?? 0;
+        assignedClients: source.assignments.map((assignment) => {
+          const aggregates = getClientDealAggregates(
+            source.dealAggregates,
+            assignment.clientId
+          );
 
           return {
-            clientId: assignment.client.id,
-            clientName: assignment.client.name,
+            clientId: assignment.clientId,
+            clientName: assignment.clientName,
             myRole: formatAssignmentRole(assignment.role),
-            clientStatus: formatClientStage(assignment.client.status),
-            dealValue: committedValue + potentialValue,
+            clientStatus: formatClientStage(assignment.clientStatus),
+            dealValue: aggregates.wonDealValue + aggregates.proposedDealValue,
           };
         }),
       };
@@ -127,19 +130,24 @@ export async function buildAssignedClientsWidget(userId: string) {
   );
 }
 
-export async function buildOpenTasksWidget(userId: string) {
+export async function buildOpenTasksWidget(
+  userId: string,
+  context?: StandardDashboardContext
+) {
   return timeAsync(
     'widget:buildOpenTasksWidget',
     async () => {
+      const clientIds = context?.clientIds ?? (await fetchAssignedClientIds(userId));
+
+      if (clientIds.length === 0) {
+        return { openTasks: [] };
+      }
+
       const openTasks = await prisma.task.findMany({
         where: {
           assigneeId: userId,
           status: { in: OPEN_TASK_STATUSES },
-          client: {
-            clientAssignments: {
-              some: { userId },
-            },
-          },
+          clientId: { in: clientIds },
         },
         select: {
           id: true,
@@ -171,18 +179,20 @@ export async function buildOpenTasksWidget(userId: string) {
   );
 }
 
-export async function buildActivityFeedWidget(userId: string) {
+export async function buildActivityFeedWidget(
+  userId: string,
+  context?: StandardDashboardContext
+) {
   return timeAsync(
     'widget:buildActivityFeedWidget',
     async () => {
-      const hasAssignments = await userHasClientAssignments(userId);
-
-      if (!hasAssignments) {
+      if (context && context.clientIds.length === 0) {
         return { recentActivity: [] };
       }
 
       const recentActivity = await buildGroupedRecentActivity(userId, {
-        assignedUserId: userId,
+        clientIds: context?.clientIds,
+        assignedUserId: context ? undefined : userId,
         totalLimit: RECENT_ACTIVITY_LIMIT,
       });
 
@@ -195,22 +205,17 @@ export async function buildActivityFeedWidget(userId: string) {
   );
 }
 
-export async function buildPerformanceMetricsWidget(userId: string) {
+export async function buildPerformanceMetricsWidget(
+  userId: string,
+  context?: StandardDashboardContext
+) {
   return timeAsync(
     'widget:buildPerformanceMetricsWidget',
     async () => {
-      const assignments = await prisma.clientAssignment.findMany({
-        where: { userId },
-        select: {
-          clientId: true,
-          role: true,
-          client: {
-            select: { status: true },
-          },
-        },
-      });
+      const dashboardContext =
+        context ?? (await loadStandardDashboardContext(userId));
 
-      if (assignments.length === 0) {
+      if (dashboardContext.assignments.length === 0) {
         return {
           hasAnyAssignment: false,
           performanceMetrics: {
@@ -221,57 +226,17 @@ export async function buildPerformanceMetricsWidget(userId: string) {
         };
       }
 
-      const clientIds = [...new Set(assignments.map((assignment) => assignment.clientId))];
-
-      const [wonDealTotals, proposedDealTotals, clientRoleAssignments] = await Promise.all([
-        prisma.deal.groupBy({
-          by: ['clientId'],
-          where: {
-            clientId: { in: clientIds },
-            status: DealStatus.WON,
-          },
-          _sum: {
-            totalCommission: true,
-          },
-        }),
-        prisma.deal.groupBy({
-          by: ['clientId'],
-          where: {
-            clientId: { in: clientIds },
-            status: DealStatus.PROPOSED,
-          },
-          _sum: {
-            dealValue: true,
-          },
-        }),
-        prisma.clientAssignment.findMany({
-          where: { clientId: { in: clientIds } },
-          select: { clientId: true, role: true },
-        }),
-      ]);
-
-      const wonCommissionByClient = new Map(
-        wonDealTotals.map((entry) => [
-          entry.clientId,
-          Number(entry._sum.totalCommission ?? 0),
-        ])
-      );
-      const proposedValueByClient = new Map(
-        proposedDealTotals.map((entry) => [
-          entry.clientId,
-          Number(entry._sum.dealValue ?? 0),
-        ])
-      );
-      const roleOccupancyMap = buildRoleOccupancyMap(clientRoleAssignments);
-
       let totalActiveClients = 0;
       let totalPipelineValue = 0;
       let mySecuredCommission = 0;
 
-      for (const assignment of assignments) {
-        const wonCommissionTotal = wonCommissionByClient.get(assignment.clientId) ?? 0;
+      for (const assignment of dashboardContext.assignments) {
+        const aggregates = getClientDealAggregates(
+          dashboardContext.dealAggregates,
+          assignment.clientId
+        );
         const roleOccupancy = getRoleOccupancy(
-          roleOccupancyMap,
+          dashboardContext.roleOccupancyMap,
           assignment.clientId,
           assignment.role
         );
@@ -280,10 +245,10 @@ export async function buildPerformanceMetricsWidget(userId: string) {
           roleOccupancy
         );
 
-        totalPipelineValue += proposedValueByClient.get(assignment.clientId) ?? 0;
-        mySecuredCommission += wonCommissionTotal * individualShare;
+        totalPipelineValue += aggregates.proposedDealValue;
+        mySecuredCommission += aggregates.wonCommission * individualShare;
 
-        if (assignment.client.status === ClientStatus.ACTIVE_CLIENT) {
+        if (assignment.clientStatus === ClientStatus.ACTIVE_CLIENT) {
           totalActiveClients += 1;
         }
       }

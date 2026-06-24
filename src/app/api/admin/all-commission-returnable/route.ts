@@ -65,7 +65,6 @@ export async function GET(request: Request) {
               name: true,
               clientId: true,
               dealValue: true,
-              totalCommission: true,
               client: {
                 select: {
                   id: true,
