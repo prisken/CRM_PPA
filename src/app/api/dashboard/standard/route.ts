@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server';
 import { getAuthenticatedUserFromRequest } from '@/lib/authHelpers';
+import { timeRouteHandler } from '@/lib/performance';
 import { buildStandardDashboard } from '@/lib/standardDashboard';
+
+export const dynamic = 'force-dynamic';
 
 export async function GET(request: Request) {
   const auth = await getAuthenticatedUserFromRequest(request);
@@ -8,6 +11,8 @@ export async function GET(request: Request) {
     return auth.error;
   }
 
-  const dashboard = await buildStandardDashboard(auth.user.id);
+  const dashboard = await timeRouteHandler('GET /api/dashboard/standard', () =>
+    buildStandardDashboard(auth.user.id)
+  );
   return NextResponse.json(dashboard);
 }

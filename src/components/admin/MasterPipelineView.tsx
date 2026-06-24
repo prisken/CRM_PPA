@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useMemo, useState } from 'react';
+import { memo, useEffect, useMemo, useState } from 'react';
 import { CLIENT_STAGES } from '@/lib/clientStages';
 
 type PipelineClient = {
@@ -23,7 +23,11 @@ const STATUS_COLUMNS = CLIENT_STAGES.map((stage) => ({
 
 const STATUS_OPTIONS = [{ key: 'ALL', label: 'All Statuses' }, ...STATUS_COLUMNS];
 
-function PipelineClientCard({ client }: { client: PipelineClient }) {
+const PipelineClientCard = memo(function PipelineClientCard({
+  client,
+}: {
+  client: PipelineClient;
+}) {
   return (
     <Link
       href={`/clients/${client.client_id}`}
@@ -40,7 +44,59 @@ function PipelineClientCard({ client }: { client: PipelineClient }) {
       )}
     </Link>
   );
-}
+});
+
+const PipelineColumn = memo(function PipelineColumn({
+  label,
+  clients,
+  variant,
+}: {
+  label: string;
+  clients: PipelineClient[];
+  variant: 'desktop' | 'mobile';
+}) {
+  if (variant === 'desktop') {
+    return (
+      <div className="min-w-[220px] flex-1 rounded-lg bg-gray-50 p-3">
+        <div className="mb-3 flex items-center justify-between">
+          <h3 className="text-sm font-semibold text-gray-800">{label}</h3>
+          <span className="rounded-full bg-gray-200 px-2 py-0.5 text-xs text-gray-600">
+            {clients.length}
+          </span>
+        </div>
+        <div className="space-y-2">
+          {clients.map((client) => (
+            <PipelineClientCard key={client.client_id} client={client} />
+          ))}
+          {clients.length === 0 && (
+            <p className="text-xs text-gray-400">No clients</p>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <section>
+      <div className="mb-3 flex items-center justify-between border-b border-gray-200 pb-2">
+        <h3 className="text-sm font-semibold text-gray-800">{label}</h3>
+        <span className="rounded-full bg-gray-200 px-2 py-0.5 text-xs text-gray-600">
+          {clients.length}
+        </span>
+      </div>
+      <ul className="space-y-2">
+        {clients.map((client) => (
+          <li key={client.client_id}>
+            <PipelineClientCard client={client} />
+          </li>
+        ))}
+        {clients.length === 0 && (
+          <li className="text-xs text-gray-400">No clients</li>
+        )}
+      </ul>
+    </section>
+  );
+});
 
 export default function MasterPipelineView({
   refreshKey = 0,
@@ -108,6 +164,23 @@ export default function MasterPipelineView({
     });
   }, [clients, assignedUserFilter, statusFilter]);
 
+  const clientsByStatus = useMemo(() => {
+    const grouped = new Map<string, PipelineClient[]>();
+
+    for (const column of STATUS_COLUMNS) {
+      grouped.set(column.key, []);
+    }
+
+    for (const client of filteredClients) {
+      const bucket = grouped.get(client.status);
+      if (bucket) {
+        bucket.push(client);
+      }
+    }
+
+    return grouped;
+  }, [filteredClients]);
+
   if (loading) {
     return <p className="text-sm text-gray-500">Loading pipeline...</p>;
   }
@@ -156,63 +229,26 @@ export default function MasterPipelineView({
 
       <div className="hidden lg:block">
         <div className="flex gap-4 overflow-x-auto pb-2">
-          {STATUS_COLUMNS.map((column) => {
-            const columnClients = filteredClients.filter(
-              (client) => client.status === column.key
-            );
-
-            return (
-              <div
-                key={column.key}
-                className="min-w-[220px] flex-1 rounded-lg bg-gray-50 p-3"
-              >
-                <div className="mb-3 flex items-center justify-between">
-                  <h3 className="text-sm font-semibold text-gray-800">{column.label}</h3>
-                  <span className="rounded-full bg-gray-200 px-2 py-0.5 text-xs text-gray-600">
-                    {columnClients.length}
-                  </span>
-                </div>
-                <div className="space-y-2">
-                  {columnClients.map((client) => (
-                    <PipelineClientCard key={client.client_id} client={client} />
-                  ))}
-                  {columnClients.length === 0 && (
-                    <p className="text-xs text-gray-400">No clients</p>
-                  )}
-                </div>
-              </div>
-            );
-          })}
+          {STATUS_COLUMNS.map((column) => (
+            <PipelineColumn
+              key={column.key}
+              label={column.label}
+              clients={clientsByStatus.get(column.key) ?? []}
+              variant="desktop"
+            />
+          ))}
         </div>
       </div>
 
       <div className="block space-y-6 lg:hidden">
-        {STATUS_COLUMNS.map((column) => {
-          const columnClients = filteredClients.filter(
-            (client) => client.status === column.key
-          );
-
-          return (
-            <section key={column.key}>
-              <div className="mb-3 flex items-center justify-between border-b border-gray-200 pb-2">
-                <h3 className="text-sm font-semibold text-gray-800">{column.label}</h3>
-                <span className="rounded-full bg-gray-200 px-2 py-0.5 text-xs text-gray-600">
-                  {columnClients.length}
-                </span>
-              </div>
-              <ul className="space-y-2">
-                {columnClients.map((client) => (
-                  <li key={client.client_id}>
-                    <PipelineClientCard client={client} />
-                  </li>
-                ))}
-                {columnClients.length === 0 && (
-                  <li className="text-xs text-gray-400">No clients</li>
-                )}
-              </ul>
-            </section>
-          );
-        })}
+        {STATUS_COLUMNS.map((column) => (
+          <PipelineColumn
+            key={column.key}
+            label={column.label}
+            clients={clientsByStatus.get(column.key) ?? []}
+            variant="mobile"
+          />
+        ))}
       </div>
     </div>
   );

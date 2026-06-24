@@ -1,27 +1,51 @@
 'use client';
 
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import { useMemo, useState } from 'react';
+import { memo, useMemo, useState } from 'react';
 import type { AssignedClientRow } from '@/lib/dashboardTypes';
 
+const moneyFormatter = new Intl.NumberFormat(undefined, {
+  minimumFractionDigits: 0,
+  maximumFractionDigits: 0,
+});
+
 function formatMoney(value: number) {
-  return value.toLocaleString(undefined, {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  });
+  return moneyFormatter.format(value);
 }
+
+const ClientTableRow = memo(function ClientTableRow({
+  client,
+}: {
+  client: AssignedClientRow;
+}) {
+  return (
+    <tr className="cursor-pointer border-b border-gray-100 transition hover:bg-blue-50">
+      <td className="px-3 py-3">
+        <Link
+          href={`/clients/${client.clientId}`}
+          className="font-medium text-blue-600 hover:underline"
+        >
+          {client.clientName}
+        </Link>
+      </td>
+      <td className="px-3 py-3 text-gray-700">{client.myRole}</td>
+      <td className="px-3 py-3 text-gray-700">{client.clientStatus}</td>
+      <td className="px-3 py-3 font-medium text-gray-900">
+        {formatMoney(client.dealValue)}
+      </td>
+    </tr>
+  );
+});
 
 type MyClientsWidgetProps = {
   assignedClients: AssignedClientRow[];
   error?: string | null;
 };
 
-export default function MyClientsWidget({
+function MyClientsWidget({
   assignedClients,
   error = null,
 }: MyClientsWidgetProps) {
-  const router = useRouter();
   const [search, setSearch] = useState('');
 
   const filteredClients = useMemo(() => {
@@ -64,26 +88,7 @@ export default function MyClientsWidget({
             </thead>
             <tbody>
               {filteredClients.map((client) => (
-                <tr
-                  key={client.clientId}
-                  onClick={() => router.push(`/clients/${client.clientId}`)}
-                  className="cursor-pointer border-b border-gray-100 transition hover:bg-blue-50"
-                >
-                  <td className="px-3 py-3">
-                    <Link
-                      href={`/clients/${client.clientId}`}
-                      className="font-medium text-blue-600 hover:underline"
-                      onClick={(event) => event.stopPropagation()}
-                    >
-                      {client.clientName}
-                    </Link>
-                  </td>
-                  <td className="px-3 py-3 text-gray-700">{client.myRole}</td>
-                  <td className="px-3 py-3 text-gray-700">{client.clientStatus}</td>
-                  <td className="px-3 py-3 font-medium text-gray-900">
-                    {formatMoney(client.dealValue)}
-                  </td>
-                </tr>
+                <ClientTableRow key={client.clientId} client={client} />
               ))}
             </tbody>
           </table>
@@ -92,3 +97,5 @@ export default function MyClientsWidget({
     </section>
   );
 }
+
+export default memo(MyClientsWidget);

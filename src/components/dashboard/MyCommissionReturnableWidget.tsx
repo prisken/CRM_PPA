@@ -19,7 +19,11 @@ function formatMoney(value: number) {
   });
 }
 
-export default function MyCommissionReturnableWidget() {
+export default function MyCommissionReturnableWidget({
+  refreshKey = 0,
+}: {
+  refreshKey?: number;
+}) {
   const [returnables, setReturnables] = useState<CommissionReturnableRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -60,7 +64,7 @@ export default function MyCommissionReturnableWidget() {
     }
 
     fetchCurrentMonthReturnables();
-  }, []);
+  }, [refreshKey]);
 
   const totalAmount = useMemo(
     () => returnables.reduce((sum, record) => sum + record.amount, 0),

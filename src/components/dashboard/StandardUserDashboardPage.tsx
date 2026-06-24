@@ -1,9 +1,9 @@
 'use client';
 
+import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
-import AddLeadModal from '@/components/dashboard/AddLeadModal';
 import CollapsibleActivityWidget from '@/components/dashboard/CollapsibleActivityWidget';
 import AuthRequiredMessage from '@/components/auth/AuthRequiredMessage';
 import MyCommissionReturnableWidget from '@/components/dashboard/MyCommissionReturnableWidget';
@@ -23,6 +23,10 @@ import type {
 } from '@/lib/dashboardTypes';
 import { authenticatedFetch } from '@/lib/authenticatedFetch';
 import { supabase } from '@/lib/supabaseClient';
+
+const AddLeadModal = dynamic(() => import('@/components/dashboard/AddLeadModal'), {
+  ssr: false,
+});
 
 type AssignmentSummary = {
   hasDoctorRole: boolean;
@@ -84,48 +88,38 @@ export default function StandardUserDashboardPage() {
   const [commissionState, setCommissionState] =
     useState<CommissionWidgetState>(initialCommissionState);
 
-  const loadAssignments = useCallback(async () => {
+  const loadDashboardData = useCallback(async () => {
     setAssignmentsLoading(true);
     setAssignmentsError(null);
-
-    try {
-      const res = await authenticatedFetch('/api/me/assignments');
-
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(
-          typeof data.error === 'string'
-            ? data.error
-            : 'Failed to load assignment data'
-        );
-      }
-
-      const assignments = await res.json();
-      setAssignmentSummary({
-        hasDoctorRole: assignments.hasDoctorRole === true,
-      });
-    } catch (err) {
-      setAssignmentsError(
-        err instanceof Error ? err.message : 'Failed to load assignment data'
-      );
-    } finally {
-      setAssignmentsLoading(false);
-    }
-  }, []);
-
-  const loadWidgetData = useCallback(async () => {
     setClientsState((current) => ({ ...current, loading: true, error: null }));
     setTasksState((current) => ({ ...current, loading: true, error: null }));
     setActivityState((current) => ({ ...current, loading: true, error: null }));
     setCommissionState((current) => ({ ...current, loading: true, error: null }));
 
-    const [clientsResult, tasksResult, activityResult, commissionResult] =
-      await Promise.allSettled([
-        authenticatedFetch('/api/dashboard/widgets/assigned-clients'),
-        authenticatedFetch('/api/dashboard/widgets/open-tasks'),
-        authenticatedFetch('/api/dashboard/widgets/activity-feed'),
-        authenticatedFetch('/api/dashboard/widgets/performance-metrics'),
-      ]);
+    const [
+      assignmentsResult,
+      clientsResult,
+      tasksResult,
+      activityResult,
+      commissionResult,
+    ] = await Promise.allSettled([
+      authenticatedFetch('/api/me/assignments'),
+      authenticatedFetch('/api/dashboard/widgets/assigned-clients'),
+      authenticatedFetch('/api/dashboard/widgets/open-tasks'),
+      authenticatedFetch('/api/dashboard/widgets/activity-feed'),
+      authenticatedFetch('/api/dashboard/widgets/performance-metrics'),
+    ]);
+
+    if (assignmentsResult.status === 'fulfilled' && assignmentsResult.value.ok) {
+      const assignments = await assignmentsResult.value.json();
+      setAssignmentSummary({
+        hasDoctorRole: assignments.hasDoctorRole === true,
+      });
+      setAssignmentsError(null);
+    } else {
+      setAssignmentsError('Failed to load assignment data');
+    }
+    setAssignmentsLoading(false);
 
     if (clientsResult.status === 'fulfilled' && clientsResult.value.ok) {
       const data = await clientsResult.value.json();
@@ -195,26 +189,21 @@ export default function StandardUserDashboardPage() {
       return;
     }
 
-    loadAssignments();
-  }, [profile, profileLoading, loadAssignments]);
+    loadDashboardData();
+  }, [profile, profileLoading, widgetRefreshKey, loadDashboardData]);
 
-  useEffect(() => {
-    if (profileLoading || !profile) {
-      return;
-    }
-
-    loadWidgetData();
-  }, [profile, profileLoading, widgetRefreshKey, loadWidgetData]);
-
-  function handleLeadCreated() {
+  const handleLeadCreated = useCallback(() => {
     setWidgetRefreshKey((key) => key + 1);
-  }
+  }, []);
 
-  async function handleSignOut() {
+  const handleOpenAddLead = useCallback(() => setShowAddLead(true), []);
+  const handleCloseAddLead = useCallback(() => setShowAddLead(false), []);
+
+  const handleSignOut = useCallback(async () => {
     await supabase.auth.signOut();
     localStorage.removeItem('token');
     router.push('/login');
-  }
+  }, [router]);
 
   if (profileLoading) {
     return (
@@ -265,7 +254,7 @@ export default function StandardUserDashboardPage() {
             {!isSuperAdmin && (
               <button
                 type="button"
-                onClick={() => setShowAddLead(true)}
+                onClick={handleOpenAddLead}
                 className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
               >
                 Add Lead
@@ -346,14 +335,14 @@ export default function StandardUserDashboardPage() {
           ) : null}
 
           {!assignmentsLoading && assignmentSummary?.hasDoctorRole && (
-            <MyCommissionReturnableWidget />
+            <MyCommissionReturnableWidget refreshKey={widgetRefreshKey} />
           )}
         </div>
       </div>
 
       {showAddLead && (
         <AddLeadModal
-          onClose={() => setShowAddLead(false)}
+          onClose={handleCloseAddLead}
           onCreated={handleLeadCreated}
         />
       )}

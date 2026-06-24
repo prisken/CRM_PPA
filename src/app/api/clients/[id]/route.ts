@@ -12,6 +12,8 @@ import {
   verifyAdminPassword,
 } from '@/lib/authHelpers';
 
+export const dynamic = 'force-dynamic';
+
 const PATCH_CLIENT_NON_STATUS_FIELDS = [
   'name',
   'company',

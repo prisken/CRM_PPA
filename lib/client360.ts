@@ -8,7 +8,13 @@ import type {
 import {
   calculateCommittedValue,
   calculatePotentialValue,
+  formatDealResponse,
 } from '@/lib/dealCalculations';
+import { prisma } from '@/lib/prisma';
+import { timeAsync } from '@/lib/performance';
+
+const CLIENT360_ACTIVITY_LOG_LIMIT = 300;
+const CLIENT360_ACTIVITY_SOURCE_LIMIT = 300;
 
 type ClientWithRelations = Client360Record;
 
@@ -69,9 +75,23 @@ function normalizeImportantDates(value: Client['importantDates']) {
     }));
 }
 
-function buildActivityLog(
-  client: Pick<ClientWithRelations, 'interactions' | 'activityLogs'>
-): ActivityLogEntry[] {
+function buildActivityLog(client: {
+  interactions: {
+    id: string;
+    type: ActivityLogType | string;
+    content: string;
+    date: Date;
+    userId: string;
+    user: Pick<User, 'name' | 'email'>;
+  }[];
+  activityLogs: {
+    id: string;
+    type: ActivityLogType | string;
+    content: string;
+    createdAt: Date;
+    user: Pick<User, 'name' | 'email'> | null;
+  }[];
+}): ActivityLogEntry[] {
   const manualEntries: ActivityLogEntry[] = client.interactions.map((interaction) => ({
     id: interaction.id,
     type: interaction.type,
@@ -91,13 +111,13 @@ function buildActivityLog(
     userName: formatUserName(entry.user),
   }));
 
-  return [...manualEntries, ...systemEntries].sort(
-    (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
-  );
+  return [...manualEntries, ...systemEntries]
+    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+    .slice(0, CLIENT360_ACTIVITY_LOG_LIMIT);
 }
 
 export function buildClient360CoreResponse(
-  client: Client360CoreRecord
+  client: Client360CoreRecord | Client360PageCoreRecord
 ) {
   const assignedUsers = client.clientAssignments.map((assignment) => ({
     assignment_id: assignment.assignmentId,
@@ -106,12 +126,20 @@ export function buildClient360CoreResponse(
     role: assignment.role,
   }));
 
-  const documents = client.documents.map((document) => ({
-    id: document.id,
-    fileName: document.fileName,
-    downloadUrl: document.url,
-    uploadedAt: document.uploadedAt.toISOString(),
-  }));
+  const documents =
+    'documents' in client && Array.isArray(client.documents)
+      ? client.documents.map((document) => ({
+          id: document.id,
+          fileName: document.fileName,
+          downloadUrl: document.url,
+          uploadedAt: document.uploadedAt.toISOString(),
+        }))
+      : [];
+
+  const strategies =
+    'strategies' in client && Array.isArray(client.strategies)
+      ? client.strategies
+      : [];
 
   return {
     client_id: client.id,
@@ -132,7 +160,7 @@ export function buildClient360CoreResponse(
     lastModified: client.lastModified.toISOString(),
     assignedUsers,
     documents,
-    strategyText: resolveStrategyText(client.strategyText, client.strategies),
+    strategyText: resolveStrategyText(client.strategyText, strategies),
     assignments: client.clientAssignments.map((assignment) => ({
       assignment_id: assignment.assignmentId,
       user_id: assignment.user.id,
@@ -142,7 +170,20 @@ export function buildClient360CoreResponse(
   };
 }
 
-function mapTasks(client: Pick<ClientWithRelations, 'tasks'>) {
+function mapTasks(
+  client: {
+    tasks: {
+      id: string;
+      title: string;
+      description: string | null;
+      status: string;
+      dueDate: Date | null;
+      createdAt: Date;
+      updatedAt: Date;
+      assignee: Pick<User, 'id' | 'name' | 'email'> | null;
+    }[];
+  }
+) {
   return client.tasks.map((task) => ({
     id: task.id,
     title: task.title,
@@ -279,7 +320,9 @@ export function buildClient360Response(client: ClientWithRelations) {
 
 export const client360CoreInclude = {
   clientAssignments: {
-    include: {
+    select: {
+      assignmentId: true,
+      role: true,
       user: {
         select: { id: true, name: true, email: true },
       },
@@ -287,6 +330,12 @@ export const client360CoreInclude = {
   },
   documents: {
     orderBy: { uploadedAt: 'desc' },
+    select: {
+      id: true,
+      fileName: true,
+      url: true,
+      uploadedAt: true,
+    },
   },
   strategies: {
     select: {
@@ -300,11 +349,30 @@ export const client360CoreInclude = {
   },
 } satisfies Prisma.ClientInclude;
 
+/** Lighter include for Client 360 server page load (no documents/strategies). */
+export const client360PageCoreInclude = {
+  clientAssignments: client360CoreInclude.clientAssignments,
+} satisfies Prisma.ClientInclude;
+
 export const client360StrategyTasksInclude = {
-  strategies: client360CoreInclude.strategies,
+  strategies: {
+    select: {
+      description: true,
+      updatedAt: true,
+    },
+    orderBy: { updatedAt: 'desc' },
+    take: 1,
+  },
   tasks: {
     orderBy: [{ status: 'asc' }, { dueDate: 'asc' }],
-    include: {
+    select: {
+      id: true,
+      title: true,
+      description: true,
+      status: true,
+      dueDate: true,
+      createdAt: true,
+      updatedAt: true,
       assignee: {
         select: { id: true, name: true, email: true },
       },
@@ -315,7 +383,13 @@ export const client360StrategyTasksInclude = {
 export const client360ActivityInclude = {
   interactions: {
     orderBy: { date: 'desc' },
-    include: {
+    take: CLIENT360_ACTIVITY_SOURCE_LIMIT,
+    select: {
+      id: true,
+      type: true,
+      content: true,
+      date: true,
+      userId: true,
       user: {
         select: { name: true, email: true },
       },
@@ -323,7 +397,12 @@ export const client360ActivityInclude = {
   },
   activityLogs: {
     orderBy: { createdAt: 'desc' },
-    include: {
+    take: CLIENT360_ACTIVITY_SOURCE_LIMIT,
+    select: {
+      id: true,
+      type: true,
+      content: true,
+      createdAt: true,
       user: {
         select: { name: true, email: true },
       },
@@ -392,6 +471,9 @@ export const client360Include = {
 
 type Client360Record = Prisma.ClientGetPayload<{ include: typeof client360Include }>;
 type Client360CoreRecord = Prisma.ClientGetPayload<{ include: typeof client360CoreInclude }>;
+type Client360PageCoreRecord = Prisma.ClientGetPayload<{
+  include: typeof client360PageCoreInclude;
+}>;
 type Client360WorkspaceRecord = Prisma.ClientGetPayload<{
   include: typeof client360StrategyTasksInclude & typeof client360ActivityInclude;
 }>;
@@ -406,4 +488,180 @@ export function getClient360WorkspaceInclude(tab: string): Prisma.ClientInclude 
   }
 
   return {};
+}
+
+export type Client360CoreData = ReturnType<typeof buildClient360CoreResponse>;
+
+export type Client360DealData = ReturnType<typeof formatDealResponse>;
+
+export type Client360CompanyHierarchyData = {
+  company: string | null;
+  employeeCount: number | null;
+  colleagues: {
+    client_id: string;
+    name: string;
+    roleInCompany: string | null;
+    status: string;
+  }[];
+};
+
+export async function getClient360CoreData(
+  clientId: string
+): Promise<Client360CoreData | null> {
+  return timeAsync(
+    'client360:getClient360CoreData',
+    async () => {
+      const client = await prisma.client.findUnique({
+        where: { id: clientId },
+        include: client360PageCoreInclude,
+      });
+
+      if (!client) {
+        return null;
+      }
+
+      return buildClient360CoreResponse(client);
+    },
+    (result) => ({
+      clientId,
+      found: result !== null,
+    })
+  );
+}
+
+export async function getClient360DealsData(
+  clientId: string
+): Promise<Client360DealData[]> {
+  return timeAsync(
+    'client360:getClient360DealsData',
+    async () => {
+      const deals = await prisma.deal.findMany({
+        where: { clientId },
+        orderBy: { createdAt: 'asc' },
+        select: {
+          id: true,
+          name: true,
+          dealValue: true,
+          totalCommission: true,
+          status: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+      });
+
+      return deals.map(formatDealResponse);
+    },
+    (result) => ({
+      clientId,
+      dealCount: result.length,
+    })
+  );
+}
+
+export type Client360CompanyHierarchyPreload = {
+  company: string | null;
+  employeeCount: number | null;
+};
+
+export async function getClient360CompanyHierarchyData(
+  clientId: string,
+  preload?: Client360CompanyHierarchyPreload
+): Promise<Client360CompanyHierarchyData | null> {
+  return timeAsync(
+    'client360:getClient360CompanyHierarchyData',
+    async () => {
+      let company: string | null;
+      let employeeCount: number | null;
+
+      if (preload) {
+        company = preload.company;
+        employeeCount = preload.employeeCount;
+      } else {
+        const client = await prisma.client.findUnique({
+          where: { id: clientId },
+          select: {
+            id: true,
+            company: true,
+            employeeCount: true,
+          },
+        });
+
+        if (!client) {
+          return null;
+        }
+
+        company = client.company;
+        employeeCount = client.employeeCount;
+      }
+
+      const colleagues = company?.trim()
+        ? await prisma.client.findMany({
+            where: {
+              company,
+              id: { not: clientId },
+            },
+            select: {
+              id: true,
+              name: true,
+              roleInCompany: true,
+              status: true,
+            },
+            orderBy: { name: 'asc' },
+          })
+        : [];
+
+      return {
+        company,
+        employeeCount,
+        colleagues: colleagues.map((colleague) => ({
+          client_id: colleague.id,
+          name: colleague.name,
+          roleInCompany: colleague.roleInCompany,
+          status: colleague.status,
+        })),
+      };
+    },
+    (result) => ({
+      clientId,
+      found: result !== null,
+      colleagueCount: result?.colleagues.length ?? 0,
+    })
+  );
+}
+
+export type LoadClient360PageDataOptions = {
+  includeDeals?: boolean;
+};
+
+export async function loadClient360PageData(
+  clientId: string,
+  options: LoadClient360PageDataOptions = {}
+) {
+  const includeDeals = options.includeDeals !== false;
+
+  return timeAsync(
+    'client360:loadClient360PageData',
+    async () => {
+      const core = await getClient360CoreData(clientId);
+      if (!core) {
+        return { core: null, deals: [], hierarchy: null };
+      }
+
+      const [deals, hierarchy] = await Promise.all([
+        includeDeals ? getClient360DealsData(clientId) : Promise.resolve([]),
+        getClient360CompanyHierarchyData(clientId, {
+          company: core.company,
+          employeeCount: core.employeeCount,
+        }),
+      ]);
+
+      return { core, deals, hierarchy };
+    },
+    (result) => ({
+      clientId,
+      hasCore: result.core !== null,
+      dealCount: result.deals.length,
+      hasHierarchy: result.hierarchy !== null,
+    })
+  );
 }

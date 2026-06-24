@@ -139,6 +139,7 @@ model ClientAssignment {
   client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@index([userId])
   @@map("client_assignments")
 }
 
@@ -175,6 +176,7 @@ model Deal {
   commissionReturnables CommissionReturnable[]
 
   @@index([clientId, status])
+  @@index([status, updatedAt])
 }
 
 model Strategy {
@@ -251,6 +253,7 @@ model Task {
   assigneeId String? @map("assignee_id")
   assignee   User?   @relation("TaskAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
 
+  @@index([assigneeId, status, dueDate])
   @@map("tasks")
 }
 
@@ -296,4 +299,6 @@ model CommissionReturnable {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@index([userId, status, period])
 }

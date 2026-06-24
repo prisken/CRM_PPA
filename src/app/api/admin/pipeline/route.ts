@@ -1,66 +1,55 @@
-import { UserRole } from '@prisma/client';
 import { NextResponse } from 'next/server';
+import { requireSuperAdminFromRequest } from '@/lib/authHelpers';
+import { timeRouteHandler } from '@/lib/performance';
 import { prisma } from '@/lib/prisma';
-import { createSupabaseServerClient } from '@/lib/supabaseServer';
 
-async function requireSuperAdmin() {
-  const supabase = await createSupabaseServerClient();
+export const dynamic = 'force-dynamic';
 
-  const {
-    data: { user },
-    error: authError,
-  } = await supabase.auth.getUser();
-
-  if (authError || !user) {
-    return { error: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }) };
-  }
-
-  const dbUser = await prisma.user.findUnique({
-    where: { id: user.id },
-    select: { id: true, role: true },
-  });
-
-  if (!dbUser) {
-    return { error: NextResponse.json({ error: 'User not found' }, { status: 404 }) };
-  }
-
-  if (dbUser.role !== UserRole.SUPER_ADMIN) {
-    return { error: NextResponse.json({ error: 'Forbidden' }, { status: 403 }) };
-  }
-
-  return { user: dbUser };
-}
-
-export async function GET() {
-  const auth = await requireSuperAdmin();
+export async function GET(request: Request) {
+  const auth = await requireSuperAdminFromRequest(request);
   if (auth.error) {
     return auth.error;
   }
 
-  const clients = await prisma.client.findMany({
-    include: {
-      clientAssignments: {
-        include: {
-          user: {
-            select: { id: true, name: true, email: true },
+  const payload = await timeRouteHandler(
+    'GET /api/admin/pipeline',
+    async () => {
+      const clients = await prisma.client.findMany({
+        select: {
+          id: true,
+          name: true,
+          company: true,
+          status: true,
+          clientAssignments: {
+            select: {
+              role: true,
+              user: {
+                select: { id: true, name: true, email: true },
+              },
+            },
           },
         },
-      },
-    },
-    orderBy: { createdAt: 'desc' },
-  });
+        orderBy: { createdAt: 'desc' },
+      });
 
-  return NextResponse.json({
-    clients: clients.map((client) => ({
-      client_id: client.id,
-      name: client.name,
-      company: client.company,
-      status: client.status,
-      assignedUsers: client.clientAssignments.map((assignment) => ({
-        user_id: assignment.user.id,
-        userName: assignment.user.name ?? assignment.user.email,
-        role: assignment.role,
-      })),
-    })),
-  });
+      return {
+        clients: clients.map((client) => ({
+          client_id: client.id,
+          name: client.name,
+          company: client.company,
+          status: client.status,
+          assignedUsers: client.clientAssignments.map((assignment) => ({
+            user_id: assignment.user.id,
+            userName: assignment.user.name ?? assignment.user.email,
+            role: assignment.role,
+          })),
+        })),
+      };
+    },
+    (result) => ({
+      clientCount: result.clients.length,
+    })
+  );
+
+  return NextResponse.json(payload);
 }

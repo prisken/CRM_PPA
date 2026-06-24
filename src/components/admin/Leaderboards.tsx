@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { memo, useEffect, useMemo, useState, type ReactElement } from 'react';
 import {
   createColumnHelper,
   flexRender,
@@ -58,7 +58,12 @@ const dealsColumns = [
   }),
 ] as ColumnDef<DealsClosedRow>[];
 
-function DataTable<T>({
+const LEADERBOARD_DOWNLOAD_LINKS = [
+  { label: 'Download as PDF', href: '/api/reports/leaderboards?format=pdf' },
+  { label: 'Download as CSV', href: '/api/reports/leaderboards?format=csv' },
+];
+
+const DataTable = memo(function DataTable<T>({
   title,
   data,
   columns,
@@ -112,7 +117,11 @@ function DataTable<T>({
       </div>
     </div>
   );
-}
+}) as <T>(props: {
+  title: string;
+  data: T[];
+  columns: ColumnDef<T>[];
+}) => ReactElement;
 
 export default function Leaderboards() {
   const [data, setData] = useState<LeaderboardData | null>(null);
@@ -159,12 +168,7 @@ export default function Leaderboards() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-semibold text-gray-900">Team Leaderboards</h2>
-        <WidgetDownloadMenu
-          links={[
-            { label: 'Download as PDF', href: '/api/reports/leaderboards?format=pdf' },
-            { label: 'Download as CSV', href: '/api/reports/leaderboards?format=csv' },
-          ]}
-        />
+        <WidgetDownloadMenu links={LEADERBOARD_DOWNLOAD_LINKS} />
       </div>
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
       <DataTable

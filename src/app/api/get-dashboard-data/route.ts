@@ -3,6 +3,8 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { createSupabaseServerClient } from '@/lib/supabaseServer';
 
+export const dynamic = 'force-dynamic';
+
 export type DashboardClient = {
   client_id: string;
   name: string;

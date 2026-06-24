@@ -1,16 +1,9 @@
-import { ClientStatus } from '@prisma/client';
 import { NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
+import { getCachedAdminFunnelData } from '@/lib/adminAnalyticsCache';
 import { requireSuperAdmin } from '@/lib/authHelpers';
 import { buildCsv, csvResponse, getReportFormat, pdfResponse } from '@/lib/reports';
 
-const FUNNEL_STAGES = [
-  { stage: 'New Lead', status: ClientStatus.NEW_LEAD },
-  { stage: 'Contacted', status: ClientStatus.CONTACTED },
-  { stage: 'Nurturing', status: ClientStatus.NURTURING },
-  { stage: 'Strategy Session', status: ClientStatus.STRATEGY_SESSION },
-  { stage: 'Active Client', status: ClientStatus.ACTIVE_CLIENT },
-];
+export const dynamic = 'force-dynamic';
 
 export async function GET(request: Request) {
   const auth = await requireSuperAdmin();
@@ -23,25 +16,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "format must be 'pdf' or 'csv'" }, { status: 400 });
   }
 
-  const statusCounts = await prisma.client.groupBy({
-    by: ['status'],
-    _count: { id: true },
-  });
-
-  const countByStatus = new Map(
-    statusCounts.map((row) => [row.status, row._count.id])
-  );
-
-  let previousCount: number | null = null;
-  const rows = FUNNEL_STAGES.map(({ stage, status }) => {
-    const count = countByStatus.get(status) ?? 0;
-    const conversionRate =
-      previousCount !== null && previousCount > 0
-        ? Math.round((count / previousCount) * 100) / 100
-        : null;
-    previousCount = count;
-    return { stage, count, conversionRate };
-  });
+  const rows = await getCachedAdminFunnelData();
 
   if (format === 'csv') {
     const csv = buildCsv(

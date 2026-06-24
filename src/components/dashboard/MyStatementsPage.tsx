@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import AuthRequiredMessage from '@/components/auth/AuthRequiredMessage';
 import Logo from '@/components/Logo';
 import { useUserProfile } from '@/hooks/useUserProfile';
@@ -56,6 +56,55 @@ function groupReturnablesByPeriod(returnables: CommissionReturnableRecord[]) {
   );
 }
 
+const StatementTableRow = memo(function StatementTableRow({
+  record,
+  isUpdating,
+  onMarkAsPaid,
+}: {
+  record: CommissionReturnableRecord;
+  isUpdating: boolean;
+  onMarkAsPaid: (id: string) => void;
+}) {
+  const isUnpaid = record.status === 'UNPAID';
+
+  return (
+    <tr>
+      <td className="py-3 pr-3 font-medium text-gray-900">{getClientName(record)}</td>
+      <td className="py-3 pr-3 text-gray-700">
+        {formatMoney(record.deal?.dealValue ?? 0)}
+      </td>
+      <td className="py-3 pr-3 text-gray-700">{formatMoney(record.amount)}</td>
+      <td className="py-3 pr-3">
+        <span
+          className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${
+            record.status === 'PAID'
+              ? 'bg-green-100 text-green-800'
+              : 'bg-amber-100 text-amber-800'
+          }`}
+        >
+          {record.status}
+        </span>
+      </td>
+      <td className="py-3 text-right">
+        {isUnpaid ? (
+          <label className="inline-flex items-center gap-2 text-sm text-gray-700">
+            <input
+              type="checkbox"
+              checked={false}
+              disabled={isUpdating}
+              onChange={() => onMarkAsPaid(record.id)}
+              className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 disabled:opacity-60"
+            />
+            {isUpdating ? 'Saving...' : 'Paid'}
+          </label>
+        ) : (
+          <span className="text-xs text-gray-400">—</span>
+        )}
+      </td>
+    </tr>
+  );
+});
+
 export default function MyStatementsPage() {
   const { profile, loading: profileLoading } = useUserProfile();
   const [returnables, setReturnables] = useState<CommissionReturnableRecord[]>([]);
@@ -103,7 +152,7 @@ export default function MyStatementsPage() {
     [returnables]
   );
 
-  async function handleMarkAsPaid(id: string) {
+  const handleMarkAsPaid = useCallback(async (id: string) => {
     setUpdatingIds((current) => new Set(current).add(id));
     setError(null);
 
@@ -138,7 +187,7 @@ export default function MyStatementsPage() {
         return next;
       });
     }
-  }
+  }, []);
 
   async function handleSignOut() {
     await supabase.auth.signOut();
@@ -229,51 +278,14 @@ export default function MyStatementsPage() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
-                      {records.map((record) => {
-                        const isUpdating = updatingIds.has(record.id);
-                        const isUnpaid = record.status === 'UNPAID';
-
-                        return (
-                          <tr key={record.id}>
-                            <td className="py-3 pr-3 font-medium text-gray-900">
-                              {getClientName(record)}
-                            </td>
-                            <td className="py-3 pr-3 text-gray-700">
-                              {formatMoney(record.deal?.dealValue ?? 0)}
-                            </td>
-                            <td className="py-3 pr-3 text-gray-700">
-                              {formatMoney(record.amount)}
-                            </td>
-                            <td className="py-3 pr-3">
-                              <span
-                                className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${
-                                  record.status === 'PAID'
-                                    ? 'bg-green-100 text-green-800'
-                                    : 'bg-amber-100 text-amber-800'
-                                }`}
-                              >
-                                {record.status}
-                              </span>
-                            </td>
-                            <td className="py-3 text-right">
-                              {isUnpaid ? (
-                                <label className="inline-flex items-center gap-2 text-sm text-gray-700">
-                                  <input
-                                    type="checkbox"
-                                    checked={false}
-                                    disabled={isUpdating}
-                                    onChange={() => handleMarkAsPaid(record.id)}
-                                    className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 disabled:opacity-60"
-                                  />
-                                  {isUpdating ? 'Saving...' : 'Paid'}
-                                </label>
-                              ) : (
-                                <span className="text-xs text-gray-400">—</span>
-                              )}
-                            </td>
-                          </tr>
-                        );
-                      })}
+                      {records.map((record) => (
+                        <StatementTableRow
+                          key={record.id}
+                          record={record}
+                          isUpdating={updatingIds.has(record.id)}
+                          onMarkAsPaid={handleMarkAsPaid}
+                        />
+                      ))}
                     </tbody>
                   </table>
                 </div>

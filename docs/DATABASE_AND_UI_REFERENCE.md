@@ -1,13 +1,16 @@
 # Profit Pulse Ally CRM — Database & UI Reference
 
-**Last updated:** June 18, 2026 (assignment-triggered returnable recalculation)  
+**Last updated:** June 24, 2026 (performance refactor complete; route timing instrumentation)  
 **Repository:** [CRM_PPA](https://github.com/prisken/CRM_PPA)  
 **Deployment branch:** `deploy`  
-**Production URL:** `https://crm-ppa-nine.vercel.app`
+**Last deployed commit:** `21324e9` (production — pre–performance-refactor)  
+**Local (uncommitted):** Full performance refactor — query optimization, safe admin caching, frontend memoization/lazy-load, DB indexes migration, route timing logs  
+**Production URL:** `https://crm-ppa-nine.vercel.app`  
+**Local dev server:** `http://localhost:3000` (run `PERF_LOGGING_ENABLED=true npm run dev`)
 
 This document describes the PostgreSQL database schema, API surface, and frontend UI structure for handoff to developers, designers, and stakeholders.
 
-### Shipped features (as of June 18, 2026)
+### Shipped features (current)
 
 | Area | Status |
 |------|--------|
@@ -22,22 +25,25 @@ This document describes the PostgreSQL database schema, API surface, and fronten
 | RELATIONSHIP client details edit | ✅ API + Edit button on Client 360 |
 | Mobile-responsive UI | ✅ Dashboards, Client 360, pipeline, modals, workspace tabs |
 | Auth UX | ✅ Stale-session sign-out; deactivated-account block on login + API |
-| **Commission engine** | ✅ Shared-role pools, `totalCommission`, secured commission |
-| **Team occupancy limits** | ✅ Max 2 Doctors, 1 Relationship, 1 Account Service per client |
-| **Multi-deal system** | ✅ CRUD per client; committed/potential value aggregation |
-| **Commission returnables** | ✅ Doctor liabilities on WON deals; multi-role credit; statements + reconciliation |
-| **Commission returnable multi-role credit fix** | ✅ Sums all RELATIONSHIP + ACCOUNT_SERVICE credits per doctor (not just one role); unit tests in `test-commission-system.ts` |
-| **Assignment-triggered returnable recalculation** | ✅ `recalculateReturnablesForUserOnClient()` on `POST`/`DELETE` `/api/clients/[id]/assignments`; errors logged, assignment succeeds |
-| **Role-based dashboard widgets** | ✅ Secured commission + returnables by assignment role (all users) |
-| **Performance refactor — dashboard widgets** | ✅ Per-widget API endpoints; skeleton loaders; parallel fetch |
-| **Performance refactor — Client 360** | ✅ Lightweight `GET /api/clients/[id]`; lazy workspace tabs |
-| **Query optimizations** | ✅ Activity feed SQL `UNION ALL`; commission `groupBy` aggregation |
-| **DB performance indexes** | ✅ Composite indexes on deals, interactions, activity logs, read status |
-| **Client lifecycle management** | ✅ Super admin archive (soft) + permanent delete with password confirmation |
-| **User management** | ✅ Super admin deactivate + permanent delete; `/admin/users` UI |
-| **Enhanced lead creation** | ✅ Full client-detail fields at create time (`AddLeadModal`, `AddClientModal`) |
-| **Account settings** | ✅ `/dashboard/settings` — edit display name; **Account Settings** link in dashboard headers |
-| **Safari/iPad autofill fix** | ✅ Global `-webkit-autofill` override in `globals.css` |
+| Commission engine | ✅ Shared-role pools, `totalCommission`, secured commission |
+| Team occupancy limits | ✅ Max 2 Doctors, 1 Relationship, 1 Account Service per client |
+| Multi-deal system | ✅ CRUD per client; committed/potential value aggregation |
+| Commission returnables | ✅ Doctor liabilities on WON deals; multi-role credit sum; statements + reconciliation |
+| Assignment-triggered returnable recalculation | ✅ Fire-and-forget via `POST /api/tasks/recalculate-returnables` on assignment add/remove |
+| Role-based dashboard widgets | ✅ Secured commission + returnables by assignment role (all users) |
+| Performance — standard dashboard | ✅ Per-widget API endpoints; skeleton loaders; parallel client fetch |
+| Performance — Client 360 | ✅ Server `Promise.all` for core + deals + hierarchy; lazy workspace tabs only |
+| Performance — admin analytics cache | ✅ `unstable_cache` (600s) for org-wide aggregates after `requireSuperAdminFromRequest`; routes `force-dynamic` |
+| Performance — frontend render | ✅ `memo`/`useMemo`/`useCallback`; `next/dynamic` for charts, pipeline, modals |
+| Performance — route timing logs | ✅ Opt-in `[perf]` logs via `PERF_LOGGING_ENABLED=true` (`lib/performance.ts`) |
+| DB performance indexes (phase 2) | ✅ `20260624084311_add_performance_indexes_phase_2` — assignments, tasks, deals, returnables |
+| Query optimizations | ✅ Activity feed SQL `UNION ALL`; commission `groupBy` aggregation; narrower Prisma selects |
+| DB performance indexes (phase 1) | ✅ `20260617003208_add_performance_indexes` — deals, interactions, activity logs, read status |
+| Client lifecycle management | ✅ Super admin archive (soft) + permanent delete with password confirmation |
+| User management | ✅ Super admin deactivate + permanent delete; `/admin/users` UI |
+| Enhanced lead creation | ✅ Full client-detail fields at create time (`AddLeadModal`, `AddClientModal`) |
+| Account settings | ✅ `/dashboard/settings` — edit display name; link in dashboard headers |
+| Safari/iPad autofill fix | ✅ Global `-webkit-autofill` override in `globals.css` |
 | Vercel deploy | ✅ `prisma generate` + `migrate deploy` on build |
 
 ---
@@ -88,11 +94,62 @@ public/assets/    # Logo, favicon
 docs/             # Documentation (this file)
 ```
 
-**Performance architecture (June 2026):**
+**Performance architecture:**
 
 - **Standard dashboard** — each widget has its own API route; the page fetches in parallel and shows dimension-matched skeleton loaders while data loads.
-- **Client 360** — initial load returns core client data only; workspace tabs and deal info fetch on demand.
+- **Client 360** — server component loads core client data, deals, and company hierarchy in parallel via `loadClient360PageData()`; workspace tabs still lazy-load on demand. Mutations call `router.refresh()` to re-fetch server data.
+- **Admin analytics** — super-admin org-wide aggregates (funnel, KPIs, revenue tracker, leaderboards) use `unstable_cache` with 600s revalidation in `lib/adminAnalyticsCache.ts`. Auth (`requireSuperAdminFromRequest`) runs on every request before cache lookup. Routes export `dynamic = 'force-dynamic'` so session-scoped responses are not globally cached. User-specific dashboard, Client 360, and `/api/me/*` routes are also `force-dynamic`.
 - **Activity feed** — single PostgreSQL query via `UNION ALL` (Interactions + activity logs), sorted and limited in the database.
+- **Route timing** — set `PERF_LOGGING_ENABLED=true` to emit `[perf]` lines in the dev server terminal. See [Route performance timings](#route-performance-timings) below.
+
+### Route performance timings
+
+Measured locally (June 24, 2026) against Supabase PostgreSQL with `PERF_LOGGING_ENABLED=true`. Times are **server handler** durations from `[perf]` logs unless noted. Cold starts and pool warmup can add latency on first request.
+
+**How to reproduce:**
+
+```bash
+PERF_LOGGING_ENABLED=true npm run dev
+npx tsx scripts/profile-api-routes.ts   # client round-trip summary
+```
+
+**Slowest routes (optimize first if still feeling slow in production):**
+
+| Route / operation | Server time | Notes |
+|-------------------|------------|-------|
+| `GET /api/dashboard/standard` | **540–1213 ms** | Legacy monolith; runs all widgets sequentially. UI now uses per-widget routes in parallel instead. |
+| `widget:buildPerformanceMetricsWidget` | **538–1294 ms** | Secured commission aggregation across assignments + deals |
+| `widget:buildAssignedClientsWidget` | **516–1213 ms** | `deal.groupBy` + assignment join |
+| `GET /api/admin/pipeline` | **~410 ms** | All clients + assignments (live; not cached) |
+| `widget:buildActivityFeedWidget` | **418–470 ms** | Includes `activityFeed:fetchRawActivities` ~207–248 ms |
+| `widget:buildOpenTasksWidget` | **222–607 ms** | Relational task filter |
+| `GET /api/dashboard/superadmin` | **234–265 ms** | All-client activity feed (`limit=100`) |
+| `GET /api/admin/all-commission-returnable` | **~220–247 ms** | Full reconciliation list |
+| `GET /api/admin/users` | **~220 ms** | All users |
+
+**Admin analytics cache (org-wide, 600s TTL):**
+
+| Route | Cache miss (DB) | Cache hit (handler) |
+|-------|-----------------|---------------------|
+| `GET /api/admin/dashboard-kpis` | ~241 ms | **~0 ms** |
+| `GET /api/admin/funnel-data` | ~233 ms | **~0 ms** |
+| `GET /api/admin/revenue-tracker` | ~226 ms | **~0 ms** |
+| `GET /api/admin/leaderboards` | ~240 ms | **~0 ms** |
+
+Client round-trip on cache hit is still ~220 ms (auth + network); server DB work is skipped.
+
+**Instrumented `[perf]` prefixes:**
+
+| Prefix | Location |
+|--------|----------|
+| `route:GET /api/...` | API route handlers (`timeRouteHandler`) |
+| `cache:admin-*` | Admin analytics cache loaders on miss |
+| `widget:build*` | Standard dashboard widget builders |
+| `activityFeed:*` | Activity feed SQL + grouping |
+| `builder:buildSuperAdminDashboard` | Super admin activity feed builder |
+| `client360:*` | Client 360 server loaders |
+
+**Not instrumented (still dynamic):** Client 360 page server render (RSC), static assets, auth middleware edge time.
 
 ---
 
@@ -476,6 +533,7 @@ erDiagram
 | `20260616004617_add_commission_returnable_model` | `CommissionReturnable` table + relations on User and Deal |
 | `20260617003208_add_performance_indexes` | Composite indexes: `Deal(clientId, status)`, `Interaction(clientId, date)`, `client_activity_logs(client_id, created_at)`, `activity_read_status(user_id)` |
 | `20260617120000_add_user_status` | `UserStatus` enum + `status` column on `User` (default `ACTIVE`) |
+| `20260624084311_add_performance_indexes_phase_2` | Non-destructive indexes: `client_assignments(userId)`, `tasks(assigneeId, status, dueDate)`, `Deal(status, updatedAt)`, `CommissionReturnable(userId, status, period)` |
 
 **Deploy note:** `package.json` runs `prisma generate` on `postinstall` and `prisma generate && prisma migrate deploy && next build` on production build so Vercel applies migrations and has an up-to-date Prisma client.
 
@@ -559,11 +617,13 @@ returnableAmount = max(0, baseLiability - userCredit)
 
 **Recalculate (bulk):** Run `npx tsx scripts/recalculate-commission-returnables.ts` to correct all historical amounts via `backfillCommissionReturnablesForWonDeals()`.
 
-**Recalculate (per user/client):** `recalculateReturnablesForUserOnClient(userId, clientId)` updates existing `CommissionReturnable` rows for all WON deals on that client when assignments change. Called automatically (non-blocking) after:
-- `POST /api/clients/[id]/assignments` — new role added
-- `DELETE /api/clients/[id]/assignments/[assignmentId]` — role removed
+**Recalculate (per user/client):** `recalculateReturnablesForUserOnClient(userId, clientId)` updates existing `CommissionReturnable` rows for all WON deals on that client. Triggered in the background when assignments change:
 
-If the user is no longer a doctor on the client, existing returnables for that user are set to **0** (record retained for audit). Recalculation failures are logged but do not fail the assignment API response.
+1. `POST` / `DELETE` `/api/clients/[id]/assignments` call `scheduleReturnableRecalculation(userId, clientId, request)` (fire-and-forget, no `await`)
+2. That helper `fetch`es `POST /api/tasks/recalculate-returnables` with forwarded session cookies
+3. The task endpoint runs `recalculateReturnablesForUserOnClient` and returns when complete
+
+If the user is no longer a doctor on the client, existing returnables for that user are set to **0** (record retained for audit). Assignment APIs respond immediately without waiting for recalculation.
 
 ### Deal value aggregation (`lib/dealCalculations.ts`)
 
@@ -681,8 +741,8 @@ Edited via `PUT /api/clients/[id]/details` by super admins or `RELATIONSHIP` ass
 | DELETE | `/api/clients/[id]/interactions/[interactionId]` | Author or super admin (session) | Delete interaction |
 | GET | `/api/clients/[id]/employees` | Bearer or session | Company hierarchy: `employeeCount`, colleagues with same `company` |
 | POST | `/api/clients/[id]/employees` | Bearer or session | Create employee as new lead. Body: `fullName`, `roleInCompany`. Auto-assigns creator as `RELATIONSHIP` |
-| POST | `/api/clients/[id]/assignments` | Super admin (session) | Assign user to client. Enforces `ROLE_OCCUPANCY_LIMITS`. On success, calls `recalculateReturnablesForUserOnClient(userId, clientId)` (errors logged, non-blocking) |
-| DELETE | `/api/clients/[id]/assignments/[assignmentId]` | Super admin (session) | Remove assignment. Fetches assignment first; on success, calls `recalculateReturnablesForUserOnClient(userId, clientId)` (errors logged, non-blocking) |
+| POST | `/api/clients/[id]/assignments` | Super admin (session) | Assign user to client. Enforces `ROLE_OCCUPANCY_LIMITS`. Schedules background returnable recalculation via `scheduleReturnableRecalculation()` |
+| DELETE | `/api/clients/[id]/assignments/[assignmentId]` | Super admin (session) | Remove assignment. Schedules background returnable recalculation via `scheduleReturnableRecalculation()` |
 | POST | `/api/clients/[id]/documents` | Super admin or any assignment (session) | Upload document (Supabase Storage, 10MB, MIME whitelist) |
 | DELETE | `/api/clients/[id]/documents/[documentId]` | Super admin (session) | Delete document |
 | POST | `/api/clients/[id]/archive` | Super admin (Bearer or session) | Soft delete: sets `status` to `ARCHIVED`. Body: `{ confirmName }` (must match client name) |
@@ -704,10 +764,16 @@ Edited via `PUT /api/clients/[id]/details` by super admins or `RELATIONSHIP` ass
 |--------|------|------|-------------|
 | GET | `/api/admin/dashboard-kpis` | Super admin | KPI summary incl. `companyOverheadEarnings` |
 | GET | `/api/admin/all-commission-returnable` | Super admin | All commission returnables (see above) |
-| GET | `/api/admin/funnel-data` | Super admin | Conversion funnel chart data |
-| GET | `/api/admin/revenue-tracker` | Super admin | Revenue over time; requires `?groupBy=month\|quarter\|year` |
-| GET | `/api/admin/leaderboards` | Super admin | Commission & deals leaderboards |
+| GET | `/api/admin/funnel-data` | Super admin | Conversion funnel chart data. **Cached:** org-wide `unstable_cache` 600s (auth every request) |
+| GET | `/api/admin/revenue-tracker` | Super admin | Revenue over time; requires `?groupBy=month\|quarter\|year`. **Cached:** org-wide `unstable_cache` 600s |
+| GET | `/api/admin/leaderboards` | Super admin | Commission & deals leaderboards. **Cached:** org-wide `unstable_cache` 600s |
 | GET | `/api/admin/pipeline` | Super admin | All clients for master pipeline |
+
+### Background tasks
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| POST | `/api/tasks/recalculate-returnables` | Super admin (session or Bearer) | Body: `{ userId, clientId }`. Runs `recalculateReturnablesForUserOnClient`. Called fire-and-forget from assignment APIs |
 
 ### Reports (alternate endpoints — require `?format=pdf|csv`)
 
@@ -1006,14 +1072,14 @@ Responsive header — stacks on mobile (`flex-col`), horizontal from `sm` up; ac
 
 **Sections (vertical stack, `flex flex-col gap-6`):**
 
-| Section | Component | API |
-|---------|-----------|-----|
-| KPI bar + Company earnings | `KpiBar` + `CompanyEarningsWidget` | `/api/admin/dashboard-kpis` |
-| Conversion funnel | `ConversionFunnelChart` | `/api/admin/funnel-data` |
-| Revenue tracker | `RevenueTrackerChart` | `/api/admin/revenue-tracker` (`groupBy` param) |
-| Leaderboards | `Leaderboards` | `/api/admin/leaderboards` |
-| Recent Activity (all clients) | `CollapsibleActivityWidget` | `/api/dashboard/superadmin` |
-| Master pipeline | `MasterPipelineView` | `/api/admin/pipeline` — Kanban on `lg+`, grouped list on mobile |
+| Section | Component | API | Cache |
+|---------|-----------|-----|-------|
+| KPI bar + Company earnings | `KpiBar` + `CompanyEarningsWidget` | `/api/admin/dashboard-kpis` | — |
+| Conversion funnel | `ConversionFunnelChart` | `/api/admin/funnel-data` | 10 min |
+| Revenue tracker | `RevenueTrackerChart` | `/api/admin/revenue-tracker` (`groupBy` param) | 10 min |
+| Leaderboards | `Leaderboards` | `/api/admin/leaderboards` | 10 min |
+| Recent Activity (all clients) | `CollapsibleActivityWidget` | `/api/dashboard/superadmin` | — |
+| Master pipeline | `MasterPipelineView` | `/api/admin/pipeline` — Kanban on `lg+`, grouped list on mobile | — |
 
 **Modals:** `AddClientModal` — same fields as `AddLeadModal` plus pipeline stage selector; scroll-safe overlay (`max-h-[90vh]`)
 
@@ -1072,10 +1138,17 @@ Responsive header — stacks on mobile (`flex-col`), horizontal from `sm` up; ac
 
 ### Page: Client 360 (`/clients/[id]`)
 
-**File:** `src/components/clients/Client360Page.tsx`  
-**Route:** `dynamic = 'force-dynamic'`
+**Route:** `src/app/clients/[id]/page.tsx` → `Client360Page` (server) → `Client360PageClient` (client)  
+**Route config:** `dynamic = 'force-dynamic'`
 
-**Initial load:** `GET /api/clients/[id]` — core client data only (fast). Workspace tabs and deal info load on demand.
+**Initial load (server):** `loadClient360PageData(clientId)` runs `Promise.all` for:
+- `getClient360CoreData()` — client details, team, documents, strategy text
+- `getClient360DealsData()` — all deals (passed to UI only for super admin or `DOCTOR` assignee)
+- `getClient360CompanyHierarchyData()` — company, employee count, colleagues
+
+Unauthenticated users are redirected to `/login`. Missing client → `notFound()`.
+
+**Refresh after mutations:** `router.refresh()` re-runs server fetches; workspace tabs also use `refreshKey` for lazy tab reload.
 
 **Header:** Logo, back to pipeline link, **Archive Client** button (super admin only), client name, pipeline stage control:
 
@@ -1090,7 +1163,7 @@ Responsive header — stacks on mobile (`flex-col`), horizontal from `sm` up; ac
 - **Archive** — type client name → `POST /api/clients/[id]/archive` (sets `ARCHIVED`, refreshes page)
 - **Permanently Delete** — warning, client name + admin password → `DELETE /api/clients/[id]` (redirects to `/admin#master-pipeline`)
 
-**Refresh coordination:** `refreshKey` + `triggerDataRefresh()` passed to mutating widgets so core client data reloads in the background after edits.
+**Refresh coordination:** `triggerDataRefresh()` calls `router.refresh()` plus increments `refreshKey` for workspace tab reloads.
 
 **Layout:** Responsive — stacks on mobile (`flex-col`), side-by-side from `md` up (`md:flex-row`, 2:1 ratio)
 
@@ -1112,9 +1185,9 @@ Deep link: `#activity-notes` opens Activity tab and scrolls into view.
 | Widget | Component | Who can edit |
 |--------|-----------|--------------|
 | Client Details | `ClientDetailsWidget` + `ClientDetailsEditModal` | Super admin **or** `RELATIONSHIP` assignee |
-| Deal Info | `DealInfoWidget` + `DealEditModal` | Visible to super admin **or** `DOCTOR` assignee only — self-fetches `GET /api/clients/[id]/deals`; multi-deal CRUD, committed/potential values, personal commission share % |
+| Deal Info | `DealInfoWidget` + `DealEditModal` | Visible to super admin **or** `DOCTOR` assignee — receives `deals` prop from server; multi-deal CRUD via API, committed/potential values, personal commission share % |
 | Assigned Team | `AssignedTeamWidget` | Super admin manages assignments (occupancy limits enforced) |
-| Company Hierarchy | `CompanyHierarchyWidget` | All authenticated — view colleagues, add employee leads |
+| Company Hierarchy | `CompanyHierarchyWidget` | Receives `hierarchy` prop from server; add employee leads via `POST /api/clients/[id]/employees` |
 
 ---
 
@@ -1172,7 +1245,8 @@ Deep link: `#activity-notes` opens Activity tab and scrolls into view.
 
 | Component | Path |
 |-----------|------|
-| `Client360Page` | `src/components/clients/Client360Page.tsx` |
+| `Client360Page` | `src/components/clients/Client360Page.tsx` | Server component — auth, parallel data load, passes props to client |
+| `Client360PageClient` | `src/components/clients/Client360PageClient.tsx` | Client shell — header, workspace, widgets, modals |
 | `WorkspacePanel` | `src/components/clients/WorkspacePanel.tsx` |
 | `StrategyAndTasks` | `src/components/clients/StrategyAndTasks.tsx` |
 | `ActivityLog` | `src/components/clients/ActivityLog.tsx` |
@@ -1192,7 +1266,7 @@ Deep link: `#activity-notes` opens Activity tab and scrolls into view.
 |--------|---------|
 | `prisma.ts` | Prisma client singleton |
 | `authHelpers.ts` | Auth guards, `verifyAdminPassword()` (Supabase re-auth for destructive actions), `ACTIVE` status checks, client access checks, system event logging |
-| `client360.ts` | Client 360 query includes + response builders: `client360CoreInclude`, workspace tab builders, legacy full response |
+| `client360.ts` | Client 360 includes, response builders, server loaders (`getClient360CoreData`, `getClient360DealsData`, `getClient360CompanyHierarchyData`, `loadClient360PageData`) |
 | `pipelinePermissions.ts` | Pipeline stage advance rules + advance checklists (shared by API + UI) |
 | `standardDashboard.ts` | Composes legacy monolithic dashboard from widget builders |
 | `standardDashboardWidgets.ts` | Per-widget data builders (assigned clients, tasks, activity, performance metrics) |
@@ -1203,7 +1277,7 @@ Deep link: `#activity-notes` opens Activity tab and scrolls into view.
 | `clientStages.ts` | Pipeline stage labels and badge styles |
 | `constants.ts` | Commission pools, company overhead, role occupancy limits |
 | `commissionCalculations.ts` | Shared-role commission share + secured commission math |
-| `commissionReturnables.ts` | Returnable generation, `recalculateReturnablesForUserOnClient`, `backfillCommissionReturnablesForWonDeals`, formatting, period filters |
+| `commissionReturnables.ts` | Returnable generation, `recalculateReturnablesForUserOnClient`, `scheduleReturnableRecalculation`, `backfillCommissionReturnablesForWonDeals`, formatting, period filters |
 | `dealCalculations.ts` | Committed/potential value, deal response formatting, money parsing |
 | `leadSources.ts` | Lead source combobox suggestions (`ClientDetailsEditModal`) |
 | `reports.ts` | CSV/PDF export helpers for admin widgets |
@@ -1253,9 +1327,7 @@ Deep link: `#activity-notes` opens Activity tab and scrolls into view.
 
 **Multi-role credit:** If the doctor also holds Relationship and/or Account Service on the same client, those pool shares reduce the returnable (e.g. all three roles → 20% of commission, not 30%).
 
-**Live updates:** When a super admin adds or removes team assignments on Client 360, returnables for that user on that client's WON deals are recalculated automatically.
-
-**One-time backfill:** Run `npx tsx scripts/recalculate-commission-returnables.ts` to correct amounts created before the multi-role credit fix.
+**Live updates:** When a super admin adds or removes team assignments on Client 360, returnables are recalculated in the background (assignment API returns immediately).
 
 ### Super admin — reconciliation
 
@@ -1287,8 +1359,8 @@ Deep link: `#activity-notes` opens Activity tab and scrolls into view.
 ```
 /clients/[id] → Assigned Team widget → add or remove assignment
              → POST /api/clients/[id]/assignments or DELETE .../assignments/[assignmentId]
-             → recalculateReturnablesForUserOnClient(userId, clientId)
-             → existing CommissionReturnable rows on WON deals updated (e.g. Doctor+Relationship 30% → add Account Service → 20%)
+             → scheduleReturnableRecalculation() → POST /api/tasks/recalculate-returnables
+             → returnables updated asynchronously (e.g. Doctor+Relationship 30% → add Account Service → 20%)
 ```
 
 ### Super admin workflow
@@ -1344,6 +1416,7 @@ Deep link: `#activity-notes` opens Activity tab and scrolls into view.
 | `NEXTAUTH_SECRET` | JWT signing secret (`lib/jwt.ts`) |
 | `SUPABASE_CLIENT_DOCUMENTS_BUCKET` | Supabase Storage bucket for client uploads (default: `client-documents`) |
 | `TEST_BASE_URL` | Optional override for integration test scripts (default: `http://localhost:3000`) |
+| `PERF_LOGGING_ENABLED` | Set to `true` to log `[perf]` route/builder timings to the server console (dev/staging only) |
 
 ---
 
@@ -1352,7 +1425,7 @@ Deep link: `#activity-notes` opens Activity tab and scrolls into view.
 ```bash
 npm install          # runs prisma generate via postinstall
 npx prisma migrate deploy
-npm run dev          # http://localhost:3000
+PERF_LOGGING_ENABLED=true npm run dev   # http://localhost:3000
 ```
 
 **Integration tests:**
@@ -1361,6 +1434,7 @@ npm run dev          # http://localhost:3000
 npx tsx scripts/test-activity-apis.ts       # Activity feed + dashboard APIs
 npx tsx scripts/test-commission-system.ts   # Commission engine + returnables (incl. multi-role credit unit tests)
 npx tsx scripts/test-user-management.ts     # User deactivate/delete + auth status checks
+npx tsx scripts/profile-api-routes.ts       # Client round-trip timings; pair with PERF_LOGGING for server `[perf]` logs
 npx tsx scripts/recalculate-commission-returnables.ts  # Backfill/correct returnable amounts after formula changes
 ```
 
@@ -1480,7 +1554,7 @@ Related: `lib/pipelinePermissions.ts` exports `getNextPipelineStage`, `canUserAd
 │  {Client Name}  [Stage badge ▼ or Move to Next Stage]       │
 ├──────────────────────────────┬──────────────────────────────┤
 │  WORKSPACE (lazy tabs)       │  Client Details              │
-│  [Strategy & Tasks] [Activity]│  Deal Info (self-fetch deals) │
+│  [Strategy & Tasks] [Activity]│  Deal Info (server-loaded deals) │
 │  ...                         │  Assigned Team               │
 │                              │  Company Hierarchy           │
 └──────────────────────────────┴──────────────────────────────┘
@@ -1512,7 +1586,9 @@ Related: `lib/pipelinePermissions.ts` exports `getNextPipelineStage`, `canUserAd
 | Client restore from ARCHIVED | No dedicated un-archive API; super admin can change stage via `PATCH` |
 | Company hierarchy APIs | `GET/POST .../employees` — any authenticated user, no assignment check |
 | Bearer vs session split | Dashboard/returnable/details/employees accept Bearer+session; interactions, strategy, tasks, deals use session-only helpers |
-| Returnable backfill | WON deals from before the returnable feature, or amounts computed before the June 2026 multi-role credit fix, require `npx tsx scripts/recalculate-commission-returnables.ts` |
+| Returnable backfill | Historical WON deals may need `npx tsx scripts/recalculate-commission-returnables.ts` |
+| Background returnable tasks | Fire-and-forget `fetch` to `/api/tasks/recalculate-returnables`; no retry queue yet — suitable for future Inngest/Vercel Cron migration |
+| Admin analytics cache | Funnel, revenue, leaderboards cached 10 min — new data may lag briefly after pipeline/deal changes |
 | Pipeline checklist in modal | Display-only reminders in `PipelineStageAdvanceModal`; not persisted or server-validated |
 | Admin route protection | `/admin/*` middleware checks session only; role enforced client-side + API 403 |
 | Duplicate auth in admin routes | Several `/api/admin/*` routes inline their own `requireSuperAdmin()` instead of shared helper |

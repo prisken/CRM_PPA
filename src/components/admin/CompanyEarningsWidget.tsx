@@ -2,8 +2,10 @@
 
 import { useEffect, useState } from 'react';
 
-type DashboardKpiResponse = {
-  companyOverheadEarnings: number;
+type CompanyEarningsWidgetProps = {
+  companyOverheadEarnings?: number | null;
+  loading?: boolean;
+  error?: string | null;
 };
 
 function formatCurrency(value: number) {
@@ -14,14 +16,22 @@ function formatCurrency(value: number) {
   }).format(value);
 }
 
-export default function CompanyEarningsWidget() {
-  const [companyOverheadEarnings, setCompanyOverheadEarnings] = useState<number | null>(
-    null
-  );
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+export default function CompanyEarningsWidget({
+  companyOverheadEarnings: externalEarnings = null,
+  loading: externalLoading,
+  error: externalError = null,
+}: CompanyEarningsWidgetProps) {
+  const [internalEarnings, setInternalEarnings] = useState<number | null>(null);
+  const [internalLoading, setInternalLoading] = useState(externalLoading === undefined);
+  const [internalError, setInternalError] = useState<string | null>(null);
+
+  const usesExternalData = externalLoading !== undefined;
 
   useEffect(() => {
+    if (usesExternalData) {
+      return;
+    }
+
     async function fetchCompanyEarnings() {
       try {
         const res = await fetch('/api/admin/dashboard-kpis');
@@ -29,19 +39,25 @@ export default function CompanyEarningsWidget() {
           throw new Error('Failed to load company earnings');
         }
 
-        const data = (await res.json()) as DashboardKpiResponse;
-        setCompanyOverheadEarnings(data.companyOverheadEarnings);
+        const data = await res.json();
+        setInternalEarnings(data.companyOverheadEarnings);
       } catch (err) {
-        setError(
+        setInternalError(
           err instanceof Error ? err.message : 'Failed to load company earnings'
         );
       } finally {
-        setLoading(false);
+        setInternalLoading(false);
       }
     }
 
     fetchCompanyEarnings();
-  }, []);
+  }, [usesExternalData]);
+
+  const companyOverheadEarnings = usesExternalData
+    ? externalEarnings
+    : internalEarnings;
+  const loading = usesExternalData ? externalLoading : internalLoading;
+  const error = usesExternalData ? externalError : internalError;
 
   if (loading) {
     return (

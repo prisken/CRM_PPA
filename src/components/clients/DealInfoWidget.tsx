@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { memo, useMemo, useState } from 'react';
 import DealEditModal from '@/components/clients/DealEditModal';
 import {
   calculateCommittedValue,
@@ -20,9 +20,9 @@ export type ClientDeal = {
 
 type DealInfoWidgetProps = {
   clientId: string;
+  deals: ClientDeal[];
   myClientCommissionPercentage?: number;
   canManage?: boolean;
-  refreshKey?: number;
   onMutationSuccess?: () => void;
 };
 
@@ -73,58 +73,17 @@ function MetricField({ label, value }: { label: string; value: string }) {
   );
 }
 
-export default function DealInfoWidget({
+export default memo(function DealInfoWidget({
   clientId,
+  deals,
   myClientCommissionPercentage = 0,
   canManage = false,
-  refreshKey = 0,
   onMutationSuccess,
 }: DealInfoWidgetProps) {
-  const [deals, setDeals] = useState<ClientDeal[]>([]);
-  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [editingDeal, setEditingDeal] = useState<ClientDeal | null>(null);
   const [deletingDealId, setDeletingDealId] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    async function loadDeals() {
-      setLoading(true);
-      setError(null);
-
-      try {
-        const res = await authenticatedFetch(`/api/clients/${clientId}/deals`);
-
-        if (!res.ok) {
-          const data = await res.json().catch(() => ({}));
-          throw new Error(
-            typeof data.error === 'string' ? data.error : 'Failed to load deals'
-          );
-        }
-
-        const data = await res.json();
-        if (!cancelled) {
-          setDeals(data.deals ?? []);
-        }
-      } catch (err) {
-        if (!cancelled) {
-          setError(err instanceof Error ? err.message : 'Failed to load deals');
-        }
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
-      }
-    }
-
-    loadDeals();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [clientId, refreshKey]);
 
   const committedValue = useMemo(
     () => calculateCommittedValue(deals),
@@ -170,7 +129,6 @@ export default function DealInfoWidget({
         );
       }
 
-      setDeals((current) => current.filter((deal) => deal.id !== dealId));
       onMutationSuccess?.();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete deal');
@@ -201,20 +159,16 @@ export default function DealInfoWidget({
           )}
         </div>
 
-        {loading ? (
-          <div className="mb-5 h-20 animate-pulse rounded-lg bg-gray-100" />
-        ) : (
-          <dl className="mb-5 grid gap-4 sm:grid-cols-2">
-            <MetricField
-              label="Committed Value"
-              value={formatMoney(committedValue)}
-            />
-            <MetricField
-              label="Potential Value"
-              value={formatMoney(potentialValue)}
-            />
-          </dl>
-        )}
+        <dl className="mb-5 grid gap-4 sm:grid-cols-2">
+          <MetricField
+            label="Committed Value"
+            value={formatMoney(committedValue)}
+          />
+          <MetricField
+            label="Potential Value"
+            value={formatMoney(potentialValue)}
+          />
+        </dl>
 
         {myClientCommissionPercentage > 0 && (
           <p className="mb-5 text-sm text-gray-700">
@@ -227,9 +181,7 @@ export default function DealInfoWidget({
 
         {error && <p className="mb-3 text-sm text-red-600">{error}</p>}
 
-        {loading ? (
-          <div className="h-24 animate-pulse rounded-lg bg-gray-100" />
-        ) : deals.length === 0 ? (
+        {deals.length === 0 ? (
           <p className="text-sm text-gray-500">No deals yet.</p>
         ) : (
           <div className="overflow-x-auto">
@@ -287,13 +239,15 @@ export default function DealInfoWidget({
         )}
       </div>
 
-      <DealEditModal
-        clientId={clientId}
-        deal={editingDeal}
-        isOpen={modalOpen}
-        onClose={closeModal}
-        onSaved={handleDealSaved}
-      />
+      {modalOpen && (
+        <DealEditModal
+          clientId={clientId}
+          deal={editingDeal}
+          isOpen
+          onClose={closeModal}
+          onSaved={handleDealSaved}
+        />
+      )}
     </>
   );
-}
+});

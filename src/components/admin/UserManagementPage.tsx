@@ -1,15 +1,20 @@
 'use client';
 
+import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useCallback, useEffect, useState } from 'react';
+import { memo, useCallback, useEffect, useState } from 'react';
 import AuthRequiredMessage from '@/components/auth/AuthRequiredMessage';
 import Logo from '@/components/Logo';
 import UserActionsMenu from '@/components/admin/UserActionsMenu';
-import UserManagementModal from '@/components/admin/UserManagementModal';
 import { useUserProfile } from '@/hooks/useUserProfile';
 import { authenticatedFetch } from '@/lib/authenticatedFetch';
 import { supabase } from '@/lib/supabaseClient';
+
+const UserManagementModal = dynamic(
+  () => import('@/components/admin/UserManagementModal'),
+  { ssr: false }
+);
 
 type ManagedUser = {
   user_id: string;
@@ -37,6 +42,56 @@ function getStatusBadgeStyles(status: string) {
 
   return 'bg-green-100 text-green-800';
 }
+
+const UserTableRow = memo(function UserTableRow({
+  user,
+  isCurrentUser,
+  onDeactivate,
+  onDelete,
+}: {
+  user: ManagedUser;
+  isCurrentUser: boolean;
+  onDeactivate: (userId: string, userName: string) => void;
+  onDelete: (userId: string, userName: string) => void;
+}) {
+  const isDeactivated = user.status === 'DEACTIVATED';
+
+  return (
+    <tr className="hover:bg-gray-50">
+      <td className="px-4 py-3 font-medium text-gray-900">
+        {user.userName}
+        {isCurrentUser && (
+          <span className="ml-2 text-xs font-normal text-gray-500">(You)</span>
+        )}
+      </td>
+      <td className="px-4 py-3 text-gray-600">{user.email}</td>
+      <td className="px-4 py-3 text-gray-600">{formatRole(user.role)}</td>
+      <td className="px-4 py-3">
+        <span
+          className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${getStatusBadgeStyles(user.status)}`}
+        >
+          {user.status === 'DEACTIVATED' ? 'Deactivated' : 'Active'}
+        </span>
+      </td>
+      <td className="px-4 py-3 text-gray-600">
+        {new Date(user.createdAt).toLocaleDateString()}
+      </td>
+      <td className="px-4 py-3 text-right">
+        <UserActionsMenu
+          disabled={isCurrentUser}
+          onDeactivate={() => onDeactivate(user.user_id, user.userName)}
+          onDelete={() => onDelete(user.user_id, user.userName)}
+        />
+        {isCurrentUser && (
+          <p className="mt-1 text-xs text-gray-400">Cannot manage your own account</p>
+        )}
+        {isDeactivated && !isCurrentUser && (
+          <p className="mt-1 text-xs text-gray-400">Already deactivated</p>
+        )}
+      </td>
+    </tr>
+  );
+});
 
 export default function UserManagementPage() {
   const router = useRouter();
@@ -82,6 +137,16 @@ export default function UserManagementPage() {
 
     loadUsers();
   }, [profile, profileLoading, loadUsers]);
+
+  const openDeactivateModal = useCallback((userId: string, userName: string) => {
+    setModalState({ userId, userName, tab: 'deactivate' });
+  }, []);
+
+  const openDeleteModal = useCallback((userId: string, userName: string) => {
+    setModalState({ userId, userName, tab: 'delete' });
+  }, []);
+
+  const handleCloseModal = useCallback(() => setModalState(null), []);
 
   async function handleSignOut() {
     await supabase.auth.signOut();
@@ -176,66 +241,15 @@ export default function UserManagementPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {users.map((user) => {
-                    const isCurrentUser = user.user_id === profile.id;
-                    const isDeactivated = user.status === 'DEACTIVATED';
-
-                    return (
-                      <tr key={user.user_id} className="hover:bg-gray-50">
-                        <td className="px-4 py-3 font-medium text-gray-900">
-                          {user.userName}
-                          {isCurrentUser && (
-                            <span className="ml-2 text-xs font-normal text-gray-500">
-                              (You)
-                            </span>
-                          )}
-                        </td>
-                        <td className="px-4 py-3 text-gray-600">{user.email}</td>
-                        <td className="px-4 py-3 text-gray-600">
-                          {formatRole(user.role)}
-                        </td>
-                        <td className="px-4 py-3">
-                          <span
-                            className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${getStatusBadgeStyles(user.status)}`}
-                          >
-                            {user.status === 'DEACTIVATED' ? 'Deactivated' : 'Active'}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 text-gray-600">
-                          {new Date(user.createdAt).toLocaleDateString()}
-                        </td>
-                        <td className="px-4 py-3 text-right">
-                          <UserActionsMenu
-                            disabled={isCurrentUser}
-                            onDeactivate={() =>
-                              setModalState({
-                                userId: user.user_id,
-                                userName: user.userName,
-                                tab: 'deactivate',
-                              })
-                            }
-                            onDelete={() =>
-                              setModalState({
-                                userId: user.user_id,
-                                userName: user.userName,
-                                tab: 'delete',
-                              })
-                            }
-                          />
-                          {isCurrentUser && (
-                            <p className="mt-1 text-xs text-gray-400">
-                              Cannot manage your own account
-                            </p>
-                          )}
-                          {isDeactivated && !isCurrentUser && (
-                            <p className="mt-1 text-xs text-gray-400">
-                              Already deactivated
-                            </p>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
+                  {users.map((user) => (
+                    <UserTableRow
+                      key={user.user_id}
+                      user={user}
+                      isCurrentUser={user.user_id === profile.id}
+                      onDeactivate={openDeactivateModal}
+                      onDelete={openDeleteModal}
+                    />
+                  ))}
                 </tbody>
               </table>
             </div>
@@ -255,7 +269,7 @@ export default function UserManagementPage() {
           userId={modalState.userId}
           userName={modalState.userName}
           initialTab={modalState.tab}
-          onClose={() => setModalState(null)}
+          onClose={handleCloseModal}
           onDeactivated={loadUsers}
           onDeleted={loadUsers}
         />

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { memo, useEffect, useMemo, useState } from 'react';
 import {
   Bar,
   BarChart,
@@ -27,7 +27,13 @@ const GROUP_OPTIONS: { label: string; value: GroupBy }[] = [
   { label: 'Year', value: 'year' },
 ];
 
-export default function RevenueTrackerChart() {
+const currencyFormatter = new Intl.NumberFormat('en-US', {
+  style: 'currency',
+  currency: 'USD',
+  maximumFractionDigits: 0,
+});
+
+function RevenueTrackerChart() {
   const [groupBy, setGroupBy] = useState<GroupBy>('month');
   const [data, setData] = useState<RevenuePeriod[]>([]);
   const [loading, setLoading] = useState(true);
@@ -55,23 +61,26 @@ export default function RevenueTrackerChart() {
     fetchRevenue();
   }, [groupBy]);
 
+  const downloadLinks = useMemo(
+    () => [
+      {
+        label: 'Download as PDF',
+        href: `/api/reports/revenue?format=pdf&groupBy=${groupBy}`,
+      },
+      {
+        label: 'Download as CSV',
+        href: `/api/reports/revenue?format=csv&groupBy=${groupBy}`,
+      },
+    ],
+    [groupBy]
+  );
+
   return (
     <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <h2 className="text-lg font-semibold text-gray-900">Revenue Tracker</h2>
         <div className="flex items-center gap-2">
-          <WidgetDownloadMenu
-            links={[
-              {
-                label: 'Download as PDF',
-                href: `/api/reports/revenue?format=pdf&groupBy=${groupBy}`,
-              },
-              {
-                label: 'Download as CSV',
-                href: `/api/reports/revenue?format=csv&groupBy=${groupBy}`,
-              },
-            ]}
-          />
+          <WidgetDownloadMenu links={downloadLinks} />
           {GROUP_OPTIONS.map((option) => (
             <button
               key={option.value}
@@ -101,11 +110,7 @@ export default function RevenueTrackerChart() {
               <Tooltip
                 formatter={(value) => {
                   const amount = typeof value === 'number' ? value : 0;
-                  return new Intl.NumberFormat('en-US', {
-                    style: 'currency',
-                    currency: 'USD',
-                    maximumFractionDigits: 0,
-                  }).format(amount);
+                  return currencyFormatter.format(amount);
                 }}
               />
               <Legend />
@@ -118,3 +123,5 @@ export default function RevenueTrackerChart() {
     </div>
   );
 }
+
+export default memo(RevenueTrackerChart);

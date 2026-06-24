@@ -5,7 +5,10 @@ import {
   parseCommissionReturnablePeriodFilter,
   parseCommissionReturnableStatusFilter,
 } from '@/lib/commissionReturnables';
+import { timeRouteHandler } from '@/lib/performance';
 import { prisma } from '@/lib/prisma';
+
+export const dynamic = 'force-dynamic';
 
 export async function GET(request: Request) {
   const auth = await getAuthenticatedUserFromRequest(request);
@@ -34,36 +37,57 @@ export async function GET(request: Request) {
     );
   }
 
-  const returnables = await prisma.commissionReturnable.findMany({
-    where: {
-      userId: auth.user.id,
-      ...(statusFilter ? { status: statusFilter } : {}),
-      ...(periodFilter ? { period: periodFilter } : {}),
-    },
-    include: {
-      deal: {
+  const payload = await timeRouteHandler(
+    'GET /api/me/commission-returnable',
+    async () => {
+      const returnables = await prisma.commissionReturnable.findMany({
+        where: {
+          userId: auth.user.id,
+          ...(statusFilter ? { status: statusFilter } : {}),
+          ...(periodFilter ? { period: periodFilter } : {}),
+        },
         select: {
           id: true,
-          name: true,
-          clientId: true,
-          dealValue: true,
-          totalCommission: true,
-          client: {
+          amount: true,
+          status: true,
+          period: true,
+          userId: true,
+          dealId: true,
+          createdAt: true,
+          updatedAt: true,
+          deal: {
             select: {
               id: true,
               name: true,
-              company: true,
+              clientId: true,
+              dealValue: true,
+              totalCommission: true,
+              client: {
+                select: {
+                  id: true,
+                  name: true,
+                  company: true,
+                },
+              },
             },
           },
         },
-      },
-    },
-    orderBy: [{ period: 'desc' }, { createdAt: 'desc' }],
-  });
+        orderBy: [{ period: 'desc' }, { createdAt: 'desc' }],
+      });
 
-  return NextResponse.json({
-    returnables: returnables.map((record) =>
-      formatCommissionReturnable(record, { deal: record.deal })
-    ),
-  });
+      return {
+        returnables: returnables.map((record) =>
+          formatCommissionReturnable(record, { deal: record.deal })
+        ),
+      };
+    },
+    (result) => ({
+      userId: auth.user.id,
+      returnableCount: result.returnables.length,
+      hasStatusFilter: Boolean(statusFilter),
+      hasPeriodFilter: Boolean(periodFilter),
+    })
+  );
+
+  return NextResponse.json(payload);
 }

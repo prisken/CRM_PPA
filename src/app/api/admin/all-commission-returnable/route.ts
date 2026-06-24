@@ -5,6 +5,7 @@ import {
   parseCommissionReturnablePeriodFilter,
   parseCommissionReturnableStatusFilter,
 } from '@/lib/commissionReturnables';
+import { timeRouteHandler } from '@/lib/performance';
 import { prisma } from '@/lib/prisma';
 
 export async function GET(request: Request) {
@@ -34,45 +35,65 @@ export async function GET(request: Request) {
     );
   }
 
-  const returnables = await prisma.commissionReturnable.findMany({
-    where: {
-      ...(statusFilter ? { status: statusFilter } : {}),
-      ...(periodFilter ? { period: periodFilter } : {}),
-    },
-    include: {
-      user: {
-        select: {
-          id: true,
-          name: true,
-          email: true,
+  const payload = await timeRouteHandler(
+    'GET /api/admin/all-commission-returnable',
+    async () => {
+      const returnables = await prisma.commissionReturnable.findMany({
+        where: {
+          ...(statusFilter ? { status: statusFilter } : {}),
+          ...(periodFilter ? { period: periodFilter } : {}),
         },
-      },
-      deal: {
         select: {
           id: true,
-          name: true,
-          clientId: true,
-          dealValue: true,
-          totalCommission: true,
-          client: {
+          amount: true,
+          status: true,
+          period: true,
+          userId: true,
+          dealId: true,
+          createdAt: true,
+          updatedAt: true,
+          user: {
             select: {
               id: true,
               name: true,
-              company: true,
+              email: true,
+            },
+          },
+          deal: {
+            select: {
+              id: true,
+              name: true,
+              clientId: true,
+              dealValue: true,
+              totalCommission: true,
+              client: {
+                select: {
+                  id: true,
+                  name: true,
+                  company: true,
+                },
+              },
             },
           },
         },
-      },
-    },
-    orderBy: [{ period: 'desc' }, { createdAt: 'desc' }],
-  });
+        orderBy: [{ period: 'desc' }, { createdAt: 'desc' }],
+      });
 
-  return NextResponse.json({
-    returnables: returnables.map((record) =>
-      formatCommissionReturnable(record, {
-        user: record.user,
-        deal: record.deal,
-      })
-    ),
-  });
+      return {
+        returnables: returnables.map((record) =>
+          formatCommissionReturnable(record, {
+            user: record.user,
+            deal: record.deal,
+          })
+        ),
+      };
+    },
+    (result) => ({
+      returnableCount: result.returnables.length,
+      hasStatusFilter: Boolean(statusFilter),
+      hasPeriodFilter: Boolean(periodFilter),
+    })
+  );
+
+  return NextResponse.json(payload);
 }

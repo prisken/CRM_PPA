@@ -1,10 +1,10 @@
 import { NextResponse } from 'next/server';
 import { logClientSystemEvent, requireSuperAdmin } from '@/lib/authHelpers';
-import { recalculateReturnablesForUserOnClient } from '@/lib/commissionReturnables';
+import { scheduleReturnableRecalculation } from '@/lib/commissionReturnables';
 import { prisma } from '@/lib/prisma';
 
 export async function DELETE(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string; assignmentId: string }> }
 ) {
   const { id: clientId, assignmentId } = await params;
@@ -32,14 +32,7 @@ export async function DELETE(
     where: { assignmentId },
   });
 
-  try {
-    await recalculateReturnablesForUserOnClient(userId, clientId);
-  } catch (error) {
-    console.error(
-      `Failed to recalculate commission returnables for user ${userId} on client ${clientId} after removing assignment.`,
-      error
-    );
-  }
+  scheduleReturnableRecalculation(userId, clientId, request);
 
   await logClientSystemEvent(
     clientId,

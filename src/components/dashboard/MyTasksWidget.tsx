@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useMemo, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import type { OpenTaskRow } from '@/lib/dashboardTypes';
 import { authenticatedFetch } from '@/lib/authenticatedFetch';
 
@@ -32,10 +32,54 @@ function isOverdue(dueDate: string | null) {
   return new Date(dueDate) < today;
 }
 
-export default function MyTasksWidget({
-  openTasks,
-  error = null,
-}: MyTasksWidgetProps) {
+const TaskListItem = memo(function TaskListItem({
+  task,
+  isCompleting,
+  onComplete,
+}: {
+  task: OpenTaskRow;
+  isCompleting: boolean;
+  onComplete: (taskId: string) => void;
+}) {
+  const overdue = isOverdue(task.dueDate);
+
+  return (
+    <li
+      className={`flex items-start gap-3 rounded-lg border px-3 py-3 ${
+        overdue ? 'border-red-200 bg-red-50' : 'border-gray-100 bg-gray-50'
+      }`}
+    >
+      <input
+        type="checkbox"
+        checked={false}
+        disabled={isCompleting}
+        onChange={() => onComplete(task.taskId)}
+        className="mt-1 h-4 w-4 rounded border-gray-300 text-blue-600 disabled:opacity-60"
+        aria-label={`Complete task: ${task.description}`}
+      />
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-medium text-gray-900">{task.description}</p>
+        <p className="mt-1 text-xs text-gray-600">
+          <Link
+            href={`/clients/${task.clientId}`}
+            className="font-medium text-blue-600 hover:underline"
+          >
+            {task.clientName}
+          </Link>
+        </p>
+        <p
+          className={`mt-1 text-xs ${
+            overdue ? 'font-semibold text-red-600' : 'text-gray-500'
+          }`}
+        >
+          Due {formatDueDate(task.dueDate)}
+        </p>
+      </div>
+    </li>
+  );
+});
+
+function MyTasksWidget({ openTasks, error = null }: MyTasksWidgetProps) {
   const [tasks, setTasks] = useState(openTasks);
   const [completingTaskId, setCompletingTaskId] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -59,7 +103,7 @@ export default function MyTasksWidget({
     });
   }, [tasks]);
 
-  async function handleComplete(taskId: string) {
+  const handleComplete = useCallback(async (taskId: string) => {
     setCompletingTaskId(taskId);
     setActionError(null);
 
@@ -81,7 +125,7 @@ export default function MyTasksWidget({
     } finally {
       setCompletingTaskId(null);
     }
-  }
+  }, []);
 
   const displayError = actionError ?? error;
 
@@ -95,47 +139,18 @@ export default function MyTasksWidget({
         <p className="mt-4 text-sm text-gray-500">No open tasks. You&apos;re all caught up!</p>
       ) : (
         <ul className="mt-4 space-y-3">
-          {sortedTasks.map((task) => {
-            const overdue = isOverdue(task.dueDate);
-
-            return (
-              <li
-                key={task.taskId}
-                className={`flex items-start gap-3 rounded-lg border px-3 py-3 ${
-                  overdue ? 'border-red-200 bg-red-50' : 'border-gray-100 bg-gray-50'
-                }`}
-              >
-                <input
-                  type="checkbox"
-                  checked={false}
-                  disabled={completingTaskId === task.taskId}
-                  onChange={() => handleComplete(task.taskId)}
-                  className="mt-1 h-4 w-4 rounded border-gray-300 text-blue-600 disabled:opacity-60"
-                  aria-label={`Complete task: ${task.description}`}
-                />
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium text-gray-900">{task.description}</p>
-                  <p className="mt-1 text-xs text-gray-600">
-                    <Link
-                      href={`/clients/${task.clientId}`}
-                      className="font-medium text-blue-600 hover:underline"
-                    >
-                      {task.clientName}
-                    </Link>
-                  </p>
-                  <p
-                    className={`mt-1 text-xs ${
-                      overdue ? 'font-semibold text-red-600' : 'text-gray-500'
-                    }`}
-                  >
-                    Due {formatDueDate(task.dueDate)}
-                  </p>
-                </div>
-              </li>
-            );
-          })}
+          {sortedTasks.map((task) => (
+            <TaskListItem
+              key={task.taskId}
+              task={task}
+              isCompleting={completingTaskId === task.taskId}
+              onComplete={handleComplete}
+            />
+          ))}
         </ul>
       )}
     </section>
   );
 }
+
+export default memo(MyTasksWidget);

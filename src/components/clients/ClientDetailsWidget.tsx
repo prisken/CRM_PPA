@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { memo, useState } from 'react';
 import ClientDetailsEditModal from '@/components/clients/ClientDetailsEditModal';
 
 export type ImportantDate = {
@@ -61,7 +61,7 @@ function normalizeImportantDates(dates: ImportantDate[]) {
   );
 }
 
-export default function ClientDetailsWidget({
+export default memo(function ClientDetailsWidget({
   clientId,
   name,
   company,
@@ -136,21 +136,23 @@ export default function ClientDetailsWidget({
         </div>
       </div>
 
-      <ClientDetailsEditModal
-        clientId={clientId}
-        initialName={name}
-        initialCompany={company}
-        initialEmail={email}
-        initialPhone={phone}
-        initialLeadSource={leadSource}
-        initialRoleInCompany={roleInCompany}
-        initialEmployeeCount={employeeCount}
-        initialExpectations={expectations}
-        initialImportantDates={importantDates}
-        isOpen={isEditModalOpen}
-        onClose={() => setIsEditModalOpen(false)}
-        onSaved={() => onMutationSuccess?.()}
-      />
+      {isEditModalOpen && (
+        <ClientDetailsEditModal
+          clientId={clientId}
+          initialName={name}
+          initialCompany={company}
+          initialEmail={email}
+          initialPhone={phone}
+          initialLeadSource={leadSource}
+          initialRoleInCompany={roleInCompany}
+          initialEmployeeCount={employeeCount}
+          initialExpectations={expectations}
+          initialImportantDates={importantDates}
+          isOpen
+          onClose={() => setIsEditModalOpen(false)}
+          onSaved={() => onMutationSuccess?.()}
+        />
+      )}
     </>
   );
-}
+});

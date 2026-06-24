@@ -3,6 +3,8 @@ import { getAuthenticatedUserFromRequest } from '@/lib/authHelpers';
 import { formatCommissionReturnable } from '@/lib/commissionReturnables';
 import { prisma } from '@/lib/prisma';
 
+export const dynamic = 'force-dynamic';
+
 export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -40,7 +42,15 @@ export async function PATCH(
   const updated = await prisma.commissionReturnable.update({
     where: { id },
     data: { status: 'PAID' },
-    include: {
+    select: {
+      id: true,
+      amount: true,
+      status: true,
+      period: true,
+      userId: true,
+      dealId: true,
+      createdAt: true,
+      updatedAt: true,
       deal: {
         select: {
           id: true,

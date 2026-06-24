@@ -1,7 +1,7 @@
 'use client';
 
 import { AssignmentRole } from '@prisma/client';
-import { useEffect, useMemo, useState } from 'react';
+import { memo, useEffect, useMemo, useState } from 'react';
 import { X } from 'lucide-react';
 import {
   countAssignmentsForRole,
@@ -44,7 +44,7 @@ type AssignedTeamWidgetProps = {
   onMutationSuccess?: () => void;
 };
 
-export default function AssignedTeamWidget({
+export default memo(function AssignedTeamWidget({
   clientId,
   assignedUsers,
   currentUser,
@@ -81,20 +81,30 @@ export default function AssignedTeamWidget({
     isSubmitting || !selectedUserId || occupancyLimitMessage !== null;
 
   useEffect(() => {
-    if (!isSuperAdmin) {
+    if (!isSuperAdmin || !isModalOpen || users.length > 0) {
       return;
     }
 
+    let cancelled = false;
+
     async function fetchUsers() {
       const res = await fetch('/api/admin/users');
-      if (res.ok) {
-        const data = await res.json();
+      if (!res.ok || cancelled) {
+        return;
+      }
+
+      const data = await res.json();
+      if (!cancelled) {
         setUsers(data);
       }
     }
 
     fetchUsers();
-  }, [isSuperAdmin]);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isSuperAdmin, isModalOpen, users.length]);
 
   async function handleRemove(assignmentId: string) {
     setError(null);
@@ -282,4 +292,4 @@ export default function AssignedTeamWidget({
       )}
     </div>
   );
-}
+});

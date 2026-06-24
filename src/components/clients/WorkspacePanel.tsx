@@ -2,7 +2,7 @@
 
 import { Menu, MenuButton, MenuItem, MenuItems } from '@headlessui/react';
 import { ChevronDown } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import ActivityLog, { type ActivityLogEntry } from '@/components/clients/ActivityLog';
 import StrategyAndTasks, {
   type StrategyCurrentUser,
@@ -31,6 +31,12 @@ type StrategyTasksData = {
   tasks: StrategyTask[];
 };
 
+type TabDataCache = {
+  refreshKey: number;
+  strategyTasks: StrategyTasksData | null;
+  activityNotes: ActivityLogEntry[] | null;
+};
+
 export default function WorkspacePanel({
   clientId,
   currentUser,
@@ -45,6 +51,11 @@ export default function WorkspacePanel({
   const [activityLog, setActivityLog] = useState<ActivityLogEntry[]>([]);
   const [loadingTab, setLoadingTab] = useState<TabId | null>('strategy-tasks');
   const [error, setError] = useState<string | null>(null);
+  const tabDataCacheRef = useRef<TabDataCache>({
+    refreshKey: -1,
+    strategyTasks: null,
+    activityNotes: null,
+  });
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -63,6 +74,25 @@ export default function WorkspacePanel({
 
   useEffect(() => {
     if (!loadedTabs.has(activeTab)) {
+      return;
+    }
+
+    const cache = tabDataCacheRef.current;
+    if (cache.refreshKey !== refreshKey) {
+      cache.refreshKey = refreshKey;
+      cache.strategyTasks = null;
+      cache.activityNotes = null;
+    }
+
+    if (activeTab === 'strategy-tasks' && cache.strategyTasks) {
+      setStrategyTasksData(cache.strategyTasks);
+      setLoadingTab(null);
+      return;
+    }
+
+    if (activeTab === 'activity-notes' && cache.activityNotes) {
+      setActivityLog(cache.activityNotes);
+      setLoadingTab(null);
       return;
     }
 
@@ -92,12 +122,16 @@ export default function WorkspacePanel({
         }
 
         if (activeTab === 'strategy-tasks') {
-          setStrategyTasksData({
+          const nextStrategyTasks = {
             strategyText: data.strategyText ?? '',
             tasks: data.tasks ?? [],
-          });
+          };
+          cache.strategyTasks = nextStrategyTasks;
+          setStrategyTasksData(nextStrategyTasks);
         } else {
-          setActivityLog(data.activityLog ?? []);
+          const nextActivityLog = data.activityLog ?? [];
+          cache.activityNotes = nextActivityLog;
+          setActivityLog(nextActivityLog);
         }
       } catch (err) {
         if (!cancelled) {
@@ -117,14 +151,22 @@ export default function WorkspacePanel({
     };
   }, [activeTab, clientId, loadedTabs, refreshKey]);
 
-  function handleTabChange(tabId: TabId) {
+  const handleTabChange = useCallback((tabId: TabId) => {
     setActiveTab(tabId);
     setLoadedTabs((current) => new Set([...current, tabId]));
-  }
+  }, []);
 
-  function handleMutationSuccess() {
+  const handleMutationSuccess = useCallback(() => {
     onMutationSuccess?.();
-  }
+  }, [onMutationSuccess]);
+
+  const activityLogCurrentUser = useMemo(
+    () =>
+      currentUser
+        ? { id: currentUser.id, role: currentUser.role }
+        : null,
+    [currentUser]
+  );
 
   const activeTabLabel =
     TABS.find((tab) => tab.id === activeTab)?.label ?? TABS[0].label;
@@ -202,11 +244,7 @@ export default function WorkspacePanel({
           <ActivityLog
             clientId={clientId}
             activityLog={activityLog}
-            currentUser={
-              currentUser
-                ? { id: currentUser.id, role: currentUser.role }
-                : null
-            }
+            currentUser={activityLogCurrentUser}
             canPostNote={canPostNote}
             onNotePosted={handleMutationSuccess}
           />

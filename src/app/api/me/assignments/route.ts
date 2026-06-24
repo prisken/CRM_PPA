@@ -3,6 +3,8 @@ import { NextResponse } from 'next/server';
 import { getAuthenticatedUserFromRequest } from '@/lib/authHelpers';
 import { prisma } from '@/lib/prisma';
 
+export const dynamic = 'force-dynamic';
+
 export async function GET(request: Request) {
   const auth = await getAuthenticatedUserFromRequest(request);
   if (auth.error) {
@@ -17,7 +19,6 @@ export async function GET(request: Request) {
       role: true,
       client: {
         select: {
-          id: true,
           name: true,
           company: true,
         },

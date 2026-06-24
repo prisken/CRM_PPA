@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import { markActivitiesAsRead } from '@/lib/activityFeed';
 import { getAuthenticatedUserFromRequest } from '@/lib/authHelpers';
 
+export const dynamic = 'force-dynamic';
+
 export async function POST(request: Request) {
   const auth = await getAuthenticatedUserFromRequest(request);
   if (auth.error) {

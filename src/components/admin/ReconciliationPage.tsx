@@ -2,12 +2,13 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useEffect, useMemo, useState } from 'react';
+import { memo, useEffect, useMemo, useState } from 'react';
 import {
   createColumnHelper,
   flexRender,
   getCoreRowModel,
   useReactTable,
+  type Row,
 } from '@tanstack/react-table';
 import Logo from '@/components/Logo';
 import { useUserProfile } from '@/hooks/useUserProfile';
@@ -101,6 +102,40 @@ function getUserName(record: CommissionReturnableRecord) {
 
   return record.user.name ?? record.user.email;
 }
+
+const ReconciliationTableBody = memo(function ReconciliationTableBody({
+  rows,
+  columnCount,
+}: {
+  rows: Row<ReconciliationRow>[];
+  columnCount: number;
+}) {
+  if (rows.length === 0) {
+    return (
+      <tbody>
+        <tr>
+          <td colSpan={columnCount} className="px-3 py-4 text-gray-500">
+            No commission returnables found.
+          </td>
+        </tr>
+      </tbody>
+    );
+  }
+
+  return (
+    <tbody>
+      {rows.map((row) => (
+        <tr key={row.id} className="border-b border-gray-100 last:border-0">
+          {row.getVisibleCells().map((cell) => (
+            <td key={cell.id} className="px-3 py-2 text-gray-800">
+              {flexRender(cell.column.columnDef.cell, cell.getContext())}
+            </td>
+          ))}
+        </tr>
+      ))}
+    </tbody>
+  );
+});
 
 export default function ReconciliationPage() {
   const router = useRouter();
@@ -326,25 +361,10 @@ export default function ReconciliationPage() {
                   </tr>
                 ))}
               </thead>
-              <tbody>
-                {table.getRowModel().rows.length === 0 ? (
-                  <tr>
-                    <td colSpan={columns.length} className="px-3 py-4 text-gray-500">
-                      No commission returnables found.
-                    </td>
-                  </tr>
-                ) : (
-                  table.getRowModel().rows.map((row) => (
-                    <tr key={row.id} className="border-b border-gray-100 last:border-0">
-                      {row.getVisibleCells().map((cell) => (
-                        <td key={cell.id} className="px-3 py-2 text-gray-800">
-                          {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                        </td>
-                      ))}
-                    </tr>
-                  ))
-                )}
-              </tbody>
+              <ReconciliationTableBody
+                rows={table.getRowModel().rows}
+                columnCount={columns.length}
+              />
             </table>
           </div>
         </section>

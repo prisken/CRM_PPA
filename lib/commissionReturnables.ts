@@ -20,6 +20,21 @@ type ClientAssignmentForReturnable = {
   role: AssignmentRole;
 };
 
+function buildAssignmentRoleOccupancy(
+  assignments: ClientAssignmentForReturnable[]
+) {
+  const occupancy = new Map<AssignmentRole, number>();
+
+  for (const assignment of assignments) {
+    occupancy.set(
+      assignment.role,
+      (occupancy.get(assignment.role) ?? 0) + 1
+    );
+  }
+
+  return occupancy;
+}
+
 export function calculateDoctorCommissionReturnableAmount(
   totalCommission: number,
   doctorCount: number,
@@ -34,6 +49,8 @@ export function calculateDoctorCommissionReturnableAmount(
   const doctorPortionOfCommission = totalCommission / doctorCount;
   const baseLiability = doctorPortionOfCommission * (1 - doctorPoolRate);
 
+  const roleOccupancy = buildAssignmentRoleOccupancy(allAssignmentsForClient);
+
   const userNonDoctorAssignments = allAssignmentsForClient.filter(
     (assignment) =>
       assignment.userId === doctorUserId &&
@@ -42,9 +59,7 @@ export function calculateDoctorCommissionReturnableAmount(
   );
 
   const userCredit = userNonDoctorAssignments.reduce((totalCredit, assignment) => {
-    const occupancy = allAssignmentsForClient.filter(
-      (clientAssignment) => clientAssignment.role === assignment.role
-    ).length;
+    const occupancy = roleOccupancy.get(assignment.role) ?? 0;
 
     if (occupancy <= 0) {
       return totalCredit;
@@ -95,28 +110,26 @@ export async function createCommissionReturnablesForWonDeal({
     return [];
   }
 
-  const returnables = await Promise.all(
-    doctorAssignments.map((assignment) => {
-      const returnableAmount = calculateDoctorCommissionReturnableAmount(
-        totalCommission,
-        doctorCount,
-        assignment.userId,
-        allAssignmentsForClient
-      );
+  const returnableRows = doctorAssignments.map((assignment) => ({
+    amount: calculateDoctorCommissionReturnableAmount(
+      totalCommission,
+      doctorCount,
+      assignment.userId,
+      allAssignmentsForClient
+    ),
+    status: 'UNPAID' as const,
+    period,
+    userId: assignment.userId,
+    dealId,
+  }));
 
-      return prisma.commissionReturnable.create({
-        data: {
-          amount: returnableAmount,
-          status: 'UNPAID',
-          period,
-          userId: assignment.userId,
-          dealId,
-        },
-      });
-    })
-  );
+  await prisma.commissionReturnable.createMany({
+    data: returnableRows,
+  });
 
-  return returnables;
+  return prisma.commissionReturnable.findMany({
+    where: { dealId },
+  });
 }
 
 /**
@@ -156,13 +169,28 @@ export async function recalculateReturnablesForUserOnClient(
     (assignment) => assignment.role === AssignmentRole.DOCTOR
   ).length;
 
+  const dealIds = wonDeals.map((deal) => deal.id);
+
+  const existingReturnables = await prisma.commissionReturnable.findMany({
+    where: {
+      userId,
+      dealId: { in: dealIds },
+    },
+    select: {
+      id: true,
+      dealId: true,
+      amount: true,
+    },
+  });
+
+  const returnableByDealId = new Map(
+    existingReturnables.map((record) => [record.dealId, record])
+  );
+
+  const updates: { id: string; amount: number }[] = [];
+
   for (const deal of wonDeals) {
-    const existingReturnable = await prisma.commissionReturnable.findFirst({
-      where: {
-        dealId: deal.id,
-        userId,
-      },
-    });
+    const existingReturnable = returnableByDealId.get(deal.id);
 
     if (!existingReturnable) {
       continue;
@@ -180,12 +208,63 @@ export async function recalculateReturnablesForUserOnClient(
     const previousAmount = Number(existingReturnable.amount);
 
     if (Math.abs(previousAmount - newAmount) > 0.005) {
-      await prisma.commissionReturnable.update({
-        where: { id: existingReturnable.id },
-        data: { amount: newAmount },
-      });
+      updates.push({ id: existingReturnable.id, amount: newAmount });
     }
   }
+
+  if (updates.length > 0) {
+    await Promise.all(
+      updates.map((update) =>
+        prisma.commissionReturnable.update({
+          where: { id: update.id },
+          data: { amount: update.amount },
+        })
+      )
+    );
+  }
+}
+
+/**
+ * Schedules returnable recalculation via a background API call (fire-and-forget).
+ * The assignment API can respond immediately while recalculation runs separately.
+ */
+export function scheduleReturnableRecalculation(
+  userId: string,
+  clientId: string,
+  request?: Request
+) {
+  const origin = request
+    ? new URL(request.url).origin
+    : process.env.VERCEL_URL
+      ? `https://${process.env.VERCEL_URL}`
+      : (process.env.TEST_BASE_URL ?? 'http://localhost:3000');
+
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  };
+
+  if (request) {
+    const cookie = request.headers.get('cookie');
+    if (cookie) {
+      headers.cookie = cookie;
+    }
+
+    const authorization = request.headers.get('authorization');
+    if (authorization) {
+      headers.authorization = authorization;
+    }
+  }
+
+  void fetch(`${origin}/api/tasks/recalculate-returnables`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ userId, clientId }),
+  }).catch((error) => {
+    console.error(
+      `Failed to schedule returnable recalculation for user ${userId} on client ${clientId}.`,
+      error
+    );
+  });
 }
 
 export type CommissionReturnableRecalculationChange = {
@@ -225,7 +304,11 @@ export async function backfillCommissionReturnablesForWonDeals() {
   }
 
   const existingReturnables = await prisma.commissionReturnable.findMany({
-    include: {
+    select: {
+      id: true,
+      amount: true,
+      dealId: true,
+      userId: true,
       user: { select: { email: true } },
       deal: {
         select: {
@@ -302,7 +385,8 @@ export async function backfillCommissionReturnablesForWonDeals() {
           userId: doctor.userId,
           dealId: deal.id,
         },
-        include: {
+        select: {
+          id: true,
           user: { select: { email: true } },
         },
       });

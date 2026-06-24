@@ -2,12 +2,19 @@
 
 import { useEffect, useState } from 'react';
 
-type KpiData = {
+export type KpiData = {
   totalCommittedRevenue: number;
   totalPotentialRevenue: number;
   totalCommissionYTD: number;
+  companyOverheadEarnings: number;
   pipelineVelocity: number;
   activeDeals: number;
+};
+
+type KpiBarProps = {
+  data?: KpiData | null;
+  loading?: boolean;
+  error?: string | null;
 };
 
 const KPI_CARDS = [
@@ -44,12 +51,22 @@ function formatValue(value: number, format: string) {
   return value.toLocaleString();
 }
 
-export default function KpiBar() {
-  const [data, setData] = useState<KpiData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+export default function KpiBar({
+  data: externalData = null,
+  loading: externalLoading,
+  error: externalError = null,
+}: KpiBarProps) {
+  const [internalData, setInternalData] = useState<KpiData | null>(null);
+  const [internalLoading, setInternalLoading] = useState(externalLoading === undefined);
+  const [internalError, setInternalError] = useState<string | null>(null);
+
+  const usesExternalData = externalLoading !== undefined;
 
   useEffect(() => {
+    if (usesExternalData) {
+      return;
+    }
+
     async function fetchKpis() {
       try {
         const res = await fetch('/api/admin/dashboard-kpis');
@@ -57,16 +74,20 @@ export default function KpiBar() {
           throw new Error('Failed to load KPIs');
         }
         const json = await res.json();
-        setData(json);
+        setInternalData(json);
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to load KPIs');
+        setInternalError(err instanceof Error ? err.message : 'Failed to load KPIs');
       } finally {
-        setLoading(false);
+        setInternalLoading(false);
       }
     }
 
     fetchKpis();
-  }, []);
+  }, [usesExternalData]);
+
+  const data = usesExternalData ? externalData : internalData;
+  const loading = usesExternalData ? externalLoading : internalLoading;
+  const error = usesExternalData ? externalError : internalError;
 
   if (loading) {
     return (
