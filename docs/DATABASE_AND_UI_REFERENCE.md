@@ -3,7 +3,7 @@
 **Last updated:** June 24, 2026 (unified lead ingestion, source records, Client 360 widget)  
 **Repository:** [CRM_PPA](https://github.com/prisken/CRM_PPA)  
 **Deployment branch:** `deploy`  
-**Last deployed commit:** `deploy` — unified lead ingestion, source records, Client 360 widget (June 24, 2026)  
+**Last deployed commit:** `13f2bcb` (unified lead ingestion, source records, Client 360 widget)  
 **Production URL:** `https://crm-ppa-nine.vercel.app`  
 **Local dev server:** `http://localhost:3000` (run `npm run dev`; add `PERF_LOGGING_ENABLED=true` for route timing logs)
 
