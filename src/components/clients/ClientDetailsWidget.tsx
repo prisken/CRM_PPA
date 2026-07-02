@@ -2,6 +2,7 @@
 
 import { memo, useState } from 'react';
 import ClientDetailsEditModal from '@/components/clients/ClientDetailsEditModal';
+import LeadSourceBadges from '@/components/clients/LeadSourceBadges';
 
 export type ImportantDate = {
   label: string;
@@ -101,7 +102,18 @@ export default memo(function ClientDetailsWidget({
           <DetailField label="Company" value={company ?? '—'} />
           <DetailField label="Email" value={email ?? '—'} />
           <DetailField label="Phone" value={phone ?? '—'} />
-          <DetailField label="Lead Source" value={leadSource ?? '—'} />
+          <div>
+            <dt className="text-xs font-medium uppercase tracking-wide text-gray-500">
+              Lead Source
+            </dt>
+            <dd className="mt-1">
+              {leadSource?.trim() ? (
+                <LeadSourceBadges sources={[leadSource]} />
+              ) : (
+                <span className="text-sm font-medium text-gray-900">—</span>
+              )}
+            </dd>
+          </div>
           <DetailField label="Role in Company" value={roleInCompany ?? '—'} />
           <DetailField
             label="Employee Count"

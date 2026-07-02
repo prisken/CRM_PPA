@@ -1,6 +1,7 @@
 'use client';
 
-import { memo, useEffect, useState } from 'react';
+import { memo, useEffect, useMemo, useState } from 'react';
+import LeadSourceBadges from '@/components/clients/LeadSourceBadges';
 import { authenticatedFetch } from '@/lib/authenticatedFetch';
 
 type SourceRecord = {
@@ -106,12 +107,24 @@ export default memo(function ClientSourceRecordsWidget({
     };
   }, [clientId]);
 
+  const uniqueSourceLabels = useMemo(
+    () => [...new Set(records.map((record) => formatSourceLabel(record.source)))],
+    [records]
+  );
+
   return (
     <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-      <h3 className="text-base font-semibold text-gray-900">External Source Records</h3>
-      <p className="mt-1 text-xs text-gray-500">
-        Inbound submissions from connected integrations.
-      </p>
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h3 className="text-base font-semibold text-gray-900">External Source Records</h3>
+          <p className="mt-1 text-xs text-gray-500">
+            Inbound submissions from connected integrations.
+          </p>
+        </div>
+        {!isLoading && !error && records.length > 0 && (
+          <LeadSourceBadges sources={uniqueSourceLabels} />
+        )}
+      </div>
 
       {isLoading ? (
         <p className="mt-4 text-sm text-gray-500">Loading source records…</p>

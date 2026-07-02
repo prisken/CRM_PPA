@@ -8,6 +8,7 @@ import ClientDetailsWidget from '@/components/clients/ClientDetailsWidget';
 import AssignedTeamWidget from '@/components/clients/AssignedTeamWidget';
 import CompanyHierarchyWidget from '@/components/clients/CompanyHierarchyWidget';
 import ClientSourceRecordsWidget from '@/components/clients/ClientSourceRecordsWidget';
+import LeadSourceBadges from '@/components/clients/LeadSourceBadges';
 import DealInfoWidget, { type ClientDeal } from '@/components/clients/DealInfoWidget';
 import WorkspacePanel from '@/components/clients/WorkspacePanel';
 import Logo from '@/components/Logo';
@@ -280,6 +281,11 @@ export default function Client360PageClient({
 
           {client.company && (
             <p className="mt-1 text-sm text-gray-500">{client.company}</p>
+          )}
+          {client.lead_source?.trim() && (
+            <div className="mt-2">
+              <LeadSourceBadges sources={[client.lead_source]} />
+            </div>
           )}
         </div>
       </header>
