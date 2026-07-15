@@ -1,27 +1,90 @@
-import { AssignmentRole, DealStatus } from '@prisma/client';
+import {
+  AssignmentRole,
+  DealStatus,
+  DealType,
+} from '@prisma/client';
 import { NextResponse } from 'next/server';
 import {
   getClientOr404,
   logClientSystemEvent,
-  requireSuperAdminOrClientRole,
+  requireDealCreateAccess,
+  requireDealViewAccess,
 } from '@/lib/authHelpers';
 import {
   createCommissionReturnablesForWonDeal,
 } from '@/lib/commissionReturnables';
 import {
+  dealResponseSelect,
   formatDealResponse,
   parseMoneyValue,
 } from '@/lib/dealCalculations';
+import {
+  buildDefaultParticipantsForDeal,
+  parseDealType,
+  resolveExplicitDealParticipants,
+  toParticipantCreateInput,
+  type NormalizedDealParticipant,
+} from '@/lib/dealParticipants';
 import { prisma } from '@/lib/prisma';
+
+async function resolveDealParticipants({
+  clientId,
+  dealType,
+  totalCommission,
+  status,
+  rawParticipants,
+}: {
+  clientId: string;
+  dealType: DealType;
+  totalCommission: number;
+  status: DealStatus;
+  rawParticipants: unknown;
+}): Promise<
+  { participants: NormalizedDealParticipant[] } | { error: string; details?: string[] }
+> {
+  const hasExplicitParticipants =
+    Array.isArray(rawParticipants) && rawParticipants.length > 0;
+
+  if (hasExplicitParticipants) {
+    return resolveExplicitDealParticipants({
+      rawParticipants,
+      totalCommission,
+      status,
+    });
+  }
+
+  const assignments = await prisma.clientAssignment.findMany({
+    where: { clientId },
+    select: { userId: true, role: true },
+  });
+
+  const relationshipAssignment = assignments.find(
+    (assignment) => assignment.role === AssignmentRole.RELATIONSHIP
+  );
+  const followUpAssignment = assignments.find(
+    (assignment) => assignment.role === AssignmentRole.ACCOUNT_SERVICE
+  );
+  const doctorAssignments = assignments.filter(
+    (assignment) => assignment.role === AssignmentRole.DOCTOR
+  );
+
+  const participants = buildDefaultParticipantsForDeal({
+    dealType,
+    totalCommission,
+    currentRelationshipAssignment: relationshipAssignment ?? null,
+    currentFollowUpAssignment: followUpAssignment ?? null,
+    selectedDoctors: doctorAssignments,
+  });
+
+  return { participants };
+}
 
 export async function GET(
   _request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id: clientId } = await params;
-  const auth = await requireSuperAdminOrClientRole(clientId, [
-    AssignmentRole.DOCTOR,
-  ]);
+  const auth = await requireDealViewAccess(clientId);
   if (auth.error) {
     return auth.error;
   }
@@ -34,6 +97,7 @@ export async function GET(
   const deals = await prisma.deal.findMany({
     where: { clientId },
     orderBy: { createdAt: 'asc' },
+    select: dealResponseSelect,
   });
 
   return NextResponse.json({
@@ -47,9 +111,7 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id: clientId } = await params;
-  const auth = await requireSuperAdminOrClientRole(clientId, [
-    AssignmentRole.DOCTOR,
-  ]);
+  const auth = await requireDealCreateAccess(clientId);
   if (auth.error) {
     return auth.error;
   }
@@ -87,15 +149,46 @@ export async function POST(
     return NextResponse.json({ error: 'Invalid deal status' }, { status: 400 });
   }
 
-  const deal = await prisma.deal.create({
-    data: {
-      clientId,
-      name,
-      dealValue: dealValueResult.value,
-      totalCommission: totalCommissionResult.value,
-      status,
-    },
+  const dealType = parseDealType(body.dealType ?? body.deal_type, DealType.CUSTOM);
+  if (!dealType) {
+    return NextResponse.json({ error: 'Invalid deal type' }, { status: 400 });
+  }
+
+  const participantsResult = await resolveDealParticipants({
+    clientId,
+    dealType,
+    totalCommission: totalCommissionResult.value,
+    status,
+    rawParticipants: body.participants,
   });
+  if ('error' in participantsResult) {
+    return NextResponse.json(
+      {
+        error: participantsResult.error,
+        ...(participantsResult.details
+          ? { details: participantsResult.details }
+          : {}),
+      },
+      { status: 400 }
+    );
+  }
+
+  const deal = await prisma.$transaction(async (tx) =>
+    tx.deal.create({
+      data: {
+        clientId,
+        name,
+        dealValue: dealValueResult.value,
+        totalCommission: totalCommissionResult.value,
+        dealType,
+        status,
+        participants: {
+          create: toParticipantCreateInput(participantsResult.participants),
+        },
+      },
+      select: dealResponseSelect,
+    })
+  );
 
   if (deal.status === DealStatus.WON) {
     await createCommissionReturnablesForWonDeal({

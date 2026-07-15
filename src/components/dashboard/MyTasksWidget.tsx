@@ -2,6 +2,9 @@
 
 import Link from 'next/link';
 import { memo, useCallback, useEffect, useMemo, useState } from 'react';
+import EmptyMuted from '@/components/ui/EmptyMuted';
+import { useDisplayDensity } from '@/components/ui/DisplayDensityProvider';
+import { getWidgetPaddingClass } from '@/components/ui/displayDensity';
 import type { OpenTaskRow } from '@/lib/dashboardTypes';
 import { authenticatedFetch } from '@/lib/authenticatedFetch';
 
@@ -12,7 +15,7 @@ type MyTasksWidgetProps = {
 
 function formatDueDate(dueDate: string | null) {
   if (!dueDate) {
-    return 'No due date';
+    return null;
   }
 
   return new Date(dueDate).toLocaleDateString(undefined, {
@@ -42,10 +45,11 @@ const TaskListItem = memo(function TaskListItem({
   onComplete: (taskId: string) => void;
 }) {
   const overdue = isOverdue(task.dueDate);
+  const dueLabel = formatDueDate(task.dueDate);
 
   return (
     <li
-      className={`flex items-start gap-3 rounded-lg border px-3 py-3 ${
+      className={`flex items-start gap-2.5 rounded-lg border px-2.5 py-2 ${
         overdue ? 'border-red-200 bg-red-50' : 'border-gray-100 bg-gray-50'
       }`}
     >
@@ -58,11 +62,17 @@ const TaskListItem = memo(function TaskListItem({
         aria-label={`Complete task: ${task.description}`}
       />
       <div className="min-w-0 flex-1">
-        <p className="text-sm font-medium text-gray-900">{task.description}</p>
-        <p className="mt-1 text-xs text-gray-600">
+        <p
+          className="line-clamp-2 text-sm font-medium text-gray-900"
+          title={task.description}
+        >
+          {task.description}
+        </p>
+        <p className="mt-1 truncate text-xs text-gray-600">
           <Link
             href={`/clients/${task.clientId}`}
             className="font-medium text-blue-600 hover:underline"
+            title={task.clientName}
           >
             {task.clientName}
           </Link>
@@ -72,7 +82,11 @@ const TaskListItem = memo(function TaskListItem({
             overdue ? 'font-semibold text-red-600' : 'text-gray-500'
           }`}
         >
-          Due {formatDueDate(task.dueDate)}
+          {dueLabel ? (
+            <>Due {dueLabel}</>
+          ) : (
+            <EmptyMuted label="No due date" />
+          )}
         </p>
       </div>
     </li>
@@ -80,6 +94,8 @@ const TaskListItem = memo(function TaskListItem({
 });
 
 function MyTasksWidget({ openTasks, error = null }: MyTasksWidgetProps) {
+  const { density } = useDisplayDensity();
+  const widgetPaddingClass = getWidgetPaddingClass(density);
   const [tasks, setTasks] = useState(openTasks);
   const [completingTaskId, setCompletingTaskId] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -130,15 +146,15 @@ function MyTasksWidget({ openTasks, error = null }: MyTasksWidgetProps) {
   const displayError = actionError ?? error;
 
   return (
-    <section className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
-      <h2 className="text-lg font-semibold text-gray-900">My Open Tasks</h2>
+    <section className={`rounded-xl border border-gray-200 bg-white shadow-sm ${widgetPaddingClass}`}>
+      <h2 className="text-sm font-semibold text-gray-900">My Open Tasks</h2>
 
-      {displayError && <p className="mt-3 text-sm text-red-600">{displayError}</p>}
+      {displayError && <p className="mt-2 text-sm text-red-600">{displayError}</p>}
 
       {sortedTasks.length === 0 ? (
-        <p className="mt-4 text-sm text-gray-500">No open tasks. You&apos;re all caught up!</p>
+        <p className="mt-2.5 text-sm text-gray-500">No open tasks.</p>
       ) : (
-        <ul className="mt-4 space-y-3">
+        <ul className="mt-2.5 space-y-2">
           {sortedTasks.map((task) => (
             <TaskListItem
               key={task.taskId}

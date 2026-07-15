@@ -41,6 +41,9 @@ export type DuplicateReviewClient = {
   assignedUsers: DuplicateReviewAssignedUser[];
   activityCount: number;
   dealCount: number;
+  priority?: string | null;
+  nextAction?: string | null;
+  nextFollowUpAt?: string | null;
 };
 
 export type DuplicateReviewGroup = {
@@ -179,6 +182,9 @@ function mapClientDetail(client: ClientDetailRow): DuplicateReviewClient {
     activityCount:
       client._count.interactions + client._count.activityLogs,
     dealCount: client._count.deals,
+    priority: client.priority,
+    nextAction: client.nextAction,
+    nextFollowUpAt: client.nextFollowUpAt?.toISOString() ?? null,
   };
 }
 

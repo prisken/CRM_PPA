@@ -1,11 +1,15 @@
 # Profit Pulse Ally CRM — Database & UI Reference
 
-**Last updated:** June 24, 2026 (unified lead ingestion, source records, Client 360 widget)  
+> **Single source of truth** for schema, APIs, permissions, UI structure, and shipped feature status.  
+> Prefer this document over chat notes, old handoffs, or divergent markdown. User-facing PDFs (`USER_MANUAL_*.pdf`) and one-off migration guides under `docs/` are **supplements**, not replacements.
+
+**Last updated:** July 15, 2026 (Important Dates + calendar widget, Client Strategy Builder, deal participants, Lead Command Center)  
 **Repository:** [CRM_PPA](https://github.com/prisken/CRM_PPA)  
 **Deployment branch:** `deploy`  
-**Last deployed commit:** `a81fff3` (unified lead ingestion, source records, Client 360 widget)  
+**Last deployed commit:** `47094c9`  
 **Production URL:** `https://crm-ppa-nine.vercel.app`  
-**Local dev server:** `http://localhost:3000` (run `npm run dev`; add `PERF_LOGGING_ENABLED=true` for route timing logs)
+**Local dev server:** `http://localhost:3000` (run `npm run dev` — runs `prisma generate` first; add `PERF_LOGGING_ENABLED=true` for route timing logs)  
+**User manuals (PDF):** `docs/USER_MANUAL_STANDARD_USER.pdf`, `docs/USER_MANUAL_SUPER_ADMIN.pdf` (regenerate: `npm run manuals:pdf`)
 
 This document describes the PostgreSQL database schema, API surface, and frontend UI structure for handoff to developers, designers, and stakeholders.
 
@@ -17,15 +21,18 @@ This document describes the PostgreSQL database schema, API surface, and fronten
 | Recent Activity feed (grouped, unread, mark-read) | ✅ Standard + super admin dashboards |
 | Branding (logo, favicon) | ✅ Login, signup, dashboards, Client 360 |
 | Client 360 workspace | ✅ Strategy, tasks, interactions, documents, multi-deal, team |
-| Client details expansion | ✅ Role in company, employee count, expectations, important dates |
+| Client details expansion | ✅ Role in company, employee count, expectations, important dates (date + optional time) |
+| **Important Dates CRUD + time** | ✅ `ClientImportantDate` table; UTC wall-clock date/time; Client 360 panel + lead preview; activity log on create/update/delete |
+| **Important Dates Calendar** | ✅ `ImportantDatesCalendarWidget` on `/dashboard` and `/admin` Schedule sections; CLIENT/LEAD filters; SUPER_ADMIN sees all |
+| **Client Strategy Builder** | ✅ Strategy plans/steps/connections/expenses on Client 360; `npm run test:client-strategy` |
 | Company hierarchy | ✅ Colleagues by company, add employee as lead |
 | Role-based pipeline advances | ✅ Standard users; super admin full control |
 | Standard user lead creation | ✅ Add Lead on dashboard with auto-assignment |
 | RELATIONSHIP client details edit | ✅ API + Edit button on Client 360 |
 | Mobile-responsive UI | ✅ Dashboards, Client 360, pipeline, modals, workspace tabs |
 | Auth UX | ✅ Stale-session sign-out; deactivated-account block on login + API |
-| Commission engine | ✅ Shared-role pools, `totalCommission`, secured commission |
-| Team occupancy limits | ✅ Max 2 Doctors, 1 Relationship, 1 Account Service per client |
+| Commission engine | ✅ Participant-backed splits (`DealParticipant`); legacy assignment-pool fallback; `totalCommission`, secured commission |
+| Team occupancy limits | ✅ Max 1 Relationship, 1 Follow-up per client; legacy max 2 Doctors (no new doctor client assignments) |
 | Multi-deal system | ✅ CRUD per client; committed/potential value aggregation |
 | Commission returnables | ✅ Doctor liabilities on WON deals; multi-role credit sum; statements + reconciliation |
 | Assignment-triggered returnable recalculation | ✅ Fire-and-forget via `POST /api/tasks/recalculate-returnables` on assignment add/remove |
@@ -52,6 +59,30 @@ This document describes the PostgreSQL database schema, API surface, and fronten
 | Account settings | ✅ `/dashboard/settings` — edit display name; link in dashboard headers |
 | Safari/iPad autofill fix | ✅ Global `-webkit-autofill` override in `globals.css` |
 | Vercel deploy | ✅ `prisma generate` + `migrate deploy` on build |
+| **Lead Command Center** | ✅ `/admin/leads` — compact inbox, attention scoring, collapsible filters, preview drawer, bulk actions |
+| **Lead duplicates panel** | ✅ Email/phone duplicate groups; `GET /api/admin/leads/duplicates`; `npm run find:duplicate-clients` |
+| **Manual client merge (pairwise)** | ✅ `mergeClients()` + `POST /api/admin/leads/merge` + `MergeClientsModal` (`pairwise`); writes `LeadMergeAudit`; archives duplicate |
+| **Manual selected-lead merge (LCC)** | ✅ Bulk **Merge selected** (2–10 rows) → `MergeClientsModal` (`manual-multi`) → `POST /api/admin/leads/merge-multiple` |
+| **Multi-record merge** | ✅ Up to 10 clients per operation (1 canonical + up to 9 duplicates); `mergeMultipleClients()`; also from Client 360 via `ClientMergePickerModal` |
+| **Custom final merge field values** | ✅ `fieldOverrides` on merge APIs; UI wizard supports pick-from-record, blank, or custom text per field |
+| **CRM compact interface cleanup** | ✅ `DisplayDensityProvider` (Comfortable/Compact); `CompactPill`, `StatusPill`, `LimitedInlineList`, `EmptyMuted`, density-aware `SectionCard`; reduced clutter on LCC, Client 360 widgets, dashboards |
+| **Client tags** | ✅ `Tag` + `ClientTag` models; bulk add via LCC; filter by tag; `GET/POST /api/admin/tags` |
+| **Follow-up fields** | ✅ `priority`, `nextAction`, `nextFollowUpAt` on Client; LCC preview drawer; attention scoring |
+| **Global client search** | ✅ `GET /api/search/clients?q=` — super admin: all clients; standard user: assigned only |
+| **Command palette** | ✅ `⌘K` / `Ctrl+K` — `CommandPalette.tsx` on dashboard/admin/clients/my-statements |
+| **Lead source badges** | ✅ `LeadSourceBadges` on LCC, Client 360 header/details, source records widget |
+| **Auth token sync on login** | ✅ `POST /api/auth/token` issues JWT after Supabase sign-in; stale Bearer falls back to session |
+| **Lead Command Center smoke test** | ✅ `npx tsx scripts/test-lead-command-center.ts` |
+| **Merge custom-fields test** | ✅ `npm run test:merge-custom-fields` (`scripts/test-merge-custom-fields.ts`) |
+| **User manuals** | ✅ `docs/USER_MANUAL_STANDARD_USER.md/.pdf`, `docs/USER_MANUAL_SUPER_ADMIN.md/.pdf` |
+| **Deal-level participant commission model** | ✅ `DealParticipant` rows per deal; explicit commission % and amounts |
+| **Deal types & commission templates** | ✅ `DealType` (`MARKETING`, `INVESTMENT`, `MEDICAL`, `CUSTOM`); templates in `lib/dealCommissionTemplates.ts`; safe apply in `DealEditModal` |
+| **Doctors assigned per deal** | ✅ Doctor participants on each deal; client-level `DOCTOR` assignment blocked for new operations |
+| **Client team limited to relationship/follow-up** | ✅ `AssignedTeamWidget` assigns Relationship + Follow-up only; legacy doctors shown collapsed |
+| **Participant-based secured commission & company earnings** | ✅ `calculateUserSecuredCommissionFromDealParticipants`, `calculateCompanyEarningsFromDealParticipants` (legacy fallback when no participants) |
+| **Participant-based returnables** | ✅ Explicit doctor returnable fields on `DealParticipant`; `generateCommissionReturnablesForDealParticipants()` |
+| **Deal participant backfill & tests** | ✅ `npm run audit:legacy-commission`, `backfill:deal-participants` / `:dry`, `verify:deal-participants`, `test:deal-participants`, `test:deal-participant-api` |
+| **Deal participant migration guide** | ✅ `docs/deal-participant-migration.md` |
 
 ---
 
@@ -98,7 +129,7 @@ lib/              # Server helpers (auth, dashboards, client360, activity feed, 
 src/app/          # Next.js routes (pages + API, incl. api/integrations/* webhooks)
 src/components/   # React UI components
 public/assets/    # Logo, favicon
-docs/             # Documentation (this file, google-forms-integration.md)
+docs/             # Documentation (this file, user manuals, google-forms-integration.md)
 ```
 
 **Performance architecture:**
@@ -166,8 +197,8 @@ Client round-trip on cache hit is still ~220 ms (auth + network); server DB work
 ### Auth flow
 
 1. **Sign up** — `POST /api/auth/register` creates a Supabase Auth user + `User` row in Postgres (`STANDARD_USER`, `status: ACTIVE` by default). Returns a JWT stored in `localStorage` as `token`.
-2. **Sign in** — Supabase `signInWithPassword` sets session cookies. After sign-in, the app queries `User.status` from Supabase; **`DEACTIVATED` users are signed out immediately** with an error message.
-3. **API access** — Session cookies (server) or `Authorization: Bearer <token>` (client fetch). All authenticated API helpers reject users with `status !== ACTIVE` (`403 Account deactivated`).
+2. **Sign in** — Supabase `signInWithPassword` sets session cookies. After sign-in, the app queries `User.status` from Supabase; **`DEACTIVATED` users are signed out immediately** with an error message. On success, the client calls `POST /api/auth/token` to refresh the JWT in `localStorage` (keeps Bearer in sync with the live session).
+3. **API access** — Session cookies (server) or `Authorization: Bearer <token>` (client fetch). If a Bearer token is present but invalid/expired, `getAuthenticatedUserFromRequest` **falls back to the Supabase session cookie** instead of rejecting immediately. `authenticatedFetch` clears `localStorage.token` on `401`. All authenticated API helpers reject users with `status !== ACTIVE` (`403 Account deactivated`).
 4. **Middleware** (`src/middleware.ts`) protects routes at the edge (session check only; **no role check** on `/admin` — role enforced client-side and via API 403s).
 
 ### Route protection (middleware)
@@ -198,18 +229,28 @@ Super Admins manage user lifecycle at `/admin/users` (deactivate or permanently 
 
 | Role | Enum value | Primary responsibilities |
 |------|------------|--------------------------|
-| Relationship | `RELATIONSHIP` | Client details, interactions, early pipeline stages, lead creation |
-| Doctor | `DOCTOR` | Strategy text, tasks, deals, interactions, strategy-session pipeline stage |
-| Account Service | `ACCOUNT_SERVICE` | Interactions, active-client pipeline stage |
+| Relationship | `RELATIONSHIP` | Client details, interactions, early pipeline stages, lead creation, deal create/view (transitional) |
+| Doctor (legacy) | `DOCTOR` | **No longer assigned at client level for new operations.** Legacy rows retained for audit. Doctors are assigned per deal via `DealParticipant`. |
+| Account Service | `ACCOUNT_SERVICE` | Follow-up officer; interactions, active-client pipeline stage, deal create/view (transitional) |
 
 Super Admins bypass assignment checks on most Client 360 APIs.
+
+### Deal access (transitional — `getDealAccessForClient` in `lib/authHelpers.ts`)
+
+| Capability | Super admin | Relationship assignee | Follow-up assignee | Legacy `DOCTOR` assignee | Deal-level `DOCTOR` participant |
+|------------|-------------|----------------------|--------------------|--------------------------|--------------------------------|
+| View deals | ✅ | ✅ | ✅ | ✅ | ✅ (deals they participate in) |
+| Create deals | ✅ | ✅ | ✅ | ✅ | ❌ (unless also relationship/follow-up) |
+| Manage all deals on client | ✅ | ❌ | ❌ | ✅ | ❌ |
+| Manage specific deal | ✅ | ❌ | ❌ | ✅ (all on client) | ✅ (deals where user is `DOCTOR` participant) |
 
 ### Per-role Client 360 permissions
 
 | Action | Super Admin | RELATIONSHIP | DOCTOR | ACCOUNT_SERVICE |
 |--------|-------------|--------------|--------|-----------------|
 | Edit client details (`PUT .../details`) | ✅ | ✅ | ❌ | ❌ |
-| Manage deals (`/deals` CRUD) | ✅ | ❌ | ✅ | ❌ |
+| Edit follow-up (`PATCH .../follow-up`) | ✅ | ✅ | ❌ | ❌ |
+| Manage deals (`/deals` CRUD) | ✅ | Create/view; manage per `getDealAccessForClient` | Create/view; manage per deal access | Create/view; manage all on client **or** per-deal if `DOCTOR` participant | ❌ (unless relationship/follow-up/legacy doctor) |
 | Edit strategy / create tasks | ✅ | ❌ | ✅ | ❌ |
 | Post interactions (notes, calls, etc.) | ✅ | ✅ (if assigned) | ✅ | ✅ |
 | Edit/delete own interactions | ✅ | ✅ (author) | ✅ (author) | ✅ (author) |
@@ -258,7 +299,7 @@ Standard users advance one stage at a time via **Move to Next Stage** + confirma
 | Mode | How it works | Used by |
 |------|--------------|---------|
 | Session cookie | Supabase session via `getAuthenticatedUser()` | Most Client 360 sub-routes (interactions, strategy, tasks, deals, assignments) |
-| Bearer or session | JWT in `Authorization` header **or** session via `getAuthenticatedUserFromRequest()` | Dashboard APIs, `PATCH /api/user/profile`, `PUT .../details`, employees endpoints, `POST /api/clients`, commission returnable APIs |
+| Bearer or session | JWT in `Authorization` header **or** session via `getAuthenticatedUserFromRequest()`. Invalid Bearer falls back to session cookie. | Dashboard APIs, `POST /api/auth/token`, `GET /api/search/clients`, Lead Command Center APIs, `PATCH /api/user/profile`, `PUT .../details`, `PATCH .../follow-up`, `POST .../quick-note`, employees endpoints, `POST /api/clients`, commission returnable APIs |
 
 **Note:** Client-side fetches that only send Bearer tokens will fail on session-only routes unless cookies are also sent (`credentials: 'same-origin'`).
 
@@ -267,18 +308,20 @@ Standard users advance one stage at a time via **Move to Next Stage** + confirma
 ## 3. Database Overview
 
 - **Provider:** PostgreSQL via Supabase connection pooler (`DATABASE_URL`) + direct URL for migrations (`DIRECT_URL`).
+- **Migrations:** 19 applied (`prisma/migrations/`).
 - **IDs:** CUID strings (`@default(cuid())`).
 - **Naming:** Prisma models use PascalCase; several tables map to snake_case via `@@map`.
 
 ### Core domain areas
 
 1. **Users & access** — `User`, `ClientAssignment`
-2. **Clients & pipeline** — `Client`, `Deal`
-3. **Lead ingestion** — `ClientSourceRecord`, `LeadMergeAudit` (audit table reserved for future merge UI)
-4. **Client 360 workspace** — `Task`, `ClientDocument`, `Strategy`, `Interaction`, `ClientActivityLog`
-5. **Activity & notifications** — `ActivityReadStatus`, `Notification`
-6. **Commission & liabilities** — `CommissionReturnable`
-7. **Legacy strategy docs** — `Strategy`, `Document` (strategy-linked; Client 360 also uses `Client.strategyText`)
+2. **Clients & pipeline** — `Client`, `Deal`, `DealParticipant`, `Tag`, `ClientTag`
+3. **Lead ingestion & merge** — `ClientSourceRecord`, `LeadMergeAudit` (written by manual merge)
+4. **Client 360 workspace** — `Task`, `ClientDocument`, `Strategy`, `Interaction`, `ClientActivityLog`, `ClientImportantDate`
+5. **Strategy Builder** — `ClientStrategyPlan`, `ClientStrategyStep`, `ClientStrategyConnection`, `ClientStrategyExpense`
+6. **Activity & notifications** — `ActivityReadStatus`, `Notification`
+7. **Commission & liabilities** — `CommissionReturnable`, `DealParticipant` (per-deal splits + doctor returnable config)
+8. **Legacy strategy docs** — `Strategy`, `Document` (strategy-linked; free-text `Client.strategyText` still on Strategy & Tasks tab)
 
 ---
 
@@ -292,7 +335,16 @@ Standard users advance one stage at a time via **Move to Next Stage** + confirma
 | `ClientStatus` | `NEW_LEAD`, `CONTACTED`, `NURTURING`, `STRATEGY_SESSION`, `ACTIVE_CLIENT`, `ARCHIVED` | `Client.status` (pipeline stages) |
 | `InteractionType` | `CALL`, `EMAIL`, `MEETING`, `NOTE` | `Interaction.type` |
 | `DealStatus` | `PROPOSED`, `WON`, `LOST`, `ON_HOLD` | `Deal.status` |
-| `StrategyStatus` | `DRAFT`, `READY_FOR_REVIEW`, `APPROVED`, `NEEDS_REVISION` | `Strategy.status` |
+| `DealType` | `MARKETING`, `INVESTMENT`, `MEDICAL`, `CUSTOM` | `Deal.dealType`; commission templates in `lib/dealCommissionTemplates.ts` |
+| `DealParticipantRole` | `RELATIONSHIP`, `FOLLOW_UP`, `DOCTOR`, `COMPANY`, `EXTERNAL_PARTNER` | `DealParticipant.role` |
+| `StrategyStatus` | `DRAFT`, `READY_FOR_REVIEW`, `APPROVED`, `NEEDS_REVISION` | Legacy `Strategy.status` |
+| `StrategyPlanStatus` | `DRAFT`, `ACTIVE`, `COMPLETED`, `ARCHIVED` | `ClientStrategyPlan.status` |
+| `StrategyStepType` | `EXISTING_DEAL`, `PLANNED_DEAL`, `MANUAL` | `ClientStrategyStep.stepType` |
+| `StrategyConnectionType` | `FUNDING_SOURCE`, `INTEREST_REDIRECT`, `INCOME_REDIRECT`, `CAPITAL_GROWTH`, `PROTECTION_SUPPORT`, `TAX_PLANNING`, `RISK_MANAGEMENT`, `MANUAL` | `ClientStrategyConnection.connectionType` |
+| `StrategyIncomeFrequency` | `MONTHLY`, `YEARLY`, `ONE_TIME`, `CUSTOM` | `ClientStrategyStep.expectedIncomeFrequency` |
+| `StrategyExpenseFrequency` | `MONTHLY`, `YEARLY`, `ONE_TIME`, `CUSTOM` | `ClientStrategyExpense.frequency` |
+| `StrategyExpenseCategory` | `HOUSING`, `EDUCATION`, `HEALTHCARE`, `INSURANCE`, `RETIREMENT`, `LIFESTYLE`, `BUSINESS`, `DEBT`, `FAMILY_SUPPORT`, `EMERGENCY`, `OTHER` | `ClientStrategyExpense.category` |
+| `StrategyExpensePriority` | `LOW`, `MEDIUM`, `HIGH`, `CRITICAL` | `ClientStrategyExpense.priority` |
 | `TaskStatus` | `PENDING`, `IN_PROGRESS`, `COMPLETED`, `CANCELLED` | `Task.status` |
 | `ActivityLogType` | `NOTE`, `CALL`, `EMAIL`, `MEETING`, `SYSTEM` | `ClientActivityLog.type` |
 | `LeadSourceType` | `GOOGLE_FORMS`, `PROFIT_PULSE_ALLY`, `MANUAL`, `OTHER` | `ClientSourceRecord.source` |
@@ -324,7 +376,7 @@ Standard users advance one stage at a time via **Move to Next Stage** + confirma
 | `status` | UserStatus | `ACTIVE` (default) or `DEACTIVATED` |
 | `createdAt`, `updatedAt` | TIMESTAMP | Audit |
 
-**Relations:** assignments, interactions, tasks (assignee), activity logs, read statuses, notifications (sent/received), strategies (author), **commission returnables**.
+**Relations:** assignments, interactions, tasks (assignee), activity logs, read statuses, notifications (sent/received), strategies (author), **commission returnables**, **deal participants** (`DealParticipant.userId`).
 
 ---
 
@@ -342,9 +394,16 @@ Doctor liability records generated when a deal transitions to `WON`.
 | `dealId` | TEXT FK → Deal | Source WON deal |
 | `createdAt`, `updatedAt` | TIMESTAMP | |
 
-**Generation trigger:** When a deal's status changes to `WON` (via `PUT .../deals/[dealId]`) or is created as `WON` (via `POST .../deals`), one record is created per `DOCTOR` assignment on the client. Idempotent — skips if records already exist for that deal.
+**Generation trigger:** When a deal's status changes to `WON` (via `PUT .../deals/[dealId]`) or is created as `WON` (via `POST .../deals`):
 
-**Amount formula:** See [Commission returnables](#commission-returnables) below. Uses `calculateDoctorCommissionReturnableAmount()` — sums all RELATIONSHIP and ACCOUNT_SERVICE credits for the doctor via `calculateIndividualRoleShare()`.
+- **Participant-backed deals:** `generateCommissionReturnablesForDealParticipants()` uses explicit `DealParticipant` returnable fields (one row per qualifying doctor).
+- **Legacy deals (no participants):** one record per client `DOCTOR` assignment using `calculateDoctorCommissionReturnableAmount()`.
+
+Participant-backed generation is idempotent and updates unpaid rows when deal/participant returnable config changes. Paid rows are preserved.
+
+**Amount formula (legacy deals only):** See [Commission returnables](#commission-returnables) below. Uses `calculateDoctorCommissionReturnableAmount()` — sums all RELATIONSHIP and ACCOUNT_SERVICE credits for the doctor via `calculateIndividualRoleShare()`.
+
+**Amount formula (participant-backed deals):** Explicit per doctor — fixed `returnableAmount` wins over `returnablePercent` of that doctor's commission.
 
 ---
 
@@ -364,12 +423,78 @@ Doctor liability records generated when a deal transitions to `WON`.
 | `role_in_company` | TEXT | Contact's role/title at their company |
 | `employee_count` | INTEGER | Reported company headcount |
 | `expectations` | TEXT | Client expectations for the engagement |
-| `important_dates` | JSONB | Array of `{ label, date }` objects; default `[]` |
+| `important_dates` | JSONB | **Legacy dual-write mirror** of `ClientImportantDate` rows as `{ label, date }` (time not stored in JSON). Prefer table rows. Default `[]` |
 | `status` | ClientStatus | Pipeline stage |
 | `pendingNotifications` | BOOLEAN | Flag for notification workflows |
+| `priority` | TEXT | Follow-up priority: `LOW`, `MEDIUM`, or `HIGH` (LCC + Client 360) |
+| `next_action` | TEXT | Free-text next step for follow-up |
+| `next_follow_up_at` | TIMESTAMP | Scheduled follow-up date; indexed (`@@index([nextFollowUpAt])`) |
 | `createdAt`, `lastModified` | TIMESTAMP | |
 
-**Relations:** assignments, interactions, deals, strategies, documents, tasks, activity logs, notifications, **source records**.
+**Relations:** assignments, interactions, deals, strategies, documents, tasks, activity logs, notifications, **source records**, **tags** (`ClientTag`), **important dates** (`ClientImportantDate`), **strategy plans** (`ClientStrategyPlan`).
+
+---
+
+### `client_important_dates` (`ClientImportantDate`)
+
+Canonical important dates for clients/leads (shared `Client` model). See [Important Dates (canonical)](#important-dates-canonical).
+
+| Column | Type | Notes |
+|--------|------|-------|
+| `id` | TEXT PK | |
+| `label` | TEXT | Title |
+| `scheduled_at` | TIMESTAMP | UTC wall-clock; date-only → midnight UTC that day |
+| `has_time` | BOOLEAN | `false` = all-day; `true` = display HH:mm from UTC |
+| `notes` | TEXT | Optional |
+| `client_id` | TEXT FK → Client | CASCADE delete |
+| `created_by_user_id` / `updated_by_user_id` | TEXT FK → User | Optional; SET NULL on user delete |
+| `created_at` / `updated_at` | TIMESTAMP | |
+
+**Indexes:** `scheduled_at`; `(client_id, scheduled_at)`.
+
+---
+
+### Client Strategy Builder
+
+Structured strategy plans on Client 360 (`ClientStrategyBuilderWidget`). Permissions: view = core read; manage/delete = SUPER_ADMIN, legacy client `DOCTOR`, or deal-level `DOCTOR` participant. Tests: `npm run test:client-strategy`.
+
+#### `ClientStrategyPlan`
+
+| Column | Type | Notes |
+|--------|------|-------|
+| `id` | TEXT PK | |
+| `clientId` | TEXT FK → Client | CASCADE |
+| `title` | TEXT | |
+| `description` / `clientGoal` / `expectedOutcome` | TEXT | Optional |
+| `status` | StrategyPlanStatus | Default `DRAFT` |
+| `ownerUserId` | TEXT FK → User | Optional |
+| `createdByUserId` | TEXT FK → User | Required |
+| `createdAt` / `updatedAt` | TIMESTAMP | |
+
+#### `ClientStrategyStep`
+
+| Column | Type | Notes |
+|--------|------|-------|
+| `id` | TEXT PK | |
+| `strategyPlanId` | TEXT FK | CASCADE |
+| `linkedDealId` | TEXT FK → Deal | Optional SET NULL |
+| `title` | TEXT | |
+| `stepType` | StrategyStepType | Default `MANUAL` |
+| `plannedAmount` | DECIMAL(12,2) | Optional |
+| `amountDescription` / `purpose` / `expectedAchievement` / `timelineLabel` | TEXT | Optional |
+| `expectedIncomeAmount` | DECIMAL(12,2) | Optional |
+| `expectedIncomeFrequency` | StrategyIncomeFrequency | Optional |
+| `sortOrder` | INT | Default 0 |
+
+#### `ClientStrategyConnection`
+
+Links two steps in a plan (`fromStepId` → `toStepId`) with `connectionType` and optional purpose/outcome/timing.
+
+#### `ClientStrategyExpense`
+
+Plan expenses with `category`, `frequency`, optional `coveredByStepId`, priority, amounts, timeline labels.
+
+**APIs:** under `/api/clients/[id]/strategy-plans` (list/create plan; nested `steps`, `connections`, `expenses`, reorder).
 
 ---
 
@@ -395,19 +520,49 @@ Immutable audit of each external lead ingest. One row per unique `(source, exter
 
 ### `lead_merge_audits` (`LeadMergeAudit`)
 
-Reserved for future manual merge UI. Not yet written by ingestion code.
+Audit trail for manual duplicate merges. Written by `mergeClients()` in `lib/clientMerge.ts` (not by webhook ingestion).
 
 | Column | Type | Notes |
 |--------|------|-------|
 | `id` | TEXT PK | |
 | `canonical_client_id` | TEXT | Surviving client |
-| `merged_client_id` | TEXT | Optional merged-away client |
-| `merged_by_user_id` | TEXT | Optional actor |
-| `merge_type` | TEXT | e.g. manual, auto |
-| `reason` | TEXT | Optional |
-| `field_changes` | JSONB | Optional diff |
-| `conflicts` | JSONB | Optional unresolved fields |
+| `merged_client_id` | TEXT | Merged-away client (archived to `ARCHIVED` status) |
+| `merged_by_user_id` | TEXT | Super admin who performed the merge |
+| `merge_type` | TEXT | `MANUAL_DUPLICATE_MERGE` for UI merges |
+| `reason` | TEXT | Optional operator note |
+| `field_changes` | JSONB | Per-field winner (`canonical` vs `duplicate`) and resolved values |
+| `conflicts` | JSONB | Assignment occupancy conflicts, duplicate `source+externalId` collisions |
 | `created_at` | TIMESTAMP | |
+
+---
+
+### `Tag` (table: `Tag`)
+
+Global tag definitions for lead/client organization (Lead Command Center).
+
+| Column | Type | Notes |
+|--------|------|-------|
+| `id` | TEXT PK | |
+| `name` | TEXT UNIQUE | Display name |
+| `color` | TEXT | Optional hex/color token for UI badges |
+| `createdAt`, `updatedAt` | TIMESTAMP | |
+
+**Relations:** `clients` via `ClientTag`.
+
+---
+
+### `ClientTag` (table: `ClientTag`)
+
+Join table linking clients to tags.
+
+| Column | Type | Notes |
+|--------|------|-------|
+| `id` | TEXT PK | |
+| `clientId` | TEXT FK → Client | CASCADE delete |
+| `tagId` | TEXT FK → Tag | CASCADE delete |
+| `createdAt` | TIMESTAMP | |
+
+**Unique:** `@@unique([clientId, tagId])` — a client cannot have the same tag twice.
 
 ---
 
@@ -420,9 +575,11 @@ Join table: which users work on which clients, and in what role.
 | `assignment_id` | TEXT PK | |
 | `client_id` | TEXT FK → Client | CASCADE delete |
 | `user_id` | TEXT FK → User | CASCADE delete |
-| `role` | AssignmentRole | RELATIONSHIP / DOCTOR / ACCOUNT_SERVICE |
+| `role` | AssignmentRole | `RELATIONSHIP`, `ACCOUNT_SERVICE` (follow-up), or legacy `DOCTOR` |
 
 A user may have multiple assignments across clients; a client may have multiple assigned users.
+
+**Current operations:** `POST /api/clients/[id]/assignments` accepts only `RELATIONSHIP` and `ACCOUNT_SERVICE`. New `DOCTOR` client assignments are rejected (`400`). Legacy `DOCTOR` rows may remain for audit and legacy commission/returnable fallback.
 
 ---
 
@@ -451,11 +608,41 @@ Financial deal records linked to a client.
 | `name` | TEXT | Deal name |
 | `dealValue` | DECIMAL(12,2) | |
 | `totalCommission` | DECIMAL(12,2) | Used for commission calculations |
+| `dealType` | DealType | Default `CUSTOM`. Drives commission templates (Marketing, Investment, Medical, Custom) |
 | `status` | DealStatus | |
 | `clientId` | TEXT FK → Client | |
 | `createdAt`, `updatedAt` | TIMESTAMP | |
 
-**Relations:** client, **commission returnables**.
+**Relations:** client, **commission returnables**, **participants** (`DealParticipant[]`, ordered by `createdAt`).
+
+---
+
+### `DealParticipant`
+
+Per-deal commission split rows (replaces client-level assignment inference for commission on participant-backed deals).
+
+| Column | Type | Notes |
+|--------|------|-------|
+| `id` | TEXT PK | |
+| `dealId` | TEXT FK → Deal | |
+| `userId` | TEXT FK → User (optional) | Internal participant |
+| `externalName` | TEXT (optional) | External participant label |
+| `role` | DealParticipantRole | `COMPANY`, `RELATIONSHIP`, `FOLLOW_UP`, `DOCTOR`, `EXTERNAL_PARTNER` |
+| `commissionPercent` | DECIMAL(5,2) | Share of deal commission pool |
+| `commissionAmount` | DECIMAL(12,2) (optional) | Fixed commission amount; otherwise derived from percent |
+| `isCommissionable` | BOOLEAN | Default `true` |
+| `returnablePercent` | DECIMAL(5,2) (optional) | Doctor returnable as % of this doctor's commission |
+| `returnableAmount` | DECIMAL(12,2) (optional) | Fixed doctor returnable; **overrides** `returnablePercent` when set |
+| `isReturnableRequired` | BOOLEAN | Default `false`. When `true` on a DOCTOR row, generates `CommissionReturnable` on WON |
+| `notes` | TEXT (optional) | |
+| `createdAt`, `updatedAt` | TIMESTAMP | |
+
+**Returnable rules (participant-backed deals):**
+
+- Only `DOCTOR` participants with `userId`, `isCommissionable = true`, and `isReturnableRequired = true` generate returnables
+- Amount = `returnableAmount` if set, else `doctorCommission × returnablePercent / 100`
+- Backfill does **not** infer returnables — configure per deal in Deal Edit modal
+- Deals **without** participants still use legacy client-assignment formula (`calculateDoctorCommissionReturnableAmount`)
 
 ---
 
@@ -553,6 +740,10 @@ erDiagram
     Client ||--o{ ClientActivityLog : "has"
     Client ||--o{ Strategy : "has"
     Client ||--o{ ClientSourceRecord : "has"
+    Client ||--o{ ClientTag : "tagged"
+    Client ||--o{ ClientImportantDate : "has"
+    Client ||--o{ ClientStrategyPlan : "has"
+    Tag ||--o{ ClientTag : "applied to"
     Client ||--o{ Notification : "linked"
     User ||--o{ Interaction : "logs"
     User ||--o{ Task : "assigned"
@@ -561,6 +752,11 @@ erDiagram
     User ||--o{ Notification : "sends/receives"
     User ||--o{ CommissionReturnable : "owes"
     Deal ||--o{ CommissionReturnable : "generates"
+    Deal ||--o{ DealParticipant : "has"
+    User ||--o{ DealParticipant : "participant on"
+    ClientStrategyPlan ||--o{ ClientStrategyStep : "has"
+    ClientStrategyPlan ||--o{ ClientStrategyConnection : "has"
+    ClientStrategyPlan ||--o{ ClientStrategyExpense : "has"
     Strategy ||--o{ Document : "has"
     User ||--o{ Strategy : "authors"
 ```
@@ -577,23 +773,82 @@ erDiagram
 | `20260615050000_client_360_fields` | Client contact/deal fields, `tasks`, `client_documents`, `client_activity_logs`, `strategyText` |
 | `20260615060000_add_user_password_hash` | `password_hash` on User |
 | `20260615070000_add_activity_read_status` | `activity_read_status` for dashboard unread tracking |
-| `20260615024217_add_client_360_fields` | `role_in_company`, `employee_count`, `expectations`, `important_dates` on Client |
+| `20260615024217_add_client_360_fields` | `role_in_company`, `employee_count`, `expectations`, `important_dates` JSONB on Client (legacy) |
 | `20260615120000_rename_gross_profit_to_total_commission` | Renamed `Deal.grossProfit` → `Deal.totalCommission` |
 | `20260616004617_add_commission_returnable_model` | `CommissionReturnable` table + relations on User and Deal |
 | `20260617003208_add_performance_indexes` | Composite indexes: `Deal(clientId, status)`, `Interaction(clientId, date)`, `client_activity_logs(client_id, created_at)`, `activity_read_status(user_id)` |
 | `20260617120000_add_user_status` | `UserStatus` enum + `status` column on `User` (default `ACTIVE`) |
 | `20260624084311_add_performance_indexes_phase_2` | Non-destructive indexes: `client_assignments(userId)`, `tasks(assigneeId, status, dueDate)`, `Deal(status, updatedAt)`, `CommissionReturnable(userId, status, period)` |
-| `20260624184022_add_lead_source_records` | `LeadSourceType` enum; `client_source_records` (payload JSONB, unique `source+externalId`); `lead_merge_audits` (future merge UI) |
+| `20260624184022_add_lead_source_records` | `LeadSourceType` enum; `client_source_records` (payload JSONB, unique `source+externalId`); `lead_merge_audits` |
+| `20260702034945_add_client_tags` | `Tag` + `ClientTag` tables; `@@unique([clientId, tagId])` |
+| `20260702035607_add_client_follow_up_fields` | `priority`, `next_action`, `next_follow_up_at` on `Client`; index on `next_follow_up_at` |
+| `20260702090904_add_deal_participants` | `DealType` enum; `Deal.dealType` (default `CUSTOM`); `DealParticipantRole` enum; `DealParticipant` table |
+| `20260702094324_add_deal_participant_returnables` | `isReturnableRequired`, `returnablePercent`, `returnableAmount` on `DealParticipant` |
+| `20260715181000_add_client_strategy_builder` | Client Strategy Builder tables (plans, steps, connections, expenses) |
+| `20260715184000_add_client_important_dates` | `client_important_dates` table + backfill from legacy JSON; dual-write retained |
 
-**Deploy note:** `package.json` runs `prisma generate` on `postinstall` and `prisma generate && prisma migrate deploy && next build` on production build so Vercel applies migrations and has an up-to-date Prisma client.
+**Deploy note:** `package.json` runs `prisma generate` on `postinstall` and `prisma generate && prisma migrate deploy && next build` on production build so Vercel applies migrations and has an up-to-date Prisma client. Local `npm run dev` also runs `prisma generate` before `next dev`.
 
 ---
 
 ## 8. Business Rules
 
-### Commission pools (`lib/constants.ts`)
+### Client-level team roles (`client_assignments`)
 
-Total commission on each deal is split across role pools and company overhead:
+| Role | Max per client | New assignments |
+|------|----------------|-----------------|
+| `RELATIONSHIP` | 1 | ✅ Via `AssignedTeamWidget` / `POST .../assignments` |
+| `ACCOUNT_SERVICE` (Follow-up) | 1 | ✅ |
+| `DOCTOR` (legacy) | 2 (historical limit) | ❌ Rejected by API; legacy rows kept for audit |
+
+Enforced in `AssignedTeamWidget` (UI) and `POST /api/clients/[id]/assignments` (API). Error message format: *"Error: A client can have a maximum of N {role label}."*
+
+Client-level relationship/follow-up users **seed** deal templates but do not own commission splits — those live on `DealParticipant` rows.
+
+### Deal-level participant roles (`DealParticipant`)
+
+Each deal has zero or more participant rows. Prefer **participant-backed** deals (`commissionModel: PARTICIPANT`).
+
+**Validation (`validateDealParticipantsForStatus` in `lib/dealParticipants.ts`):**
+
+| Rule | WON | PROPOSED / ON_HOLD |
+|------|-----|--------------------|
+| Participant `%` total 100% | Error if not | Warning (save allowed) |
+| Effective commission amounts sum `>` `totalCommission` | Error (`400`) | Error (`400`) |
+| Effective amounts sum `<` `totalCommission` | Warning (COMPANY presence noted) | Warning |
+| Doctor `isReturnableRequired` without `userId` / positive returnable % or amount | Error | Warning |
+| `returnablePercent` not in 0–100 | Error | Error |
+| `returnableAmount` `>` doctor's effective commission | Error | Error |
+| Returnable on non-commissionable doctor | Error | Error |
+
+API create/update with invalid participants returns `{ error: "Validation failed", details: string[] }` (`400`).
+
+`DealEditModal` shows percent total, effective commission, unallocated/overallocated amounts, and live validation warnings/errors before save.
+
+| Role | Identity | Notes |
+|------|----------|-------|
+| `RELATIONSHIP` | `userId` | Relationship officer share |
+| `FOLLOW_UP` | `userId` | Follow-up officer share |
+| `DOCTOR` | `userId` | One row per doctor; pool split evenly when applying template |
+| `COMPANY` | `externalName` (default *Profit Pulse Ally*) | PPA / company share — drives admin company earnings |
+| `EXTERNAL_PARTNER` | `externalName` | Marketing/vendor partner (e.g. 80% on Marketing deals) |
+
+**Deal types & templates** (`lib/dealCommissionTemplates.ts`):
+
+| `DealType` | Default split (%) |
+|------------|-------------------|
+| `MARKETING` | PPA 15 · Relationship 5 · External partner 80 |
+| `INVESTMENT` | PPA 20 · Relationship 10 · Follow-up 10 · Doctors 60 (even split) |
+| `MEDICAL` | PPA 20 · Relationship 10 · Follow-up 10 · Doctor 60 |
+| `CUSTOM` | Same as Investment/Medical until edited |
+
+`DealEditModal` applies templates on explicit user action (does not silently overwrite when `dealType` changes). Confirmation required when replacing existing participant rows.
+
+Helpers: `buildDefaultParticipantsForDeal()` (`lib/dealParticipants.ts`), `splitDoctorPoolEvenly` in UI.
+
+### Commission pools — legacy reference (`lib/constants.ts`)
+
+Historical client-assignment pool rates (still used for **legacy fallback** when deals have no participants):
 
 | Assignment role | Pool rate (`COMMISSION_RATE_POOLS`) |
 |-----------------|-------------------------------------|
@@ -601,13 +856,41 @@ Total commission on each deal is split across role pools and company overhead:
 | Relationship (`RELATIONSHIP`) | 10% |
 | Account Service (`ACCOUNT_SERVICE`) | 10% |
 
-Company overhead: 20% (`COMPANY_OVERHEAD_RATE`).
+Company overhead fallback: 20% (`COMPANY_OVERHEAD_RATE`) when no `COMPANY` participant row exists.
 
-Pools + overhead = 100%.
+### Commission calculation — participant-backed (preferred)
 
-### Shared-role commission calculation (`lib/commissionCalculations.ts`)
+**Per-participant amount** (`calculateDealParticipantAmount` in `lib/dealParticipantCalculations.ts`):
 
-When multiple users share a role on a client, the pool is divided evenly:
+```
+commissionAmount = deal.totalCommission × commissionPercent / 100
+(or fixed commissionAmount when set on the row)
+```
+
+**User secured commission** (dashboard `mySecuredCommission`):
+
+```
+Σ participant commissionAmount on WON deals
+  where participant.userId = current user
+  and participant.isCommissionable = true
+```
+
+Implementation: `calculateUserSecuredCommissionFromDealParticipants()` with legacy fallback via `calculateMySecuredCommissionWithLegacyFallback()` for deals without participants.
+
+**Company earnings** (admin KPI `companyOverheadEarnings`):
+
+```
+Σ COMPANY participant commissionAmount on WON deals
+(legacy: deal.totalCommission × COMPANY_OVERHEAD_RATE when no participant rows)
+```
+
+Implementation: `calculateCompanyEarningsFromDealParticipants()`.
+
+**Leaderboards:** `calculateLeaderboardsFromDealParticipants()` / `calculateAdminLeaderboardsWithLegacyFallback()`.
+
+### Shared-role commission calculation — legacy (`lib/commissionCalculations.ts`)
+
+When deals have **no** `DealParticipant` rows, secured commission still uses client assignments:
 
 ```
 individualShare = COMMISSION_RATE_POOLS[role] / roleOccupancy
@@ -621,28 +904,30 @@ For each ClientAssignment the user holds:
     earnings += deal.totalCommission × individualShare
 ```
 
-**Client 360 personal share** (displayed on `DealInfoWidget`):
+**Client 360 secured commission preview** (displayed on `DealInfoWidget`):
 
-```
-For each role the user holds on the client:
-  share += COMMISSION_RATE_POOLS[role] / roleOccupancy
-```
+For participant-backed deals, sums the current user's participant `commissionAmount` rows on each deal. Legacy deals without participants fall back to client-assignment pool share (formula above).
 
-Example: sole Doctor on a client → 60% share. Two Doctors → 30% each.
-
-### Team occupancy limits (`ROLE_OCCUPANCY_LIMITS`)
+### Team occupancy limits (`ROLE_OCCUPANCY_LIMITS`) — client assignments only
 
 | Role | Max per client |
 |------|----------------|
-| `DOCTOR` | 2 |
+| `DOCTOR` | 2 (legacy; no new assignments) |
 | `RELATIONSHIP` | 1 |
 | `ACCOUNT_SERVICE` | 1 |
 
-Enforced in `AssignedTeamWidget` (UI) and `POST /api/clients/[id]/assignments` (API). Error message format: *"Error: A client can have a maximum of N {role label}."*
-
 ### Commission returnables
 
-When a deal becomes `WON`, each assigned Doctor receives a liability:
+When a deal becomes `WON`, each doctor with an explicit returnable obligation receives a liability.
+
+**Participant-backed deals (preferred):**
+
+- Configure per doctor in **Deal Edit** (`DealEditModal`): checkbox **Returnable required**, then **Returnable % of commission** and/or **Fixed returnable amount** (fixed wins if both set).
+- Generation: `generateCommissionReturnablesForDealParticipants()` in `lib/commissionReturnables.ts` — one `CommissionReturnable` per qualifying `DOCTOR` `DealParticipant` with `userId`.
+- Skips doctors where `isReturnableRequired` is false.
+- Backfill does **not** infer returnables; configure per deal after `npm run backfill:deal-participants`.
+
+**Legacy deals (no `DealParticipant` rows):**
 
 ```
 baseLiability = (deal.totalCommission / doctorCount) × (1 - COMMISSION_RATE_POOLS.DOCTOR)
@@ -665,7 +950,7 @@ returnableAmount = max(0, baseLiability - userCredit)
 | Relationship + Account Service | $20 (10% + 10%) | $20 (40% base − 20%) |
 | Neither | $0 | $40 (40% base) |
 
-**Recalculate (bulk):** Run `npx tsx scripts/recalculate-commission-returnables.ts` to correct all historical amounts via `backfillCommissionReturnablesForWonDeals()`.
+**Recalculate (bulk):** Run `npm run test:deal-returnables` for unit tests; `npx tsx scripts/recalculate-commission-returnables.ts` recalculates all WON deals (participant explicit fields or legacy fallback per deal).
 
 **Recalculate (per user/client):** `recalculateReturnablesForUserOnClient(userId, clientId)` updates existing `CommissionReturnable` rows for all WON deals on that client. Triggered in the background when assignments change:
 
@@ -686,11 +971,19 @@ Client 360 displays `committedValue` and `potentialValue` on `DealInfoWidget`.
 
 ### Company overhead earnings (admin KPI)
 
+**Participant-backed:**
+
 ```
-companyOverheadEarnings = Σ (deal.totalCommission × COMPANY_OVERHEAD_RATE) for all WON deals
+companyOverheadEarnings = Σ COMPANY participant commission on WON deals
 ```
 
-Returned by `GET /api/admin/dashboard-kpis` and displayed in `CompanyEarningsWidget`.
+**Legacy fallback** (deals with no participants):
+
+```
+companyOverheadEarnings += deal.totalCommission × COMPANY_OVERHEAD_RATE
+```
+
+Returned by `GET /api/admin/dashboard-kpis` and displayed in `CompanyEarningsWidget`. See `calculateCompanyEarningsFromDealParticipants()`.
 
 ### Activity feed
 
@@ -717,18 +1010,89 @@ Clients sharing the same `company` name are treated as colleagues. The **Company
 
 The employees endpoint copies the employer's `company`, sets `status` to `NEW_LEAD`, and auto-assigns the creator as `RELATIONSHIP`.
 
-### Important dates format
+### Important Dates (canonical)
 
-Stored as JSONB array on `Client.important_dates`:
+**Roles:** This CRM has only `SUPER_ADMIN` and `STANDARD_USER` (`UserRole`). There is **no** separate `ADMIN` role — treat “admin” in product language as `SUPER_ADMIN`.
+
+**Canonical store:** `client_important_dates` (`ClientImportantDate`), linked by `client_id`.  
+Leads and clients share the `Client` model (there is no separate Lead table). Lead-facing APIs use the same rows and expose the owner id as `leadId`.
+
+| Column | Meaning |
+|--------|---------|
+| `scheduled_at` | UTC wall-clock timestamp. Date-only rows use `00:00:00.000Z` on that calendar day. |
+| `has_time` | `false` = all-day (ignore clock for display); `true` = show HH:mm from UTC clock fields |
+| `label` | Title |
+| `notes` | Optional details |
+| `client_id` | Owner Client id (also used as `leadId` in lead APIs) |
+| `created_by_user_id` / `updated_by_user_id` | Optional audit users |
+| `created_at` / `updated_at` | Timestamps |
+
+**Timezone rule (do not change lightly):** User-entered `YYYY-MM-DD` + optional `HH:mm` are stored as **UTC wall-clock components** (`Date.UTC`), not converted from the browser’s local zone. Display helpers format with `timeZone: 'UTC'` so date-only midnight never shifts to the previous local day. Calendar month cells map by the stored `date` string (`YYYY-MM-DD`).
+
+API / Client 360 DTO shape:
 
 ```json
 [
-  { "label": "Contract renewal", "date": "2026-12-01" },
-  { "label": "Onboarding", "date": "2026-06-17" }
+  {
+    "id": "…",
+    "label": "Contract renewal",
+    "date": "2026-12-01",
+    "time": null,
+    "notes": null,
+    "scheduledAt": "2026-12-01T00:00:00.000Z",
+    "hasTime": false
+  },
+  {
+    "id": "…",
+    "label": "Kickoff call",
+    "date": "2026-06-17",
+    "time": "14:30",
+    "notes": "Bring onboarding checklist",
+    "scheduledAt": "2026-06-17T14:30:00.000Z",
+    "hasTime": true
+  }
 ]
 ```
 
-Edited via `PUT /api/clients/[id]/details` by super admins or `RELATIONSHIP` assignees; displayed on `ClientDetailsWidget`.
+**Legacy JSON:** `Client.important_dates` JSONB is retained and **dual-written** on edit for rollback. Readers **prefer table rows** when any exist; fall back to JSON only when a client has **zero** table rows. Migration `20260715184000_add_client_important_dates` backfilled JSON into the table (invalid dates skipped).
+
+**Limitation:** The calendar widget reads **table rows only**. Owners with legacy JSON and no table rows appear in list APIs via fallback but not on the calendar until backfilled / edited (which dual-writes).
+
+**CRUD APIs** (same rows for client and lead; lead routes are aliases):
+
+| Method | Path | Auth |
+|--------|------|------|
+| GET | `/api/clients/[id]/important-dates` | Core read (SUPER_ADMIN, any assignment, or deal participant) |
+| POST | `/api/clients/[id]/important-dates` | SUPER_ADMIN or `RELATIONSHIP` |
+| PUT/PATCH | `/api/clients/[id]/important-dates/[dateId]` | SUPER_ADMIN or `RELATIONSHIP` |
+| DELETE | `/api/clients/[id]/important-dates/[dateId]` | SUPER_ADMIN or `RELATIONSHIP` |
+| GET/POST/PUT/PATCH/DELETE | `/api/leads/[id]/important-dates…` | Same rules; responses use `leadId` |
+
+Also editable as a full replace via `PUT /api/clients/[id]/details` (`importantDates` array). UI: `ImportantDatesPanel` on `ClientDetailsWidget` (Lead Details when status ≠ `ACTIVE_CLIENT`) and `LeadPreviewDrawer`.
+
+**Activity log:** Create / update / delete write `ClientActivityLog` `SYSTEM` entries via `lib/importantDateActivity.ts` → `logClientSystemEvent` (includes `userId`, owner id, `importantDateId`, label, schedule, action). Details replace logs deleted previous rows + created new rows.
+
+**Permissions (`lib/importantDatePermissions.ts`):**
+
+| Helper | Behavior |
+|--------|----------|
+| `canViewAllImportantDates(user)` | `true` for `SUPER_ADMIN` only |
+| `getAccessibleOwnerIdsForImportantDates(user)` | `null` = all; else Client ids from any `ClientAssignment` **or** `DealParticipant` |
+| `canViewImportantDate` | Same as `canReadClientCore` |
+| `canManageImportantDate` | SUPER_ADMIN or `RELATIONSHIP` |
+
+**Calendar widget (`ImportantDatesCalendarWidget`):**
+
+- Mounted on **Schedule** sections of `/dashboard` (`StandardUserDashboardPage`) and `/admin` (`SuperAdminDashboardPage`)
+- Data: `GET /api/dashboard/widgets/important-dates-calendar` (`lib/importantDatesCalendar.ts`)
+- Query: required `startDate`/`endDate` (YYYY-MM-DD); optional `recordType=CLIENT|LEAD|ALL`, `search`, `assignedUserId` (**SUPER_ADMIN only**)
+- Visibility: SUPER_ADMIN = all in range; others = assigned / deal-participant owners only (enforced server-side)
+- Event chips: label + time; detail modal: label, date, time (or “No time set”), record name, CLIENT/LEAD type, notes, edit/delete when `canManage`
+- Add from calendar: `AddImportantDateFromCalendarModal` (SUPER_ADMIN search; RELATIONSHIP select from assignments)
+- Indexes: `scheduled_at`, `(client_id, scheduled_at)` — sufficient for month-range queries
+- Caps: max ~366-day range; max 1000 events per response
+
+**Tests:** `npm run test:important-dates`, `npm run test:important-dates-calendar` (both included in `npm run test:all`).
 
 ### External lead ingestion (`lib/leadIngestion.ts`)
 
@@ -759,6 +1123,52 @@ Google Forms returns `201` on create, `200` on update. Optional `GOOGLE_FORMS_DE
 
 **Normalization** (`lib/leadNormalization.ts`): `normalizeEmail`, `normalizePhone`, `normalizeName`, `normalizeCompany`, `compactString`.
 
+### Lead Command Center (`lib/leadCommandCenter.ts`)
+
+Super-admin inbox at `/admin/leads`. Entry point: `fetchLeadCommandCenterRows(filters)`.
+
+**Row payload (`LeadCommandCenterRow`):** client core fields, assignments, latest source record, tags, duplicate flags (email/phone), follow-up fields (`priority`, `nextAction`, `nextFollowUpAt`), `attentionScore`, `attentionReasons`.
+
+**Attention scoring** (higher = more urgent): overdue follow-up (+30), due today (+20), no next action on active lead (+15), unassigned (+25), missing email/phone (+10 each), duplicate email/phone (+20/+30), high priority (+30), recent ingest with no contact (+15–30), no relationship assignee (+10), etc. Rows sorted by `attentionScore` desc, then `lastModified` desc.
+
+**Filters** (query params on `GET /api/admin/leads`): `search`, `status`, `source`, `assignedUserId`, `missingEmail`, `missingPhone`, `unassigned`, `duplicateEmail`, `duplicatePhone`, `needsAttention`, `overdueFollowUp`, `dueToday`, `noNextAction`, `createdFrom`/`createdTo`, `latestSourceFrom`/`latestSourceTo`, `tagIds`, `tagNames`, `limit` (default 200, max 500), `offset`.
+
+**Global search** (`searchClients()`): used by `GET /api/search/clients?q=` — name/company/email/phone `ILIKE`; super admin searches all clients; standard users scoped to assignments; max 10 results with attention score.
+
+### Duplicate detection (`lib/leadDuplicates.ts`)
+
+`findDuplicateClientGroups()` groups clients by normalized email or phone (excluding empty values). Used by `GET /api/admin/leads/duplicates` and `npm run find:duplicate-clients`. Duplicate flags on inbox rows use the same normalization.
+
+### Manual client merge (`lib/clientMerge.ts`)
+
+Two functions:
+
+| Function | Use case | Max clients |
+|----------|----------|-------------|
+| `mergeClients()` | Pairwise merge (Duplicates tab, legacy API) | 2 (canonical + 1 duplicate) |
+| `mergeMultipleClients()` | LCC bulk merge, Client 360 multi-picker | 10 total (1 canonical + up to 9 duplicates) |
+
+**Field resolution:** Each merge accepts optional `fieldChoices` (pick canonical vs duplicate per scalar field) and/or `fieldOverrides` (explicit final values — including custom-entered text or blank). If both are present for a field, `fieldOverrides` wins. **`name` is required** on the surviving client; API rejects blank `fieldOverrides.name`.
+
+**Multi-merge transaction** (`mergeMultipleClients`): runs pairwise merges for each duplicate into the canonical **without** `fieldOverrides`, then applies `fieldOverrides` once at the end so later duplicates cannot overwrite custom final values.
+
+Each archived duplicate gets its own `LeadMergeAudit` row. When `fieldOverrides` are used in a multi-merge, those final field changes are also merged into the **last** audit row's `fieldChanges` JSON (see [Known limitations](#known-limitations-future-work)).
+
+Per merge (pairwise step or full `mergeClients` call), in a **single Prisma transaction**:
+
+1. Resolves scalar fields per `fieldChoices` / `fieldOverrides` (default `fieldChoices`: keep canonical when both differ)
+2. Moves related records (interactions, deals, tasks, documents, activity logs, source records, tags, assignments) from duplicate → canonical
+3. Handles assignment occupancy limits (`ROLE_OCCUPANCY_LIMITS`) — skips conflicting roles, records in audit `conflicts`
+4. Merges `important_dates` JSON arrays
+5. Archives each non-canonical client (`status: ARCHIVED`)
+6. Writes `LeadMergeAudit` (+ SYSTEM activity log on canonical) per merged-away record
+7. Recalculates commission returnables for affected doctor assignments
+
+**APIs:**
+
+- `POST /api/admin/leads/merge` — body: `canonicalClientId`, `duplicateClientId`, optional `fieldChoices`, `fieldOverrides`, `reason`
+- `POST /api/admin/leads/merge-multiple` — body: `canonicalClientId`, `duplicateClientIds` (1–9 ids), optional `fieldChoicesByDuplicateId`, `fieldOverrides`, `reason`. Returns `{ ok: true, result }` with `mergedClientIds`, `auditIds`, `conflicts`, `fieldChanges`
+
 ---
 
 ## 9. API Reference
@@ -768,6 +1178,7 @@ Google Forms returns `201` on create, `200` on update. Optional `GOOGLE_FORMS_DE
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
 | POST | `/api/auth/register` | Public | Create user (name, email, password) |
+| POST | `/api/auth/token` | Session or Bearer | Issue fresh JWT for `localStorage` after Supabase sign-in. Returns `{ token }` |
 | PATCH | `/api/user/profile` | Bearer or session | Update authenticated user's `name`. Body: `{ name }`. Returns `id`, `name`, `email`, `role`, `status`, timestamps |
 | * | `/api/auth/[...nextauth]` | — | Legacy/auxiliary; **not used** by live app (Supabase is primary auth) |
 
@@ -780,9 +1191,17 @@ Google Forms returns `201` on create, `200` on update. Optional `GOOGLE_FORMS_DE
 | GET | `/api/dashboard/widgets/open-tasks` | Bearer or session | Open tasks for current user on assigned clients |
 | GET | `/api/dashboard/widgets/activity-feed` | Bearer or session | Grouped recent activity (~15 items) on assigned clients |
 | GET | `/api/dashboard/widgets/performance-metrics` | Bearer or session | `hasAnyAssignment`, `performanceMetrics` (incl. `mySecuredCommission` with role-pool splits) |
+| GET | `/api/dashboard/widgets/deal-participation` | Bearer or session | Deals where current user is a participant |
+| GET | `/api/dashboard/widgets/important-dates-calendar` | Bearer or session | Important Dates month/range events (see Important Dates section) |
 | GET | `/api/dashboard/superadmin` | Super admin (Bearer or session) | System-wide grouped recent activity (last ~100 items) |
-| GET | `/api/me/assignments` | Any authenticated user (Bearer or session) | User's client assignments; returns `roles`, `hasAnyAssignment`, `hasDoctorRole` |
+| GET | `/api/me/assignments` | Any authenticated user (Bearer or session) | User's client assignments. Returns `roles`, `hasAnyAssignment`, `hasDoctorRole`, `hasRelationshipRole`, and per-assignment `clientStatus` (for calendar create picker) |
 | POST | `/api/activity/mark-read` | Bearer or session | Body: `{ activityLogIds: string[] }` — upsert read status |
+
+### Global search
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| GET | `/api/search/clients` | Any authenticated user (Bearer or session) | Client search for command palette. Query: `?q=` (required). Super admin: all clients; standard user: assigned only. Max 10 results with `attentionScore` |
 
 ### Commission returnables
 
@@ -803,14 +1222,28 @@ Google Forms returns `201` on create, `200` on update. Optional `GOOGLE_FORMS_DE
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
 | POST | `/api/clients` | Bearer or session | Create lead/client. Standard users auto-assigned `RELATIONSHIP`. Body: `name` (required), `company`, `email`, `phone`, `lead_source`, `role_in_company`, `employee_count`, `expectations`, `status`, `contactInfo` (legacy). Returns created client including new detail fields |
-| GET | `/api/clients/[id]` | Session | **Core** Client 360 payload — client details, team, documents, strategy text. **No** deals, tasks, or activity log |
+| GET | `/api/clients/[id]` | Bearer or session — super admin, any client assignment, or any deal participant on the client | **Core** Client 360 payload — client details, team, documents, strategy text. **No** deals, tasks, or activity log |
 | GET | `/api/clients/[id]/workspace` | Super admin or any client assignment (session) | Lazy tab data. Query: `?tab=strategy-tasks` or `?tab=activity-notes` (alias: `activity`) |
 | PATCH | `/api/clients/[id]` | Session | Super admin: any field; standard user: `status` only (role-based). Returns core payload. Stage changes log system activity |
-| PUT | `/api/clients/[id]/details` | Super admin or `RELATIONSHIP` assignee (Bearer or session) | Name, company, email, phone, lead source, `roleInCompany`, `employeeCount`, `expectations`, `importantDates` |
-| GET | `/api/clients/[id]/deals` | Super admin or `DOCTOR` assignment (session) | List all deals for client |
-| POST | `/api/clients/[id]/deals` | Super admin or `DOCTOR` assignment (session) | Create deal. Body: `name`, `dealValue`, `totalCommission`, `status`. Creates returnables if status is `WON` |
-| PUT | `/api/clients/[id]/deals/[dealId]` | Super admin or `DOCTOR` assignment (session) | Update deal. Triggers returnable generation on transition to `WON` |
-| DELETE | `/api/clients/[id]/deals/[dealId]` | Super admin or `DOCTOR` assignment (session) | Delete deal |
+| PUT | `/api/clients/[id]/details` | Super admin or `RELATIONSHIP` assignee (Bearer or session) | Name, company, email, phone, lead source, `roleInCompany`, `employeeCount`, `expectations`, `importantDates` (full replace; date + optional time) |
+| GET | `/api/clients/[id]/important-dates` | Core read — super admin, any assignment, or deal participant (Bearer or session) | List important dates for client/lead. `{ client_id, importantDates }` |
+| POST | `/api/clients/[id]/important-dates` | Super admin or `RELATIONSHIP` (Bearer or session) | Create one date. Body: `label`/`title`, `date`, optional `time`, optional `notes`/`details`, optional matching `clientId`/`leadId` |
+| PUT/PATCH | `/api/clients/[id]/important-dates/[dateId]` | Super admin or `RELATIONSHIP` (Bearer or session) | Update label/date/time/notes. `time: null` clears to all-day |
+| DELETE | `/api/clients/[id]/important-dates/[dateId]` | Super admin or `RELATIONSHIP` (Bearer or session) | Delete one important date |
+| GET | `/api/dashboard/widgets/important-dates-calendar` | Bearer or session | Calendar events for clients + leads. Query: `startDate`, `endDate` (YYYY-MM-DD required), optional `recordType=CLIENT\|LEAD\|ALL`, optional `assignedUserId` (SUPER_ADMIN only), optional `search`. Visibility: SUPER_ADMIN = all; others = assigned / deal-participant owners only. Response: `{ startDate, endDate, recordType, events[] }` with `canManage` |
+| GET | `/api/leads/[id]/important-dates` | Same core read as client | Lead alias — same rows; response `{ leadId, recordType, importantDates }` |
+| POST | `/api/leads/[id]/important-dates` | Super admin or `RELATIONSHIP` | Create lead important date (`leadId` in body optional, must match route) |
+| PUT/PATCH | `/api/leads/[id]/important-dates/[dateId]` | Super admin or `RELATIONSHIP` | Update lead important date |
+| DELETE | `/api/leads/[id]/important-dates/[dateId]` | Super admin or `RELATIONSHIP` | Delete lead important date |
+| GET | `/api/clients/[id]/strategy-plans` | Core read (Bearer or session) | List strategy plans for client |
+| POST | `/api/clients/[id]/strategy-plans` | SUPER_ADMIN, legacy client `DOCTOR`, or deal `DOCTOR` participant | Create plan |
+| GET/PUT/PATCH/DELETE | `/api/clients/[id]/strategy-plans/[planId]` | View = core read; mutate = manage (above) | Plan detail / update / delete |
+| POST/PUT/PATCH/DELETE | `.../steps`, `.../connections`, `.../expenses` (+ reorder) | Manage | Nested Strategy Builder resources — see `lib/clientStrategyPermissions.ts` |
+| GET | `/api/clients/[id]/deals` | Deal view access (session) — super admin, relationship/follow-up assignee, legacy doctor, or deal-level doctor participant | List deals. Response: `{ client_id, deals: DealResponse[] }` each with `participants` array |
+| POST | `/api/clients/[id]/deals` | Deal create access (session) | Create deal. Body: `name`, `dealValue`, `totalCommission`, `status`, optional `dealType`, optional `participants[]`. Without `participants`, builds defaults from client assignments + `dealType`. Creates returnables if `WON` |
+| PUT | `/api/clients/[id]/deals/[dealId]` | Deal manage access (session) | Update deal. Body may include `dealType`, `participants[]` (replaces all rows). Participant-backed WON deals require 100% split + amount/returnable validation (`Validation failed` + `details`). Triggers returnable generation on transition to `WON` |
+| DELETE | `/api/clients/[id]/deals/[dealId]` | Deal manage access (session) | Delete deal |
+| GET | `/api/clients/[id]/deals/participant-users` | Deal picker access (session) | Active users for participant user picker (`{ users: [{ user_id, userName, email }] }`). Not super-admin-only |
 | PUT | `/api/clients/[id]/strategy` | Super admin or `DOCTOR` assignment (session) | `strategyText` |
 | POST | `/api/clients/[id]/tasks` | Super admin or `DOCTOR` assignment (session) | Create task |
 | PUT | `/api/clients/[id]/tasks/[taskId]` | Super admin or `DOCTOR` assignment (session) | Update task |
@@ -818,15 +1251,18 @@ Google Forms returns `201` on create, `200` on update. Optional `GOOGLE_FORMS_DE
 | POST | `/api/clients/[id]/interactions` | Super admin or any assignment (session) | Add interaction (note, call, email, meeting). Body: `content`, `type` |
 | PUT | `/api/clients/[id]/interactions/[interactionId]` | Author or super admin (session) | Edit interaction |
 | DELETE | `/api/clients/[id]/interactions/[interactionId]` | Author or super admin (session) | Delete interaction |
-| GET | `/api/clients/[id]/employees` | Bearer or session | Company hierarchy: `employeeCount`, colleagues with same `company` |
+| GET | `/api/clients/[id]/employees` | Bearer or session — super admin or any client assignment (not deal-only participants) | Company hierarchy: `employeeCount`, colleagues with same `company` |
 | GET | `/api/clients/[id]/source-records` | Super admin or any client assignment (session) | Lead source history — newest `receivedAt` first; includes raw `payload` JSON |
-| POST | `/api/clients/[id]/employees` | Bearer or session | Create employee as new lead. Body: `fullName`, `roleInCompany`. Auto-assigns creator as `RELATIONSHIP` |
-| POST | `/api/clients/[id]/assignments` | Super admin (session) | Assign user to client. Enforces `ROLE_OCCUPANCY_LIMITS`. Schedules background returnable recalculation via `scheduleReturnableRecalculation()` |
+| POST | `/api/clients/[id]/employees` | Bearer or session — super admin or any client assignment (not deal-only participants) | Create employee as new lead. Body: `fullName`, `roleInCompany`. Auto-assigns creator as `RELATIONSHIP` |
+| POST | `/api/clients/[id]/assignments` | Super admin (session) | Assign user to client. **`DOCTOR` rejected.** Enforces `ROLE_OCCUPANCY_LIMITS` for relationship/follow-up. Schedules background returnable recalculation via `scheduleReturnableRecalculation()` |
 | DELETE | `/api/clients/[id]/assignments/[assignmentId]` | Super admin (session) | Remove assignment. Schedules background returnable recalculation via `scheduleReturnableRecalculation()` |
 | POST | `/api/clients/[id]/documents` | Super admin or any assignment (session) | Upload document (Supabase Storage, 10MB, MIME whitelist) |
 | DELETE | `/api/clients/[id]/documents/[documentId]` | Super admin (session) | Delete document |
 | POST | `/api/clients/[id]/archive` | Super admin (Bearer or session) | Soft delete: sets `status` to `ARCHIVED`. Body: `{ confirmName }` (must match client name) |
 | DELETE | `/api/clients/[id]` | Super admin (Bearer or session) | Permanent delete. Body: `{ confirmName, password }` — verifies admin password via Supabase Auth, deletes commission returnables for client's deals, then `prisma.client.delete()` |
+| PATCH | `/api/clients/[id]/follow-up` | Super admin or `RELATIONSHIP` assignee (Bearer or session) | Update `priority` (`LOW`/`MEDIUM`/`HIGH`/null), `nextAction`, `nextFollowUpAt` (ISO or null). Logs SYSTEM activity on change |
+| POST | `/api/clients/[id]/quick-note` | Super admin or any assignment (Bearer or session) | Add quick note. Body: `content`, optional `type` (interaction type), `mode` (`interaction` default or `system`) |
+| DELETE | `/api/clients/[id]/tags/[tagId]` | Super admin (Bearer or session) | Remove tag from client |
 
 ### User management
 
@@ -848,6 +1284,21 @@ Google Forms returns `201` on create, `200` on update. Optional `GOOGLE_FORMS_DE
 | GET | `/api/admin/revenue-tracker` | Super admin (Bearer or session) | Revenue over time; requires `?groupBy=month\|quarter\|year`. **Cached:** org-wide `unstable_cache` 600s |
 | GET | `/api/admin/leaderboards` | Super admin (Bearer or session) | Commission & deals leaderboards. **Cached:** org-wide `unstable_cache` 600s |
 | GET | `/api/admin/pipeline` | Super admin (Bearer or session) | All clients for master pipeline |
+
+### Lead Command Center (super admin)
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| GET | `/api/admin/leads` | Super admin (Bearer or session) | Inbox rows with attention scoring. Rich query filters (see [Lead Command Center](#lead-command-center-libleadcommandcenterts)). Default `limit=200`, max 500. Returns `{ leads, meta }` |
+| GET | `/api/admin/leads/duplicates` | Super admin (Bearer or session) | Duplicate groups by email/phone. Query: `?type=email\|phone\|all` |
+| POST | `/api/admin/leads/merge` | Super admin (Bearer or session) | Pairwise manual merge via `mergeClients()`. Body: `canonicalClientId`, `duplicateClientId`, optional `fieldChoices`, `fieldOverrides`, `reason` |
+| POST | `/api/admin/leads/merge-multiple` | Super admin (Bearer or session) | Multi merge via `mergeMultipleClients()`. Body: `canonicalClientId`, `duplicateClientIds` (1–9), optional `fieldChoicesByDuplicateId`, `fieldOverrides`, `reason`. Max 10 clients total. Returns `{ ok: true, result }` |
+| POST | `/api/admin/leads/bulk-note` | Super admin (Bearer or session) | Add note to multiple clients. Body: `clientIds`, `content`, optional `type` |
+| POST | `/api/admin/leads/bulk-status` | Super admin (Bearer or session) | Bulk pipeline status change. Body: `clientIds`, `status` |
+| POST | `/api/admin/leads/bulk-tags` | Super admin (Bearer or session) | Bulk add tags. Body: `clientIds`, `tagIds` or `tagNames` (creates tags if missing) |
+| POST | `/api/admin/leads/bulk-assign-relationship` | Super admin (Bearer or session) | Bulk RELATIONSHIP assignment. Body: `clientIds`, `userId` |
+| GET | `/api/admin/tags` | Super admin (Bearer or session) | List all tags |
+| POST | `/api/admin/tags` | Super admin (Bearer or session) | Create tag. Body: `name`, optional `color` |
 
 ### External integrations (webhooks)
 
@@ -946,8 +1397,10 @@ No CRM login required. All webhook routes validate header `x-webhook-secret` aga
 | `GET .../widgets/open-tasks` | `{ openTasks: [...] }` |
 | `GET .../widgets/activity-feed` | `{ recentActivity: [...] }` |
 | `GET .../widgets/performance-metrics` | `{ hasAnyAssignment: boolean, performanceMetrics: { totalActiveClients, totalPipelineValue, mySecuredCommission } }` |
+| `GET .../widgets/deal-participation` | `{ deals: [...] }` — deals where current user is a participant |
+| `GET .../widgets/important-dates-calendar` | `{ startDate, endDate, recordType, events: [{ id, title, label, scheduledAt, date, time, recordType, recordId, recordName, notes, canManage, createdByName }] }` |
 
-**Secured commission query optimization:** `buildPerformanceMetricsWidget` uses `fetchDealAggregatesByClientIds` (single parameterized SQL: WON `totalCommission` + deal values, PROPOSED pipeline value per client) plus `loadStandardDashboardContext` role occupancy map — then applies role-pool / occupancy splits in memory. Legacy monolith passes shared context so assigned/performance widgets avoid duplicate DB work.
+**Secured commission query optimization:** `buildPerformanceMetricsWidget` uses participant-backed secured commission when deals have `DealParticipant` rows (`calculateMySecuredCommissionWithLegacyFallback`); otherwise legacy assignment pool math. Deal aggregates via `fetchDealAggregatesByClientIds` + `loadStandardDashboardContext`.
 
 ### Client 360 core response (`GET /api/clients/[id]`)
 
@@ -963,7 +1416,15 @@ No CRM login required. All webhook routes validate header `x-webhook-secret` aga
   "employeeCount": 120,
   "expectations": "Quarterly strategy reviews",
   "importantDates": [
-    { "label": "Contract renewal", "date": "2026-12-01" }
+    {
+      "id": "…",
+      "label": "Contract renewal",
+      "date": "2026-12-01",
+      "time": null,
+      "notes": null,
+      "scheduledAt": "2026-12-01T00:00:00.000Z",
+      "hasTime": false
+    }
   ],
   "equity": 0,
   "status": "ACTIVE_CLIENT",
@@ -997,6 +1458,62 @@ No CRM login required. All webhook routes validate header `x-webhook-secret` aga
 ### Client 360 full response (legacy)
 
 The monolithic payload (deals + tasks + activity in one response) is **no longer returned** by `GET /api/clients/[id]`. Use the split endpoints above: core `GET /api/clients/[id]`, `GET /api/clients/[id]/workspace?tab=...`, and `GET /api/clients/[id]/deals`.
+
+### Deal response shape (`GET/POST/PUT .../deals`)
+
+```json
+{
+  "id": "...",
+  "name": "Annual retainer",
+  "dealValue": 50000,
+  "totalCommission": 10000,
+  "dealType": "INVESTMENT",
+  "dealTypeLabel": "Investment",
+  "status": "PROPOSED",
+  "createdAt": "2026-07-02T10:00:00.000Z",
+  "updatedAt": "2026-07-02T10:00:00.000Z",
+  "commissionModel": "PARTICIPANT",
+  "usesLegacyCommissionFallback": false,
+  "participants": [
+    {
+      "id": "...",
+      "dealId": "...",
+      "userId": "...",
+      "userName": "Jane Doe",
+      "userEmail": "jane@example.com",
+      "externalName": null,
+      "role": "DOCTOR",
+      "roleLabel": "Doctor / Specialist",
+      "commissionPercent": 30,
+      "commissionAmount": 3000,
+      "isCommissionable": true,
+      "notes": null,
+      "returnablePercent": 20,
+      "returnableAmount": null,
+      "isReturnableRequired": true
+    }
+  ]
+}
+```
+
+**Commission model metadata:**
+- `commissionModel`: `"PARTICIPANT"` when the deal has one or more `DealParticipant` rows; `"LEGACY_FALLBACK"` when there are none.
+- `usesLegacyCommissionFallback`: `true` iff `commissionModel === "LEGACY_FALLBACK"`.
+- Under `LEGACY_FALLBACK`, secured commission / company earnings / returnables still use client-assignment pool formulas. **Client assignments are team/access roles, not commission entitlement** under the preferred participant model.
+- Client 360 `DealInfoWidget` shows an amber warning on legacy-fallback deals asking operators to backfill or edit participants before relying on commission numbers.
+
+**Participant payload (create/update):** array of `{ role, userId?, externalName?, commissionPercent, notes?, isReturnableRequired?, returnablePercent?, returnableAmount? }`. `COMPANY` / `EXTERNAL_PARTNER` use `externalName`; internal roles use `userId`.
+
+**Backfill / audit scripts (existing deals without participants):**
+
+```bash
+npm run audit:legacy-commission          # read-only report of deals on LEGACY_FALLBACK
+npm run backfill:deal-participants:dry   # preview
+npm run backfill:deal-participants       # write participant rows from client assignments
+npm run verify:deal-participants         # read-only validation report
+```
+
+See `docs/deal-participant-migration.md` for full migration runbook.
 
 ### Commission returnable response shape
 
@@ -1067,8 +1584,9 @@ The monolithic payload (deals + tasks + activity in one response) is **no longer
 /login                → Sign in
 /signup               → Register
 /dashboard            → User Dashboard (all authenticated users; role-based commission widgets)
-/dashboard/settings   → Account Settings (view/edit display name)
+/dashboard/settings   → Account Settings (display name, display density preference)
 /admin                → Super Admin Dashboard
+/admin/leads          → Lead Command Center (inbox + duplicates + merge)
 /admin/reconciliation → Global Reconciliation Dashboard (commission returnables audit)
 /admin/users          → User Management (deactivate / permanently delete users)
 /my-statements        → Returnable Statements (doctors mark liabilities as paid)
@@ -1096,7 +1614,7 @@ The monolithic payload (deals + tasks + activity in one response) is **no longer
 **File:** `src/app/login/page.tsx`
 
 - Profit Pulse Ally logo (centered)
-- Email + password form → Supabase sign-in → checks `User.status` → `/dashboard`
+- Email + password form → Supabase sign-in → checks `User.status` → `POST /api/auth/token` (stores JWT) → `/dashboard`
 - Deactivated accounts: signed out with *"Your account has been deactivated. Contact an administrator."*
 - Link to `/signup`
 
@@ -1117,6 +1635,8 @@ The monolithic payload (deals + tasks + activity in one response) is **no longer
 
 **Header:** Logo (links home), welcome message, **Add Lead** (standard users only), **Returnable Statements** (if `DOCTOR` role), **Admin Dashboard** (super admin), **Account Settings**, Sign Out
 
+**Command palette:** `⌘K` / `Ctrl+K` opens global client search (`CommandPalette` via `Providers.tsx`). Enabled on `/dashboard`, `/admin/*`, `/clients/*`, `/my-statements`.
+
 **Data loading:** Page shell (header + widget grid) renders immediately once profile is ready. Each widget fetches its own endpoint **in parallel**; dimension-matched **skeleton loaders** display until data arrives. Also fetches `/api/me/assignments` for doctor-role visibility (non-blocking).
 
 **Refresh:** `AddLeadModal` `onCreated` increments a shared `widgetRefreshKey` to re-fetch all widget endpoints.
@@ -1131,6 +1651,8 @@ The monolithic payload (deals + tasks + activity in one response) is **no longer
 | My Open Tasks | `MyTasksWidget` | `MyTasksWidgetSkeleton` | Always | `GET /api/dashboard/widgets/open-tasks` |
 | Recent Activity | `CollapsibleActivityWidget` | `CollapsibleActivityWidgetSkeleton` | Always | `GET /api/dashboard/widgets/activity-feed` |
 | My Secured Commission | `MySecuredCommissionWidget` | `MySecuredCommissionWidgetSkeleton` | If `hasAnyAssignment` from performance-metrics | `GET /api/dashboard/widgets/performance-metrics` |
+| My Deal Participation | `MyDealParticipationWidget` | `MyDealParticipationWidgetSkeleton` | If user has deal participant rows | `GET /api/dashboard/widgets/deal-participation` |
+| Important Dates Calendar | `ImportantDatesCalendarWidget` | `ImportantDatesCalendarWidgetSkeleton` | Always (Schedule section) | `GET /api/dashboard/widgets/important-dates-calendar` |
 | Current Month Commission Returnable | `MyCommissionReturnableWidget` | *(inline pulse)* | If `hasDoctorRole` from `/api/me/assignments` | `GET /api/me/commission-returnable?status=UNPAID&period=YYYY-MM` |
 
 **Skeleton design:** Each skeleton mirrors its widget's exact section padding, heading, and content structure to prevent layout shift (CLS).
@@ -1150,6 +1672,7 @@ The monolithic payload (deals + tasks + activity in one response) is **no longer
 **Features:**
 - View display name and email (email read-only)
 - **Edit** toggles inline name input with **Save** / **Cancel**
+- **Display density** preference (Comfortable / Compact) — stored in `localStorage` (`crm-display-density`); default Compact for super admin, Comfortable for standard users
 - Loading, saving, and error states
 - Header: logo, **Account Settings** (via dashboard headers), Back to Dashboard, Sign Out
 
@@ -1159,7 +1682,7 @@ The monolithic payload (deals + tasks + activity in one response) is **no longer
 
 **File:** `src/components/admin/SuperAdminDashboardPage.tsx`
 
-**Header:** Logo, title, Add Lead/Client, User Dashboard, **Reconciliation**, **User Management**, **Account Settings**, Sign Out
+**Header:** Logo, title, Add Lead/Client, **Lead Command Center**, User Dashboard, **Reconciliation**, **User Management**, **Account Settings**, Sign Out
 
 Responsive header — stacks on mobile (`flex-col`), horizontal from `sm` up; action buttons wrap.
 
@@ -1172,9 +1695,57 @@ Responsive header — stacks on mobile (`flex-col`), horizontal from `sm` up; ac
 | Revenue tracker | `RevenueTrackerChart` | `/api/admin/revenue-tracker` (`groupBy` param) | 10 min |
 | Leaderboards | `Leaderboards` | `/api/admin/leaderboards` | 10 min |
 | Recent Activity (all clients) | `CollapsibleActivityWidget` | `/api/dashboard/superadmin` | — |
+| Important Dates Calendar | `ImportantDatesCalendarWidget` | `/api/dashboard/widgets/important-dates-calendar` | — |
 | Master pipeline | `MasterPipelineView` | `/api/admin/pipeline` — Kanban on `lg+`, grouped list on mobile | — |
 
 **Modals:** `AddClientModal` — same fields as `AddLeadModal` plus pipeline stage selector; scroll-safe overlay (`max-h-[90vh]`)
+
+---
+
+### Page: Lead Command Center (`/admin/leads`)
+
+**File:** `src/app/admin/leads/page.tsx` → `src/components/admin/LeadCommandCenterPage.tsx`
+
+**Auth:** Super admin only (non-admins redirected to `/dashboard`).
+
+**Tabs:**
+
+| Tab | Component | Data |
+|-----|-----------|------|
+| Inbox | Built-in table/cards + filters | `GET /api/admin/leads` |
+| Duplicates | `LeadDuplicatesPanel` | `GET /api/admin/leads/duplicates` |
+
+**Toolbar (inbox):**
+- Search + quick filter chips (needs attention, overdue follow-up, etc.)
+- **Display density** toggle (Comfortable / Compact) — `DisplayDensityToggle` in toolbar; preference also in Account Settings
+- **Filters** panel — collapsed by default; advanced filters (status, source, assignee, tags, date ranges, missing contact, duplicate flags, follow-up states)
+
+**Inbox layout (compact):**
+- Desktop: dense table rows — `StatusPill`, `LeadSourceBadges` / `LeadTagBadges` (max 2 visible + `+N`), truncated contact/next-step text, `EmptyMuted` (`—`) for blanks
+- Mobile: compact cards; tap row opens preview drawer
+- Per-row primary action: **Preview** → `LeadPreviewDrawer` (Open Client 360 and follow-up editing live in the drawer)
+- Row selection + bulk actions: status change (`BulkStatusModal`), add tags (`BulkTagsModal`), assign relationship (`BulkAssignRelationshipModal`), bulk note (`BulkNoteModal`), **Merge selected** (2–10 leads, disabled above 10)
+
+**Preview drawer (`LeadPreviewDrawer`):**
+- Collapsible sections: Summary, Contact, Follow-up, Attention, Sources/tags, Recent activity
+- Follow-up fields (`PATCH /api/clients/[id]/follow-up`), compact pills for priority/attention, source/tag lists capped at 2 visible
+- Primary CTA: **Open Client 360**
+
+**Duplicates tab:**
+- Groups by shared email or phone; compact table/cards
+- **Merge** per group opens `MergeClientsModal` (`mode="pairwise"`) → `POST /api/admin/leads/merge` with per-field winners + optional `fieldOverrides`
+- On merge success, inbox refreshes
+
+**Merge modal (`MergeClientsModal`):**
+
+| Mode | Opened from | API |
+|------|-------------|-----|
+| `pairwise` | Duplicates tab | `POST /api/admin/leads/merge` |
+| `manual-multi` | LCC bulk **Merge selected**, Client 360 **Merge clients** | `POST /api/admin/leads/merge-multiple` |
+
+`manual-multi` is a 3-step wizard: (1) pick surviving record, (2) set final field values per field (existing record value, blank, or custom), (3) review. **`name` is required** in step 2.
+
+**Navigation:** Link back to Admin Dashboard in header.
 
 ---
 
@@ -1236,19 +1807,23 @@ Responsive header — stacks on mobile (`flex-col`), horizontal from `sm` up; ac
 
 **Initial load (server):** `loadClient360PageData(clientId)` runs `Promise.all` for:
 - `getClient360CoreData()` — client details, team, documents, strategy text
-- `getClient360DealsData()` — all deals (passed to UI only for super admin or `DOCTOR` assignee)
+- `getClient360DealsData()` — all deals with participants (visible per deal access rules)
 - `getClient360CompanyHierarchyData()` — company, employee count, colleagues
 
 Unauthenticated users are redirected to `/login`. Missing client → `notFound()`.
 
 **Refresh after mutations:** `router.refresh()` re-runs server fetches; workspace tabs also use `refreshKey` for lazy tab reload.
 
-**Header:** Logo, back to pipeline link, **Archive Client** button (super admin only), client name, pipeline stage control:
+**Header:** Logo, back to pipeline link, **More actions** menu (super admin: **Merge clients**, **Archive client**), client name, `LeadSourceBadges`, pipeline stage control:
 
 | Role | UI control |
 |------|------------|
 | Super Admin | Dropdown — any stage, immediate `PATCH` |
-| Standard User | Read-only badge + **Move to Next Stage** button (when role permits) |
+| Standard User | Read-only `StatusPill` + **Move to Next Stage** button (when role permits) |
+
+**Super admin merge (Client 360):** **More actions → Merge clients** opens `ClientMergePickerModal` (search/add up to 9 additional records) → `MergeClientsModal` (`manual-multi`) → `POST /api/admin/leads/merge-multiple`. Navigates to canonical client on success.
+
+**Right column widgets:** Density-aware padding/spacing (`DisplayDensityProvider`); collapsible sections for company hierarchy, external source records, and extended client details.
 
 **Pipeline advance modal:** `PipelineStageAdvanceModal` — confirmation message + non-interactive checklist reminders; **Confirm** calls `PATCH /api/clients/[id]`.
 
@@ -1277,9 +1852,10 @@ Deep link: `#activity-notes` opens Activity tab and scrolls into view.
 
 | Widget | Component | Who can edit |
 |--------|-----------|--------------|
-| Client Details | `ClientDetailsWidget` + `ClientDetailsEditModal` | Super admin **or** `RELATIONSHIP` assignee |
-| Deal Info | `DealInfoWidget` + `DealEditModal` | Visible to super admin **or** `DOCTOR` assignee — receives `deals` prop from server; multi-deal CRUD via API, committed/potential values, personal commission share % |
-| Assigned Team | `AssignedTeamWidget` | Super admin manages assignments (occupancy limits enforced) |
+| Client Details | `ClientDetailsWidget` + `ClientDetailsEditModal` + `ImportantDatesPanel` | Super admin **or** `RELATIONSHIP` assignee (details + important dates CRUD) |
+| Strategy Builder | `ClientStrategyBuilderWidget` (+ plan/step/connection/expense modals) | View: core read. Manage: SUPER_ADMIN, legacy client `DOCTOR`, or deal `DOCTOR` participant |
+| Deal Info | `DealInfoWidget` + `DealEditModal` | Users with deal view access — participant table per deal, deal type label, committed/potential values, secured commission from participant rows. Amber **legacy fallback** warning when `usesLegacyCommissionFallback`. **Edit** when `canCreateDeal` / `canManageDeal(dealId)` |
+| Assigned Team | `AssignedTeamWidget` | Super admin assigns **Relationship** and **Follow-up** only. Legacy client-level doctors in collapsed section. No new doctor assignments at client level |
 | Company Hierarchy | `CompanyHierarchyWidget` | Receives `hierarchy` prop from server; add employee leads via `POST /api/clients/[id]/employees` |
 | Lead Source Records | `ClientSourceRecordsWidget` | Fetches `GET /api/clients/[id]/source-records` on mount; collapsible raw payload per ingest |
 
@@ -1294,7 +1870,8 @@ Deep link: `#activity-notes` opens Activity tab and scrolls into view.
 | `Logo` | `src/components/Logo.tsx` | Branded logo image |
 | `AuthRequiredMessage` | `src/components/auth/AuthRequiredMessage.tsx` | Unauthenticated fallback with sign-in CTA |
 | `SignUpPage` | `src/components/auth/SignUpPage.tsx` | Registration form |
-| `Providers` | `src/components/Providers.tsx` | App-level providers wrapper (legacy NextAuth `SessionProvider`; live auth is Supabase) |
+| `Providers` | `src/components/Providers.tsx` | App-level providers wrapper (legacy NextAuth `SessionProvider`; mounts `CommandPalette` with `ssr: false`) |
+| `CommandPalette` | `src/components/CommandPalette.tsx` | Global `⌘K`/`Ctrl+K` client search → `/clients/[id]` |
 
 **Hook:** `useUserProfile` (`src/hooks/useUserProfile.ts`) — loads current user from Supabase `User` table; signs out users with `status === DEACTIVATED`.
 
@@ -1307,6 +1884,10 @@ Deep link: `#activity-notes` opens Activity tab and scrolls into view.
 | `MyTasksWidget` | `src/components/dashboard/MyTasksWidget.tsx` |
 | `CollapsibleActivityWidget` | `src/components/dashboard/CollapsibleActivityWidget.tsx` |
 | `MySecuredCommissionWidget` | `src/components/dashboard/MySecuredCommissionWidget.tsx` |
+| `MyDealParticipationWidget` | `src/components/dashboard/MyDealParticipationWidget.tsx` |
+| `ImportantDatesCalendarWidget` | `src/components/dashboard/ImportantDatesCalendarWidget.tsx` |
+| `ImportantDateEventDetailModal` | `src/components/dashboard/ImportantDateEventDetailModal.tsx` |
+| `AddImportantDateFromCalendarModal` | `src/components/dashboard/AddImportantDateFromCalendarModal.tsx` |
 | `MyCommissionReturnableWidget` | `src/components/dashboard/MyCommissionReturnableWidget.tsx` |
 | `MyStatementsPage` | `src/components/dashboard/MyStatementsPage.tsx` |
 | `AddLeadModal` | `src/components/dashboard/AddLeadModal.tsx` |
@@ -1315,6 +1896,8 @@ Deep link: `#activity-notes` opens Activity tab and scrolls into view.
 | `MyTasksWidgetSkeleton` | `src/components/dashboard/skeletons/MyTasksWidgetSkeleton.tsx` |
 | `CollapsibleActivityWidgetSkeleton` | `src/components/dashboard/skeletons/CollapsibleActivityWidgetSkeleton.tsx` |
 | `MySecuredCommissionWidgetSkeleton` | `src/components/dashboard/skeletons/MySecuredCommissionWidgetSkeleton.tsx` |
+| `MyDealParticipationWidgetSkeleton` | `src/components/dashboard/skeletons/MyDealParticipationWidgetSkeleton.tsx` |
+| `ImportantDatesCalendarWidgetSkeleton` | `src/components/dashboard/skeletons/ImportantDatesCalendarWidgetSkeleton.tsx` |
 | `skeletonUtils` | `src/components/dashboard/skeletons/skeletonUtils.tsx` — shared `SkeletonPulse`, section classes |
 
 ### Admin
@@ -1334,6 +1917,16 @@ Deep link: `#activity-notes` opens Activity tab and scrolls into view.
 | `UserManagementModal` | `src/components/admin/UserManagementModal.tsx` |
 | `UserActionsMenu` | `src/components/admin/UserActionsMenu.tsx` |
 | `WidgetDownloadMenu` | `src/components/admin/WidgetDownloadMenu.tsx` |
+| `LeadCommandCenterPage` | `src/components/admin/LeadCommandCenterPage.tsx` |
+| `LeadDuplicatesPanel` | `src/components/admin/LeadDuplicatesPanel.tsx` |
+| `LeadPreviewDrawer` | `src/components/admin/LeadPreviewDrawer.tsx` |
+| `MergeClientsModal` | `src/components/admin/MergeClientsModal.tsx` |
+| `ClientMergePickerModal` | `src/components/clients/ClientMergePickerModal.tsx` |
+| `QuickNoteModal` | `src/components/admin/QuickNoteModal.tsx` |
+| `BulkNoteModal` | `src/components/admin/BulkNoteModal.tsx` |
+| `BulkStatusModal` | `src/components/admin/BulkStatusModal.tsx` |
+| `BulkTagsModal` | `src/components/admin/BulkTagsModal.tsx` |
+| `BulkAssignRelationshipModal` | `src/components/admin/BulkAssignRelationshipModal.tsx` |
 
 ### Client 360
 
@@ -1346,14 +1939,34 @@ Deep link: `#activity-notes` opens Activity tab and scrolls into view.
 | `ActivityLog` | `src/components/clients/ActivityLog.tsx` |
 | `ClientDetailsWidget` | `src/components/clients/ClientDetailsWidget.tsx` |
 | `ClientDetailsEditModal` | `src/components/clients/ClientDetailsEditModal.tsx` |
-| `DealInfoWidget` | `src/components/clients/DealInfoWidget.tsx` |
-| `DealEditModal` | `src/components/clients/DealEditModal.tsx` |
+| `ImportantDatesPanel` | `src/components/clients/ImportantDatesPanel.tsx` |
+| `ClientStrategyBuilderWidget` | `src/components/clients/ClientStrategyBuilderWidget.tsx` |
+| `StrategyPlanDetailView` / edit/delete modals | `src/components/clients/StrategyPlan*.tsx`, `StrategyStepEditModal.tsx`, `StrategyConnectionEditModal.tsx`, `StrategyExpenseEditModal.tsx` |
+| `DealInfoWidget` | `src/components/clients/DealInfoWidget.tsx` | Deal list, participant display, returnable summary per doctor |
+| `DealEditModal` | `src/components/clients/DealEditModal.tsx` | Participant editor: user picker, external names, templates, doctor returnables, safe template apply |
+| `ParticipantUserPicker` | `src/components/clients/ParticipantUserPicker.tsx` | Searchable user select for internal participant rows |
 | `TaskEditModal` | `src/components/clients/TaskEditModal.tsx` |
-| `AssignedTeamWidget` | `src/components/clients/AssignedTeamWidget.tsx` |
+| `AssignedTeamWidget` | `src/components/clients/AssignedTeamWidget.tsx` | Relationship/follow-up assign only; legacy doctors collapsed |
 | `CompanyHierarchyWidget` | `src/components/clients/CompanyHierarchyWidget.tsx` |
 | `ClientSourceRecordsWidget` | `src/components/clients/ClientSourceRecordsWidget.tsx` |
+| `LeadSourceBadges` | `src/components/clients/LeadSourceBadges.tsx` |
+| `LeadTagBadges` | `src/components/clients/LeadTagBadges.tsx` |
 | `PipelineStageAdvanceModal` | `src/components/clients/PipelineStageAdvanceModal.tsx` |
 | `ClientDeletionModal` | `src/components/clients/ClientDeletionModal.tsx` |
+
+### Shared UI (density & compact display)
+
+| Component | Path |
+|-----------|------|
+| `DisplayDensityProvider` / `useDisplayDensity` / `DisplayDensityToggle` | `src/components/ui/DisplayDensityProvider.tsx` |
+| `displayDensity` helpers | `src/components/ui/displayDensity.ts` |
+| `CompactPill` | `src/components/ui/CompactPill.tsx` |
+| `StatusPill` | `src/components/ui/StatusPill.tsx` |
+| `LimitedInlineList` | `src/components/ui/LimitedInlineList.tsx` |
+| `EmptyMuted` | `src/components/ui/EmptyMuted.tsx` |
+| `SectionCard` | `src/components/ui/SectionCard.tsx` |
+
+Mounted via `src/components/Providers.tsx` (wraps app with `DisplayDensityProvider`).
 
 ### Server-side libraries (`lib/`)
 
@@ -1371,18 +1984,25 @@ Deep link: `#activity-notes` opens Activity tab and scrolls into view.
 | `activityFeed.ts` | SQL `UNION ALL` activity fetch, grouped activity + mark-as-read |
 | `adminAnalyticsCache.ts` | `unstable_cache` loaders for admin funnel, KPIs, revenue, leaderboards |
 | `performance.ts` | Opt-in `timeRouteHandler` / `timeAsync` route timing (`PERF_LOGGING_ENABLED`) |
-| `authenticatedFetch.ts` | Client-side fetch helper with Bearer token + `credentials: 'same-origin'` |
+| `authenticatedFetch.ts` | Client-side fetch helper with Bearer token + `credentials: 'same-origin'`; clears token on 401 |
 | `dashboardTypes.ts` | TypeScript types for dashboard payloads |
 | `clientStages.ts` | Pipeline stage labels and badge styles |
 | `constants.ts` | Commission pools, company overhead, role occupancy limits |
-| `commissionCalculations.ts` | Shared-role commission share + secured commission math |
+| `commissionCalculations.ts` | Shared-role commission share + legacy secured commission math |
 | `commissionRates.ts` | Role label formatting (`formatAssignmentRole`) |
-| `commissionReturnables.ts` | Returnable generation, `recalculateReturnablesForUserOnClient`, `scheduleReturnableRecalculation`, `backfillCommissionReturnablesForWonDeals`, formatting, period filters |
+| `commissionReturnables.ts` | Returnable generation (participant + legacy), `recalculateReturnablesForUserOnClient`, `scheduleReturnableRecalculation`, formatting |
+| `dealCommissionTemplates.ts` | `DealType` labels, default commission templates, percent validation |
+| `dealParticipants.ts` | Participant normalization, validation, `buildDefaultParticipantsForDeal`, API payload parsing |
+| `dealParticipantsBackfill.ts` | Backfill participant rows from client assignments |
+| `dealParticipantCalculations.ts` | Participant amounts, secured commission, company earnings, leaderboards |
 | `clientDeals.ts` | Deal CRUD helpers for Client 360 |
-| `dealCalculations.ts` | Committed/potential value, deal response formatting, money parsing |
+| `dealCalculations.ts` | Committed/potential value, `formatDealResponse` (incl. `commissionModel` / `usesLegacyCommissionFallback`), money parsing |
 | `leadSources.ts` | Lead source combobox suggestions (`ClientDetailsEditModal`) |
 | `leadNormalization.ts` | Email/phone/name/company normalization for ingestion |
 | `leadIngestion.ts` | `ingestExternalLead()` — shared webhook ingest, dedupe, safe merge, source records |
+| `leadCommandCenter.ts` | Lead Command Center inbox rows, attention scoring, filters, `searchClients()` |
+| `leadDuplicates.ts` | Duplicate client group detection (email/phone) |
+| `clientMerge.ts` | `mergeClients()`, `mergeMultipleClients()` — atomic manual merge with `fieldChoices` / `fieldOverrides`, audit per archived duplicate |
 | `reports.ts` | CSV/PDF export helpers for admin widgets |
 | `jwt.ts` | JWT sign/verify for Bearer auth (7-day expiry) |
 | `supabaseClient.ts` / `supabaseServer.ts` / `supabaseAdmin.ts` | Supabase clients; storage bucket via `SUPABASE_CLIENT_DOCUMENTS_BUCKET` |
@@ -1396,6 +2016,22 @@ Deep link: `#activity-notes` opens Activity tab and scrolls into view.
 ```
 /signup → POST /api/auth/register → Supabase user + User row
        → JWT in localStorage → Supabase sign-in → /dashboard
+```
+
+### Sign in (session + JWT sync)
+
+```
+/login → Supabase signInWithPassword → check User.status
+      → POST /api/auth/token → localStorage.token refreshed
+      → /dashboard
+```
+
+### Command palette (any role)
+
+```
+⌘K / Ctrl+K (on dashboard, admin, clients, my-statements)
+→ GET /api/search/clients?q=...
+→ select result → /clients/[id]
 ```
 
 ### Standard user — edit display name
@@ -1473,14 +2109,36 @@ Deep link: `#activity-notes` opens Activity tab and scrolls into view.
       → scan system-wide activity feed
       → master pipeline → filter by status/user → open Client 360
       → change pipeline stage, edit details, manage team assignments
-      → archive or permanently delete client (Client 360 → Archive Client modal)
+      → archive or permanently delete client (Client 360 → More actions → Archive client)
+/admin/leads → Lead Command Center inbox (compact rows, preview drawer, bulk actions)
+            → Inbox: select 2–10 leads → Merge selected (manual-multi)
+            → Duplicates tab → pairwise merge per group (MergeClientsModal)
 /admin/users → deactivate or permanently delete user accounts
+/clients/[id] → More actions → Merge clients (multi-picker) or Archive client
+```
+
+### Super admin — manual duplicate merge
+
+```
+Pairwise (Duplicates tab):
+/admin/leads → Duplicates tab → select group → Merge
+            → MergeClientsModal (pairwise): canonical vs duplicate per field + optional fieldOverrides
+            → POST /api/admin/leads/merge
+            → duplicate archived (ARCHIVED), records moved, LeadMergeAudit written
+            → inbox refreshes
+
+Multi (LCC bulk or Client 360):
+/admin/leads → select 2–10 inbox rows → Merge selected
+   OR /clients/[id] → More actions → Merge clients → ClientMergePickerModal
+            → MergeClientsModal (manual-multi): surviving record → final field values → review
+            → POST /api/admin/leads/merge-multiple
+            → all non-canonical records archived; one LeadMergeAudit per archived duplicate
 ```
 
 ### Super admin — client lifecycle
 
 ```
-/clients/[id] → Archive Client (header button)
+/clients/[id] → More actions → Archive client
              → ClientDeletionModal
                 Archive tab: confirm client name → POST /api/clients/[id]/archive
                 Delete tab: confirm name + admin password → DELETE /api/clients/[id]
@@ -1528,6 +2186,7 @@ Setup details: `docs/google-forms-integration.md` (Google Forms). Profit Pulse A
 
 ```bash
 npx tsx scripts/test-lead-ingestion.ts
+npx tsx scripts/test-lead-command-center.ts   # fetchLeadCommandCenterRows smoke test
 ```
 
 **Scan for duplicate clients (email/phone):**
@@ -1572,10 +2231,27 @@ npx tsx scripts/test-activity-apis.ts       # Activity feed + dashboard APIs
 npx tsx scripts/test-commission-system.ts   # Commission engine + returnables (incl. multi-role credit unit tests)
 npx tsx scripts/test-user-management.ts     # User deactivate/delete + auth status checks
 npx tsx scripts/test-lead-ingestion.ts      # ingestExternalLead integration (no webhooks/secrets)
+npx tsx scripts/test-lead-command-center.ts # Lead Command Center lib smoke test
+npm run test:merge-custom-fields            # mergeClients + fieldOverrides integration test
+npm run test:client-access                  # Client 360 access helpers
+npm run test:client-strategy                # Strategy Builder API integration
+npm run test:important-dates                # Important Dates CRUD + permissions + activity log
+npm run test:important-dates-calendar       # Calendar visibility + range filters
+npm run test:all                            # Full suite (includes HTTP tests — needs running server)
 npx tsx scripts/find-duplicate-clients.ts   # Report duplicate email/phone client groups
+npm run manuals:pdf                         # Generate USER_MANUAL_*.pdf from markdown
 npx tsx scripts/profile-api-routes.ts       # Client round-trip timings; pair with PERF_LOGGING for server `[perf]` logs
 npx tsx scripts/recalculate-commission-returnables.ts  # Backfill/correct returnable amounts after formula changes
+npm run audit:legacy-commission                       # Read-only report of deals without DealParticipant rows
+npm run backfill:deal-participants:dry                # Preview DealParticipant backfill for legacy deals
+npm run backfill:deal-participants                    # Write DealParticipant rows from client assignments
+npm run verify:deal-participants                      # Read-only participant validation report
+npm run test:deal-participants                        # Unit tests: templates, secured commission, company earnings
+npm run test:deal-participant-api                     # Integration test: create deal → WON → returnables (dev DB)
+npm run test:deal-returnables                         # Unit tests: explicit doctor returnable fields
 ```
+
+> **Source of truth:** Prefer this document (`docs/DATABASE_AND_UI_REFERENCE.md`) for schema, APIs, permissions, and UI. User manuals under `docs/USER_MANUAL_*` are end-user guides. One-off migration notes (e.g. `deal-participant-migration.md`) are operational supplements — do not treat them as replacing this reference.
 
 **Build (matches Vercel):**
 
@@ -1636,9 +2312,20 @@ All exported functions in `lib/authHelpers.ts`:
 | `hasClientAssignment(userId, clientId, roles?)` | Lookup assignment; optional role filter |
 | `requireSuperAdminOrClientRole(clientId, roles[])` | Session → super admin or matching assignment role |
 | `requireSuperAdminOrClientAccess(clientId)` | Session → super admin or any assignment |
+| `hasDealParticipantOnClient(userId, clientId)` | True if user is any `DealParticipant` on a deal for the client |
+| `canReadClientCore(userId, userRole, clientId)` | Super admin, any assignment, or deal participant |
+| `canAccessClientHierarchy(userId, userRole, clientId)` | Super admin or any assignment (not deal-only) |
+| `requireClientCoreReadAccess(clientId, request?)` | Bearer/session → Client 360 core read gate |
+| `requireClientHierarchyAccess(clientId, request?)` | Bearer/session → company hierarchy GET gate |
+| `requireClientEmployeeLeadCreateAccess(clientId, request?)` | Bearer/session → employee lead POST gate |
 | `logClientSystemEvent(clientId, content, userId?)` | Write `ClientActivityLog` with `type: SYSTEM` |
 | `authorizePipelineStatusChange(...)` | Role-based pipeline stage advance check |
 | `canAssignmentRoleChangePipelineStatus` | Re-export from `lib/pipelinePermissions.ts` |
+| `getDealAccessForClient(userId, userRole, clientId)` | Returns `canView`, `canCreate`, `canManageAll`, `manageableDealIds` |
+| `requireDealViewAccess(clientId)` | Session → deal list/read permission |
+| `requireDealCreateAccess(clientId)` | Session → deal create permission |
+| `requireDealManageAccess(clientId, dealId)` | Session → deal update/delete permission |
+| `canUseDealParticipantPicker(userRole, access)` | Whether user may call participant-users picker API |
 
 Related: `lib/pipelinePermissions.ts` exports `getNextPipelineStage`, `canUserAdvancePipelineStage`, `getPipelineAdvanceChecklist`, and `PIPELINE_ADVANCE_CHECKLIST`.
 
@@ -1653,7 +2340,7 @@ Related: `lib/pipelinePermissions.ts` exports `getNextPipelineStage`, `canUserAd
 │  My Assigned Clients     │  My Open Tasks                     │  skeletons → data
 ├──────────────────────────┼──────────────────────────────────┤
 │  Recent Activity         │  My Secured Commission (*)       │
-│  ▼ Client A  [!]         │                                    │
+│  ▼ Client A  [!]         │  My Deal Participation           │
 │  ▼ Client B              │  Current Month Returnable (**)   │
 └──────────────────────────┴──────────────────────────────────┘
   (*)  if any assignment   (**) if DOCTOR role
@@ -1673,10 +2360,29 @@ Related: `lib/pipelinePermissions.ts` exports `getNextPipelineStage`, `canUserAd
 └─────────────────────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────────────────────┐
+│  Lead Command Center    [Compact│Comfortable]  [Inbox][Dup] │
+├─────────────────────────────────────────────────────────────┤
+│  [search] [quick chips]              [Filters ▼ collapsed]    │
+├─────────────────────────────────────────────────────────────┤
+│  ☐ │ Name/Status │ Contact │ Owner │ Attention │ Preview    │
+│  ... bulk: [Status][Tags][Assign][Note][Merge selected]      │
+├─────────────────────────────────────────────────────────────┤
+│  Duplicates: email/phone groups → [Merge] per group         │
+└─────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────┐
+│  ⌘K  Search clients...                                      │  Command palette (overlay)
+├─────────────────────────────────────────────────────────────┤
+│  > Acme Corp — acme@example.com                    score 45 │
+│  > Jane Doe — jane@example.com                     score 30 │
+└─────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────┐
 │  Account Settings                    [Back to Dashboard]    │
 ├─────────────────────────────────────────────────────────────┤
 │  Name: {display name}                          [Edit]       │
 │  Email: {email} (read-only)                                  │
+│  Display density: [Compact] [Comfortable]                     │
 └─────────────────────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────────────────────┐
@@ -1689,7 +2395,7 @@ Related: `lib/pipelinePermissions.ts` exports `getNextPipelineStage`, `canUserAd
 └─────────────────────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────────────────────┐
-│  [Logo]                              ← Back to list         │  Client 360 (desktop)
+│  [Logo]                    ← Back   [More actions ▼]        │  Client 360 (desktop)
 │  {Client Name}  [Stage badge ▼ or Move to Next Stage]       │
 ├──────────────────────────────┬──────────────────────────────┤
 │  WORKSPACE (lazy tabs)       │  Client Details              │
@@ -1706,7 +2412,7 @@ Related: `lib/pipelinePermissions.ts` exports `getNextPipelineStage`, `canUserAd
 │  ...                        │
 ├─────────────────────────────┤
 │  Client Details  [Edit]     │
-│  Deal Info (committed/potential + commission share %)       │
+│  Deal Info (type, participants, committed/potential, secured $) │
 │  Assigned Team              │
 │  Company Hierarchy          │
 └─────────────────────────────┘
@@ -1720,17 +2426,22 @@ Related: `lib/pipelinePermissions.ts` exports `getNextPipelineStage`, `canUserAd
 
 | Item | Notes |
 |------|-------|
-| Client 360 read access | `GET /api/clients/[id]` allows any authenticated user (not restricted to assignees) |
 | User reactivation | No UI/API to restore `DEACTIVATED` → `ACTIVE`; requires direct DB update |
 | Client restore from ARCHIVED | No dedicated un-archive API; super admin can change stage via `PATCH` |
-| Company hierarchy APIs | `GET/POST .../employees` — any authenticated user, no assignment check |
-| Bearer vs session split | Dashboard/returnable/details/employees accept Bearer+session; interactions, strategy, tasks, deals use session-only helpers |
-| Returnable backfill | Historical WON deals may need `npx tsx scripts/recalculate-commission-returnables.ts` |
+| Bearer vs session split | Dashboard/returnable/details/employees/Client 360 core accept Bearer+session; interactions, strategy, tasks, deals use session-only helpers |
+| Legacy client-level `DOCTOR` assignments | May exist for audit; not assignable for new operations; doctors belong on deals via `DealParticipant` |
+| Legacy commission/returnable fallback | Deals without `DealParticipant` rows still use client-assignment pools (`commissionModel: LEGACY_FALLBACK`). Surfaced in deal API metadata + Deal Info warning; audit with `npm run audit:legacy-commission`, then backfill (`npm run backfill:deal-participants`) |
+| Participant returnables v1 | Explicit per-doctor fields; create/update validates caps/`userId`/commissionable; backfill still does not infer returnables — business review after migration |
+| Deal participant API integration tests | `test:deal-participant-api` uses Prisma + route libraries (deal routes use session auth, not Bearer-only HTTP) |
+| Returnable backfill | Historical WON deals may need `npx tsx scripts/recalculate-commission-returnables.ts` after configuring doctor returnables |
 | Background returnable tasks | Fire-and-forget `fetch` to `/api/tasks/recalculate-returnables`; no retry queue yet — suitable for future Inngest/Vercel Cron migration |
 | Admin analytics cache | Funnel, revenue, leaderboards cached 10 min — new data may lag briefly after pipeline/deal changes |
 | Pipeline checklist in modal | Display-only reminders in `PipelineStageAdvanceModal`; not persisted or server-validated |
 | Admin route protection | `/admin/*` middleware checks session only; role enforced client-side + API 403 |
-| Lead merge audit UI | `LeadMergeAudit` table exists; ingestion does not write merge audits yet |
+| Lead merge audit browse UI | `LeadMergeAudit` rows written on merge; no dedicated admin page to browse merge history yet |
+| Multi-merge size limit | UI and `POST /api/admin/leads/merge-multiple` support at most **10 clients** per operation (1 canonical + up to 9 duplicates) |
+| Multi-merge audit shape | One `LeadMergeAudit` row per archived duplicate; `fieldOverrides` from multi-merge are folded into the **last** audit's `fieldChanges` (not a separate audit per override field) |
+| Client tags outside LCC | Tags managed via Lead Command Center bulk actions; no tag editor on Client 360 yet |
 | Duplicate client prevention | App-level only via `ingestExternalLead`; manual `POST /api/clients` can still create duplicate emails |
 | NextAuth legacy route | `/api/auth/[...nextauth]` exists with placeholder credentials; primary auth is Supabase |
 | Activity read IDs | Polymorphic: `activity_read_status.activity_log_id` may reference `Interaction.id` or `ClientActivityLog.id` |

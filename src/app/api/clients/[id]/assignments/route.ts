@@ -32,6 +32,13 @@ export async function POST(
     return NextResponse.json({ error: 'Invalid role' }, { status: 400 });
   }
 
+  if (role === AssignmentRole.DOCTOR) {
+    return NextResponse.json(
+      { error: 'Doctors are assigned per deal. Add doctors in the Deal editor.' },
+      { status: 400 }
+    );
+  }
+
   const client = await prisma.client.findUnique({ where: { id: clientId } });
   if (!client) {
     return NextResponse.json({ error: 'Client not found' }, { status: 404 });

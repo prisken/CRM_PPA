@@ -9,6 +9,9 @@ import { timeRouteHandler } from '@/lib/performance';
 
 export const dynamic = 'force-dynamic';
 
+const DEFAULT_LIMIT = 200;
+const MAX_LIMIT = 500;
+
 const LEAD_SOURCE_LABEL_TO_ENUM: Record<string, LeadSourceType> = {
   'google forms': LeadSourceType.GOOGLE_FORMS,
   'profit pulse ally': LeadSourceType.PROFIT_PULSE_ALLY,
@@ -136,31 +139,42 @@ export async function GET(request: Request) {
     return auth.error;
   }
 
-  const { searchParams } = new URL(request.url);
-  const filters = parseLeadCommandCenterFilters(searchParams);
-  const offset = filters.offset ?? 0;
-  const limit = filters.limit;
+  try {
+    const { searchParams } = new URL(request.url);
+    const filters = parseLeadCommandCenterFilters(searchParams);
+    const offset = filters.offset ?? 0;
+    const limit = Math.min(filters.limit ?? DEFAULT_LIMIT, MAX_LIMIT);
 
-  const payload = await timeRouteHandler(
-    'GET /api/admin/leads',
-    async () => {
-      const leads = await fetchLeadCommandCenterRows(filters);
+    const payload = await timeRouteHandler(
+      'GET /api/admin/leads',
+      async () => {
+        const leads = await fetchLeadCommandCenterRows({
+          ...filters,
+          limit,
+        });
 
-      return {
-        leads,
-        meta: {
-          count: leads.length,
-          limit: limit ?? leads.length,
-          offset,
-        },
-      };
-    },
-    (result) => ({
-      leadCount: result.leads.length,
-      limit: result.meta.limit,
-      offset: result.meta.offset,
-    })
-  );
+        return {
+          leads,
+          meta: {
+            count: leads.length,
+            limit,
+            offset,
+          },
+        };
+      },
+      (result) => ({
+        leadCount: result.leads.length,
+        limit: result.meta.limit,
+        offset: result.meta.offset,
+      })
+    );
 
-  return NextResponse.json(payload);
+    return NextResponse.json(payload);
+  } catch (error) {
+    console.error('GET /api/admin/leads failed:', error);
+    const message =
+      error instanceof Error ? error.message : 'Failed to load leads';
+
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
 }

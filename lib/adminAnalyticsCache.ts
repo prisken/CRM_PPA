@@ -1,6 +1,13 @@
 import { AssignmentRole, ClientStatus, DealStatus, Prisma } from '@prisma/client';
 import { unstable_cache } from 'next/cache';
-import { COMPANY_OVERHEAD_RATE } from '@/lib/constants';
+import {
+  fetchAllWonDealsWithParticipants,
+  fetchWonDealsWithParticipantsSince,
+} from '@/lib/dashboardDealAggregates';
+import {
+  calculateAdminLeaderboardsWithLegacyFallback,
+  calculateCompanyEarningsFromDealParticipants,
+} from '@/lib/dealParticipantCalculations';
 import { timeAsync } from '@/lib/performance';
 import { prisma } from '@/lib/prisma';
 
@@ -121,7 +128,7 @@ async function loadAdminDashboardKpis(): Promise<AdminDashboardKpis> {
     potentialRevenue,
     velocityResult,
     activeDeals,
-    wonCommissionTotal,
+    wonDealsWithParticipants,
   ] = await Promise.all([
     prisma.deal.aggregate({
       where: {
@@ -154,10 +161,7 @@ async function loadAdminDashboardKpis(): Promise<AdminDashboardKpis> {
         status: { notIn: [DealStatus.WON, DealStatus.LOST] },
       },
     }),
-    prisma.deal.aggregate({
-      where: { status: DealStatus.WON },
-      _sum: { totalCommission: true },
-    }),
+    fetchAllWonDealsWithParticipants(),
   ]);
 
   const avgDays = velocityResult[0]?.avg_days;
@@ -168,8 +172,20 @@ async function loadAdminDashboardKpis(): Promise<AdminDashboardKpis> {
     totalCommittedRevenue: Number(committedRevenue._sum.dealValue ?? 0),
     totalPotentialRevenue: Number(potentialRevenue._sum.dealValue ?? 0),
     totalCommissionYTD: Number(wonDealsYTD._sum.totalCommission ?? 0),
-    companyOverheadEarnings:
-      Number(wonCommissionTotal._sum.totalCommission ?? 0) * COMPANY_OVERHEAD_RATE,
+    companyOverheadEarnings: calculateCompanyEarningsFromDealParticipants(
+      wonDealsWithParticipants.map((deal) => ({
+        id: deal.id,
+        totalCommission: deal.totalCommission,
+        status: DealStatus.WON,
+        participants: deal.participants.map((participant) => ({
+          id: participant.id,
+          role: participant.role,
+          commissionPercent: participant.commissionPercent,
+          commissionAmount: participant.commissionAmount,
+          isCommissionable: participant.isCommissionable,
+        })),
+      }))
+    ),
     pipelineVelocity: Math.round(pipelineVelocity * 10) / 10,
     activeDeals,
   };
@@ -180,18 +196,7 @@ async function loadAdminLeaderboardsData(): Promise<AdminLeaderboardsData> {
   return timeAsync('cache:admin-leaderboards', async () => {
   const yearStart = getYearStart();
 
-  const wonDealsYTD = await prisma.deal.findMany({
-    where: {
-      status: DealStatus.WON,
-      updatedAt: { gte: yearStart },
-    },
-    select: {
-      clientId: true,
-      dealValue: true,
-      totalCommission: true,
-    },
-  });
-
+  const wonDealsYTD = await fetchWonDealsWithParticipantsSince(yearStart);
   const clientIds = [...new Set(wonDealsYTD.map((deal) => deal.clientId))];
 
   const assignments =
@@ -208,82 +213,33 @@ async function loadAdminLeaderboardsData(): Promise<AdminLeaderboardsData> {
           },
         });
 
-  const assignmentsByClient = new Map<string, typeof assignments>();
-  for (const assignment of assignments) {
-    const existing = assignmentsByClient.get(assignment.clientId) ?? [];
-    existing.push(assignment);
-    assignmentsByClient.set(assignment.clientId, existing);
-  }
-
-  const userStats = new Map<
-    string,
-    {
-      userName: string;
-      totalCommission: number;
-      dealsClosed: number;
-      totalDealValue: number;
-    }
-  >();
-  const relationshipStats = new Map<
-    string,
-    { userName: string; dealsClosed: number; totalDealValue: number }
-  >();
-
-  for (const deal of wonDealsYTD) {
-    const clientAssignments = assignmentsByClient.get(deal.clientId) ?? [];
-    const dealValue = Number(deal.dealValue);
-    const totalCommission = Number(deal.totalCommission);
-
-    for (const assignment of clientAssignments) {
-      const userId = assignment.user.id;
-      const userName = getUserName(assignment.user.name, assignment.user.email);
-
-      const existing = userStats.get(userId) ?? {
-        userName,
-        totalCommission: 0,
-        dealsClosed: 0,
-        totalDealValue: 0,
-      };
-
-      existing.totalCommission +=
-        totalCommission * LEADERBOARD_COMMISSION_RATES[assignment.role];
-      existing.dealsClosed += 1;
-      existing.totalDealValue += dealValue;
-      userStats.set(userId, existing);
-
-      if (assignment.role === AssignmentRole.RELATIONSHIP) {
-        const relationshipEntry = relationshipStats.get(userId) ?? {
-          userName,
-          dealsClosed: 0,
-          totalDealValue: 0,
-        };
-
-        relationshipEntry.dealsClosed += 1;
-        relationshipEntry.totalDealValue += dealValue;
-        relationshipStats.set(userId, relationshipEntry);
-      }
-    }
-  }
-
-  return {
-    commissionLeaderboard: Array.from(userStats.values())
-      .map(({ userName, totalCommission, dealsClosed }) => ({
-        userName,
-        totalCommission: Math.round(totalCommission * 100) / 100,
-        dealsClosed,
-      }))
-      .sort((a, b) => b.totalCommission - a.totalCommission),
-    dealsClosedLeaderboard: Array.from(relationshipStats.values())
-      .map(({ userName, dealsClosed, totalDealValue }) => ({
-        userName,
-        dealsClosed,
-        averageDealValue:
-          dealsClosed > 0
-            ? Math.round((totalDealValue / dealsClosed) * 100) / 100
-            : 0,
-      }))
-      .sort((a, b) => b.dealsClosed - a.dealsClosed),
-  };
+  return calculateAdminLeaderboardsWithLegacyFallback(
+    wonDealsYTD.map((deal) => ({
+      id: deal.id,
+      clientId: deal.clientId,
+      dealValue: deal.dealValue,
+      totalCommission: deal.totalCommission,
+      status: DealStatus.WON,
+      participants: deal.participants.map((participant) => ({
+        id: participant.id,
+        userId: participant.userId,
+        userName: participant.user
+          ? getUserName(participant.user.name, participant.user.email)
+          : null,
+        role: participant.role,
+        commissionPercent: participant.commissionPercent,
+        commissionAmount: participant.commissionAmount,
+        isCommissionable: participant.isCommissionable,
+      })),
+    })),
+    assignments.map((assignment) => ({
+      clientId: assignment.clientId,
+      role: assignment.role,
+      userId: assignment.user.id,
+      userName: getUserName(assignment.user.name, assignment.user.email),
+    })),
+    LEADERBOARD_COMMISSION_RATES
+  );
   });
 }
 

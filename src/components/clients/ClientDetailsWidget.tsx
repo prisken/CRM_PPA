@@ -2,15 +2,26 @@
 
 import { memo, useState } from 'react';
 import ClientDetailsEditModal from '@/components/clients/ClientDetailsEditModal';
+import ImportantDatesPanel from '@/components/clients/ImportantDatesPanel';
 import LeadSourceBadges from '@/components/clients/LeadSourceBadges';
+import EmptyMuted from '@/components/ui/EmptyMuted';
+import { useDisplayDensity } from '@/components/ui/DisplayDensityProvider';
+import { getWidgetPaddingClass } from '@/components/ui/displayDensity';
 
 export type ImportantDate = {
+  id?: string;
   label: string;
   date: string;
+  time?: string | null;
+  notes?: string | null;
+  scheduledAt?: string;
+  hasTime?: boolean;
 };
 
 type ClientDetailsWidgetProps = {
   clientId: string;
+  /** When true (or status is lead-like), label UI as Lead Details. */
+  isLead?: boolean;
   name: string;
   company: string | null;
   email: string | null;
@@ -36,34 +47,9 @@ function DetailField({ label, value }: { label: string; value: string }) {
   );
 }
 
-function formatImportantDate(date: string) {
-  if (!date) {
-    return '—';
-  }
-
-  const parsed = new Date(date);
-  if (Number.isNaN(parsed.getTime())) {
-    return date;
-  }
-
-  return parsed.toLocaleDateString(undefined, {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-  });
-}
-
-function normalizeImportantDates(dates: ImportantDate[]) {
-  return dates.filter(
-    (entry) =>
-      typeof entry === 'object' &&
-      entry !== null &&
-      (entry.label?.trim() || entry.date?.trim())
-  );
-}
-
 export default memo(function ClientDetailsWidget({
   clientId,
+  isLead = false,
   name,
   company,
   email,
@@ -78,14 +64,24 @@ export default memo(function ClientDetailsWidget({
   onMutationSuccess,
 }: ClientDetailsWidgetProps) {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
-  const displayDates = normalizeImportantDates(importantDates);
+  const { density } = useDisplayDensity();
+  const widgetPaddingClass = getWidgetPaddingClass(density);
   const canEditDetails = isSuperAdmin || isRelationshipSpecialist;
+  const entityLabel = isLead ? 'Lead' : 'Client';
+  const hasExtraDetails =
+    Boolean(roleInCompany?.trim()) ||
+    employeeCount !== null ||
+    Boolean(expectations?.trim());
 
   return (
     <>
-      <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-        <div className="mb-4 flex items-center justify-between gap-3">
-          <h3 className="text-base font-semibold text-gray-900">Client Details</h3>
+      <div
+        className={`rounded-xl border border-gray-200 bg-white shadow-sm ${widgetPaddingClass}`}
+      >
+        <div className="mb-2.5 flex items-center justify-between gap-3">
+          <h3 className="text-sm font-semibold text-gray-900">
+            {entityLabel} Details
+          </h3>
           {canEditDetails && (
             <button
               type="button"
@@ -97,60 +93,67 @@ export default memo(function ClientDetailsWidget({
           )}
         </div>
 
-        <dl className="grid gap-4 sm:grid-cols-2">
+        <dl className="grid gap-3 sm:grid-cols-2">
           <DetailField label="Name" value={name} />
           <DetailField label="Company" value={company ?? '—'} />
           <DetailField label="Email" value={email ?? '—'} />
           <DetailField label="Phone" value={phone ?? '—'} />
-          <div>
+          <div className="sm:col-span-2">
             <dt className="text-xs font-medium uppercase tracking-wide text-gray-500">
               Lead Source
             </dt>
             <dd className="mt-1">
               {leadSource?.trim() ? (
-                <LeadSourceBadges sources={[leadSource]} />
+                <LeadSourceBadges sources={[leadSource]} maxVisible={2} />
               ) : (
-                <span className="text-sm font-medium text-gray-900">—</span>
+                <EmptyMuted />
               )}
             </dd>
           </div>
-          <DetailField label="Role in Company" value={roleInCompany ?? '—'} />
-          <DetailField
-            label="Employee Count"
-            value={employeeCount !== null ? String(employeeCount) : '—'}
-          />
         </dl>
 
-        <div className="mt-4">
-          <dt className="text-xs font-medium uppercase tracking-wide text-gray-500">
-            Expectations
-          </dt>
-          <dd className="mt-1 whitespace-pre-wrap text-sm text-gray-900">
-            {expectations?.trim() ? expectations : '—'}
-          </dd>
+        <div className="mt-3 border-t border-gray-100 pt-3">
+          <ImportantDatesPanel
+            ownerId={clientId}
+            ownerKind={isLead ? 'lead' : 'client'}
+            canEdit={canEditDetails}
+            initialDates={importantDates}
+            onChanged={onMutationSuccess}
+          />
         </div>
 
-        <div className="mt-4">
-          <dt className="text-xs font-medium uppercase tracking-wide text-gray-500">
-            Important Dates
-          </dt>
-          {displayDates.length === 0 ? (
-            <dd className="mt-1 text-sm text-gray-900">—</dd>
-          ) : (
-            <ul className="mt-2 space-y-1">
-              {displayDates.map((entry, index) => (
-                <li key={`${entry.label}-${entry.date}-${index}`} className="text-sm text-gray-900">
-                  {entry.label?.trim() || 'Untitled'}: {formatImportantDate(entry.date)}
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
+        {hasExtraDetails && (
+          <details className="mt-3 border-t border-gray-100 pt-3">
+            <summary className="cursor-pointer text-xs font-medium text-blue-600 hover:text-blue-700">
+              More details
+            </summary>
+            <dl className="mt-3 grid gap-3 sm:grid-cols-2">
+              <DetailField
+                label="Role in Company"
+                value={roleInCompany ?? '—'}
+              />
+              <DetailField
+                label="Employee Count"
+                value={employeeCount !== null ? String(employeeCount) : '—'}
+              />
+            </dl>
+
+            <div className="mt-3">
+              <dt className="text-xs font-medium uppercase tracking-wide text-gray-500">
+                Expectations
+              </dt>
+              <dd className="mt-1 line-clamp-3 whitespace-pre-wrap text-sm text-gray-900">
+                {expectations?.trim() ? expectations : '—'}
+              </dd>
+            </div>
+          </details>
+        )}
       </div>
 
       {isEditModalOpen && (
         <ClientDetailsEditModal
           clientId={clientId}
+          isLead={isLead}
           initialName={name}
           initialCompany={company}
           initialEmail={email}

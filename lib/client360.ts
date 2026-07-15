@@ -8,8 +8,14 @@ import type {
 import {
   calculateCommittedValue,
   calculatePotentialValue,
+  dealResponseSelect,
   formatDealResponse,
 } from '@/lib/dealCalculations';
+import {
+  resolveImportantDatesForClient,
+  importantDateRecordSelect,
+  type ImportantDateRecordLike,
+} from '@/lib/importantDates';
 import { prisma } from '@/lib/prisma';
 import { timeAsync } from '@/lib/performance';
 
@@ -55,24 +61,14 @@ function resolveStrategyText(
   return latestStrategy.description;
 }
 
-function normalizeImportantDates(value: Client['importantDates']) {
-  if (!Array.isArray(value)) {
-    return [];
-  }
-
-  return value
-    .filter((entry): entry is { label: string; date: string } => {
-      return (
-        typeof entry === 'object' &&
-        entry !== null &&
-        'label' in entry &&
-        'date' in entry
-      );
-    })
-    .map((entry) => ({
-      label: String(entry.label ?? ''),
-      date: String(entry.date ?? ''),
-    }));
+function resolveClientImportantDates(client: {
+  importantDates: Client['importantDates'];
+  importantDateRecords?: ImportantDateRecordLike[] | null;
+}) {
+  return resolveImportantDatesForClient({
+    records: client.importantDateRecords,
+    legacyJson: client.importantDates,
+  });
 }
 
 function buildActivityLog(client: {
@@ -152,7 +148,7 @@ export function buildClient360CoreResponse(
     roleInCompany: client.roleInCompany,
     employeeCount: client.employeeCount,
     expectations: client.expectations,
-    importantDates: normalizeImportantDates(client.importantDates),
+    importantDates: resolveClientImportantDates(client),
     equity: client.equity !== null && client.equity !== undefined ? Number(client.equity) : 0,
     status: client.status,
     pendingNotifications: client.pendingNotifications,
@@ -267,15 +263,7 @@ export function buildClient360Response(client: ClientWithRelations) {
   }));
 
   const activityLog = buildActivityLog(client);
-  const deals = client.deals.map((deal) => ({
-    id: deal.id,
-    name: deal.name,
-    dealValue: Number(deal.dealValue),
-    totalCommission: Number(deal.totalCommission),
-    status: deal.status,
-    createdAt: deal.createdAt.toISOString(),
-    updatedAt: deal.updatedAt.toISOString(),
-  }));
+  const deals = client.deals.map(formatDealResponse);
 
   return {
     client_id: client.id,
@@ -288,7 +276,7 @@ export function buildClient360Response(client: ClientWithRelations) {
     roleInCompany: client.roleInCompany,
     employeeCount: client.employeeCount,
     expectations: client.expectations,
-    importantDates: normalizeImportantDates(client.importantDates),
+    importantDates: resolveClientImportantDates(client),
     committedValue: calculateCommittedValue(client.deals),
     potentialValue: calculatePotentialValue(client.deals),
     equity: client.equity !== null && client.equity !== undefined ? Number(client.equity) : 0,
@@ -328,6 +316,10 @@ export const client360CoreInclude = {
       },
     },
   },
+  importantDateRecords: {
+    orderBy: { scheduledAt: 'asc' },
+    select: importantDateRecordSelect,
+  },
   documents: {
     orderBy: { uploadedAt: 'desc' },
     select: {
@@ -352,6 +344,7 @@ export const client360CoreInclude = {
 /** Lighter include for Client 360 server page load (no documents/strategies). */
 export const client360PageCoreInclude = {
   clientAssignments: client360CoreInclude.clientAssignments,
+  importantDateRecords: client360CoreInclude.importantDateRecords,
 } satisfies Prisma.ClientInclude;
 
 export const client360StrategyTasksInclude = {
@@ -418,6 +411,10 @@ export const client360Include = {
       },
     },
   },
+  importantDateRecords: {
+    orderBy: { scheduledAt: 'asc' },
+    select: importantDateRecordSelect,
+  },
   documents: {
     orderBy: { uploadedAt: 'desc' },
   },
@@ -457,15 +454,7 @@ export const client360Include = {
   },
   deals: {
     orderBy: { createdAt: 'asc' },
-    select: {
-      id: true,
-      name: true,
-      dealValue: true,
-      totalCommission: true,
-      status: true,
-      createdAt: true,
-      updatedAt: true,
-    },
+    select: dealResponseSelect,
   },
 } satisfies Prisma.ClientInclude;
 
@@ -538,15 +527,7 @@ export async function getClient360DealsData(
       const deals = await prisma.deal.findMany({
         where: { clientId },
         orderBy: { createdAt: 'asc' },
-        select: {
-          id: true,
-          name: true,
-          dealValue: true,
-          totalCommission: true,
-          status: true,
-          createdAt: true,
-          updatedAt: true,
-        },
+        select: dealResponseSelect,
       });
 
       return deals.map(formatDealResponse);

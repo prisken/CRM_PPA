@@ -5,6 +5,10 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import AuthRequiredMessage from '@/components/auth/AuthRequiredMessage';
 import Logo from '@/components/Logo';
+import {
+  DisplayDensityToggle,
+  useDisplayDensity,
+} from '@/components/ui/DisplayDensityProvider';
 import { useUserProfile } from '@/hooks/useUserProfile';
 import { authenticatedFetch } from '@/lib/authenticatedFetch';
 import { supabase } from '@/lib/supabaseClient';
@@ -207,8 +211,32 @@ export default function UserProfileSettingsPage() {
               to update it.
             </p>
           </div>
+
+          <DisplayDensityPreferenceSection />
         </div>
       </div>
     </main>
+  );
+}
+
+function DisplayDensityPreferenceSection() {
+  const { density } = useDisplayDensity();
+
+  return (
+    <div className="rounded-lg border border-gray-200 p-6">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0 flex-1">
+          <h2 className="text-sm font-medium text-gray-500">Display density</h2>
+          <p className="mt-1 text-sm text-gray-700">
+            Choose how tightly information is spaced across CRM lists and side
+            panels.
+          </p>
+          <p className="mt-2 text-xs text-gray-500">
+            Current setting: {density === 'compact' ? 'Compact' : 'Comfortable'}
+          </p>
+        </div>
+        <DisplayDensityToggle showOnMobile className="self-start" />
+      </div>
+    </div>
   );
 }

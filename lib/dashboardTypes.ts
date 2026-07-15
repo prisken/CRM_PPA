@@ -1,10 +1,25 @@
+export type DealParticipationRow = {
+  dealId: string;
+  dealName: string;
+  clientId: string;
+  clientName: string;
+  status: string;
+  dealType: string;
+  myRoles: string[];
+  myCommissionPercent: number;
+  myCommissionAmount: number;
+};
+
 export type AssignedClientRow = {
   clientId: string;
   clientName: string;
   myRole: string;
+  myRoles: string[];
   clientStatus: string;
   dealValue: number;
 };
+
+export type LegacyAssignedClientRow = AssignedClientRow;
 
 export type OpenTaskRow = {
   taskId: string;
@@ -35,6 +50,7 @@ export type PerformanceMetrics = {
 
 export type StandardDashboardData = {
   assignedClients: AssignedClientRow[];
+  legacyDoctorAssignments?: LegacyAssignedClientRow[];
   openTasks: OpenTaskRow[];
   recentActivity: GroupedClientActivity[];
   performanceMetrics: PerformanceMetrics;

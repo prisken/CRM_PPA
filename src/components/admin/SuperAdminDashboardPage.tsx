@@ -9,7 +9,9 @@ import AuthRequiredMessage from '@/components/auth/AuthRequiredMessage';
 import CompanyEarningsWidget from '@/components/admin/CompanyEarningsWidget';
 import KpiBar, { type KpiData } from '@/components/admin/KpiBar';
 import CollapsibleActivityWidget from '@/components/dashboard/CollapsibleActivityWidget';
+import ImportantDatesCalendarWidget from '@/components/dashboard/ImportantDatesCalendarWidget';
 import Logo from '@/components/Logo';
+import SectionCard from '@/components/ui/SectionCard';
 import { useUserProfile } from '@/hooks/useUserProfile';
 import type { SuperAdminDashboardData } from '@/lib/dashboardTypes';
 import { supabase } from '@/lib/supabaseClient';
@@ -37,6 +39,44 @@ const AddClientModal = dynamic(() => import('@/components/admin/AddClientModal')
   ssr: false,
 });
 
+function QuickActionsRow({ onAddClient }: { onAddClient: () => void }) {
+  return (
+    <section
+      aria-label="Quick actions"
+      className="rounded-xl border border-gray-200 bg-white p-3 shadow-sm sm:p-4"
+    >
+      <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Quick actions</p>
+      <div className="mt-2 flex flex-wrap gap-2">
+        <button
+          type="button"
+          onClick={onAddClient}
+          className="rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700"
+        >
+          Add Lead / Client
+        </button>
+        <Link
+          href="/admin/leads"
+          className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+        >
+          Lead Command Center
+        </Link>
+        <Link
+          href="/admin/users"
+          className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+        >
+          User Management
+        </Link>
+        <Link
+          href="/admin/reconciliation"
+          className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+        >
+          Reconciliation
+        </Link>
+      </div>
+    </section>
+  );
+}
+
 export default function SuperAdminDashboardPage() {
   const router = useRouter();
   const { profile, loading: profileLoading, error: profileError } = useUserProfile();
@@ -50,6 +90,7 @@ export default function SuperAdminDashboardPage() {
   const [kpiError, setKpiError] = useState<string | null>(null);
   const [showAddClient, setShowAddClient] = useState(false);
   const [pipelineRefreshKey, setPipelineRefreshKey] = useState(0);
+  const [pipelineSectionKey, setPipelineSectionKey] = useState('pipeline-collapsed');
 
   const loadKpis = useCallback(async () => {
     setKpiLoading(true);
@@ -124,8 +165,16 @@ export default function SuperAdminDashboardPage() {
       return;
     }
 
-    const element = document.getElementById('master-pipeline');
-    element?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    setPipelineSectionKey('pipeline-expanded');
+
+    const timeoutId = window.setTimeout(() => {
+      document.getElementById('master-pipeline')?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'start',
+      });
+    }, 100);
+
+    return () => window.clearTimeout(timeoutId);
   }, [profileLoading, profile]);
 
   async function handleSignOut() {
@@ -182,36 +231,11 @@ export default function SuperAdminDashboardPage() {
             </div>
           </div>
           <div className="flex flex-wrap gap-3">
-            <button
-              type="button"
-              onClick={handleOpenAddClient}
-              className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
-            >
-              + Add Lead / Client
-            </button>
-            <Link
-              href="/admin/leads"
-              className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-            >
-              Lead Command Center
-            </Link>
             <a
               href="/dashboard"
               className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
             >
               User Dashboard
-            </a>
-            <a
-              href="/admin/reconciliation"
-              className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-            >
-              Reconciliation
-            </a>
-            <a
-              href="/admin/users"
-              className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-            >
-              User Management
             </a>
             <Link
               href="/dashboard/settings"
@@ -230,7 +254,9 @@ export default function SuperAdminDashboardPage() {
         </div>
       </header>
 
-      <div className="mx-auto flex max-w-7xl flex-col gap-6 px-4 py-6 sm:px-6 lg:px-8">
+      <div className="mx-auto flex max-w-7xl flex-col gap-4 px-4 py-6 sm:gap-5 sm:px-6 lg:px-8">
+        <QuickActionsRow onAddClient={handleOpenAddClient} />
+
         <div className="flex flex-col gap-4 xl:flex-row xl:items-start">
           <div className="min-w-0 flex-1">
             <KpiBar data={kpiData} loading={kpiLoading} error={kpiError} />
@@ -242,32 +268,66 @@ export default function SuperAdminDashboardPage() {
           />
         </div>
 
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-          <ConversionFunnelChart />
-          <RevenueTrackerChart />
-        </div>
+        <SectionCard
+          title="Schedule"
+          description="Important dates across clients and leads this month"
+          collapsible
+        >
+          <ImportantDatesCalendarWidget />
+        </SectionCard>
 
-        <Leaderboards />
+        <SectionCard
+          title="Analytics"
+          description="Conversion funnel and revenue trends"
+          collapsible
+          defaultCollapsed
+        >
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 lg:gap-6">
+            <ConversionFunnelChart />
+            <RevenueTrackerChart />
+          </div>
+        </SectionCard>
 
-        {dashboardLoading ? (
-          <section className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+        <SectionCard
+          title="Leaderboards"
+          description="Commission and deals closed rankings"
+          collapsible
+          defaultCollapsed
+        >
+          <Leaderboards />
+        </SectionCard>
+
+        <SectionCard
+          title="Recent Activity"
+          description="Latest updates across all clients"
+          collapsible
+          defaultCollapsed
+        >
+          {dashboardLoading ? (
             <div className="h-48 animate-pulse rounded-lg bg-gray-100" />
-          </section>
-        ) : dashboardError ? (
-          <section className="rounded-xl border border-red-200 bg-red-50 p-6 text-sm text-red-700">
-            {dashboardError}
-          </section>
-        ) : (
-          <CollapsibleActivityWidget
-            recentActivity={dashboardData?.recentActivity ?? []}
-            title="Recent Activity (All Clients)"
-          />
-        )}
+          ) : dashboardError ? (
+            <p className="text-sm text-red-600">{dashboardError}</p>
+          ) : (
+            <CollapsibleActivityWidget
+              recentActivity={dashboardData?.recentActivity ?? []}
+              title=""
+              showOuterTitle={false}
+            />
+          )}
+        </SectionCard>
 
-        <MasterPipelineView
-          refreshKey={pipelineRefreshKey}
-          onAddClick={handleOpenAddClient}
-        />
+        <SectionCard
+          key={pipelineSectionKey}
+          title="Pipeline Overview"
+          description="Master pipeline by stage — use Lead Command Center for day-to-day lead work"
+          collapsible
+          defaultCollapsed={pipelineSectionKey !== 'pipeline-expanded'}
+        >
+          <MasterPipelineView
+            refreshKey={pipelineRefreshKey}
+            onAddClick={handleOpenAddClient}
+          />
+        </SectionCard>
       </div>
 
       {showAddClient && (

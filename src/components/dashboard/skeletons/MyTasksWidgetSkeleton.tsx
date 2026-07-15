@@ -9,11 +9,11 @@ export default function MyTasksWidgetSkeleton() {
     <section className={dashboardWidgetSectionClassName}>
       <h2 className={dashboardWidgetHeadingClassName}>My Open Tasks</h2>
 
-      <ul className="mt-4 space-y-3">
+      <ul className="mt-3 space-y-2">
         {Array.from({ length: 3 }).map((_, index) => (
           <li
             key={index}
-            className="flex items-start gap-3 rounded-lg border border-gray-100 bg-gray-50 px-3 py-3"
+            className="flex items-start gap-2.5 rounded-lg border border-gray-100 bg-gray-50 px-2.5 py-2"
           >
             <SkeletonPulse className="mt-1 h-4 w-4 shrink-0 rounded" />
             <div className="min-w-0 flex-1">

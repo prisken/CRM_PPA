@@ -1,23 +1,37 @@
-import { AssignmentRole, DealStatus } from '@prisma/client';
+import { DealStatus } from '@prisma/client';
 import { NextResponse } from 'next/server';
 import {
   getClientOr404,
   logClientSystemEvent,
-  requireSuperAdminOrClientRole,
+  requireDealManageAccess,
 } from '@/lib/authHelpers';
 import {
   createCommissionReturnablesForWonDeal,
 } from '@/lib/commissionReturnables';
+import { calculateParticipantAmount } from '@/lib/dealCommissionTemplates';
 import {
+  dealResponseSelect,
   formatDealResponse,
   parseMoneyValue,
 } from '@/lib/dealCalculations';
+import {
+  parseDealType,
+  resolveExplicitDealParticipants,
+  toParticipantCreateInput,
+  type NormalizedDealParticipant,
+} from '@/lib/dealParticipants';
 import { prisma } from '@/lib/prisma';
 
 async function getDealForClient(clientId: string, dealId: string) {
   const deal = await prisma.deal.findFirst({
     where: { id: dealId, clientId },
-    select: { id: true, name: true, status: true },
+    select: {
+      id: true,
+      name: true,
+      status: true,
+      totalCommission: true,
+      dealType: true,
+    },
   });
 
   if (!deal) {
@@ -32,9 +46,7 @@ export async function PUT(
   { params }: { params: Promise<{ id: string; dealId: string }> }
 ) {
   const { id: clientId, dealId } = await params;
-  const auth = await requireSuperAdminOrClientRole(clientId, [
-    AssignmentRole.DOCTOR,
-  ]);
+  const auth = await requireDealManageAccess(clientId, dealId);
   if (auth.error) {
     return auth.error;
   }
@@ -49,7 +61,8 @@ export async function PUT(
     return dealCheck.error;
   }
 
-  const previousStatus = dealCheck.deal.status;
+  const existingDeal = dealCheck.deal;
+  const previousStatus = existingDeal.status;
 
   const body = await request.json();
   const name = body.name !== undefined ? body.name?.trim() : undefined;
@@ -90,23 +103,115 @@ export async function PUT(
     return NextResponse.json({ error: 'Invalid deal status' }, { status: 400 });
   }
 
-  const updatedDeal = await prisma.deal.update({
-    where: { id: dealId },
-    data: {
-      ...(name !== undefined && { name }),
-      ...(dealValueResult && 'value' in dealValueResult && {
-        dealValue: dealValueResult.value,
-      }),
-      ...(totalCommissionResult && 'value' in totalCommissionResult && {
-        totalCommission: totalCommissionResult.value,
-      }),
-      ...(status !== undefined && { status }),
-    },
+  const dealTypeProvided =
+    body.dealType !== undefined || body.deal_type !== undefined;
+  const dealType = dealTypeProvided
+    ? parseDealType(body.dealType ?? body.deal_type)
+    : null;
+  if (dealTypeProvided && !dealType) {
+    return NextResponse.json({ error: 'Invalid deal type' }, { status: 400 });
+  }
+
+  const participantsProvided = body.participants !== undefined;
+  const effectiveStatus = status ?? existingDeal.status;
+  const effectiveTotalCommission =
+    totalCommissionResult && 'value' in totalCommissionResult
+      ? totalCommissionResult.value
+      : Number(existingDeal.totalCommission);
+  const totalCommissionChanged =
+    totalCommissionResult !== undefined &&
+    'value' in totalCommissionResult &&
+    totalCommissionResult.value !== Number(existingDeal.totalCommission);
+
+  let replacementParticipants: NormalizedDealParticipant[] | undefined;
+
+  if (participantsProvided) {
+    const participantsResult = resolveExplicitDealParticipants({
+      rawParticipants: body.participants,
+      totalCommission: effectiveTotalCommission,
+      status: effectiveStatus,
+    });
+    if ('error' in participantsResult) {
+      return NextResponse.json(
+        {
+          error: participantsResult.error,
+          ...(participantsResult.details
+            ? { details: participantsResult.details }
+            : {}),
+        },
+        { status: 400 }
+      );
+    }
+
+    replacementParticipants = participantsResult.participants;
+  }
+
+  const updatedDeal = await prisma.$transaction(async (tx) => {
+    await tx.deal.update({
+      where: { id: dealId },
+      data: {
+        ...(name !== undefined && { name }),
+        ...(dealValueResult && 'value' in dealValueResult && {
+          dealValue: dealValueResult.value,
+        }),
+        ...(totalCommissionResult && 'value' in totalCommissionResult && {
+          totalCommission: totalCommissionResult.value,
+        }),
+        ...(status !== undefined && { status }),
+        ...(dealType && { dealType }),
+      },
+    });
+
+    if (participantsProvided) {
+      await tx.dealParticipant.deleteMany({
+        where: { dealId },
+      });
+
+      if (replacementParticipants && replacementParticipants.length > 0) {
+        await tx.dealParticipant.createMany({
+          data: toParticipantCreateInput(replacementParticipants).map(
+            (participant) => ({
+              dealId,
+              ...participant,
+            })
+          ),
+        });
+      }
+    } else if (totalCommissionChanged) {
+      const existingParticipants = await tx.dealParticipant.findMany({
+        where: { dealId },
+        select: {
+          id: true,
+          commissionPercent: true,
+        },
+      });
+
+      await Promise.all(
+        existingParticipants.map((participant) =>
+          tx.dealParticipant.update({
+            where: { id: participant.id },
+            data: {
+              commissionAmount: calculateParticipantAmount(
+                effectiveTotalCommission,
+                Number(participant.commissionPercent)
+              ),
+            },
+          })
+        )
+      );
+    }
+
+    return tx.deal.findUniqueOrThrow({
+      where: { id: dealId },
+      select: dealResponseSelect,
+    });
   });
 
   if (
     updatedDeal.status === DealStatus.WON &&
-    previousStatus !== DealStatus.WON
+    (previousStatus !== DealStatus.WON ||
+      participantsProvided ||
+      totalCommissionChanged)
   ) {
     await createCommissionReturnablesForWonDeal({
       dealId: updatedDeal.id,
@@ -129,9 +234,7 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string; dealId: string }> }
 ) {
   const { id: clientId, dealId } = await params;
-  const auth = await requireSuperAdminOrClientRole(clientId, [
-    AssignmentRole.DOCTOR,
-  ]);
+  const auth = await requireDealManageAccess(clientId, dealId);
   if (auth.error) {
     return auth.error;
   }

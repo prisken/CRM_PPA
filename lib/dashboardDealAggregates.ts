@@ -7,6 +7,33 @@ export type ClientDealAggregates = {
   proposedDealValue: number;
 };
 
+export const dashboardWonDealSelect = {
+  id: true,
+  clientId: true,
+  dealValue: true,
+  totalCommission: true,
+  participants: {
+    select: {
+      id: true,
+      userId: true,
+      role: true,
+      commissionPercent: true,
+      commissionAmount: true,
+      isCommissionable: true,
+      user: {
+        select: {
+          name: true,
+          email: true,
+        },
+      },
+    },
+  },
+} as const;
+
+export type DashboardWonDealWithParticipants = Prisma.DealGetPayload<{
+  select: typeof dashboardWonDealSelect;
+}>;
+
 const emptyAggregates: ClientDealAggregates = {
   wonCommission: 0,
   wonDealValue: 0,
@@ -59,6 +86,53 @@ export async function fetchDealAggregatesByClientIds(clientIds: string[]) {
   }
 
   return aggregates;
+}
+
+/**
+ * Loads all WON deals (with participants) for the given clients in one query.
+ * Used by the standard dashboard secured-commission metric.
+ */
+export async function fetchWonDealsWithParticipantsByClientIds(
+  clientIds: string[]
+): Promise<DashboardWonDealWithParticipants[]> {
+  if (clientIds.length === 0) {
+    return [];
+  }
+
+  return prisma.deal.findMany({
+    where: {
+      clientId: { in: clientIds },
+      status: DealStatus.WON,
+    },
+    select: dashboardWonDealSelect,
+  });
+}
+
+/**
+ * All WON deals with participants (admin KPIs / analytics).
+ */
+export async function fetchAllWonDealsWithParticipants(): Promise<
+  DashboardWonDealWithParticipants[]
+> {
+  return prisma.deal.findMany({
+    where: { status: DealStatus.WON },
+    select: dashboardWonDealSelect,
+  });
+}
+
+/**
+ * WON deals updated on/after `since`, with participants (admin leaderboards YTD).
+ */
+export async function fetchWonDealsWithParticipantsSince(
+  since: Date
+): Promise<DashboardWonDealWithParticipants[]> {
+  return prisma.deal.findMany({
+    where: {
+      status: DealStatus.WON,
+      updatedAt: { gte: since },
+    },
+    select: dashboardWonDealSelect,
+  });
 }
 
 export function getClientDealAggregates(

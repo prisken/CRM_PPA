@@ -21,6 +21,7 @@ export async function GET(request: Request) {
         select: {
           name: true,
           company: true,
+          status: true,
         },
       },
     },
@@ -34,10 +35,12 @@ export async function GET(request: Request) {
       assignment_id: assignment.assignmentId,
       client_id: assignment.clientId,
       clientName: assignment.client.company ?? assignment.client.name,
+      clientStatus: assignment.client.status,
       role: assignment.role,
     })),
     roles,
     hasAnyAssignment: assignments.length > 0,
     hasDoctorRole: roles.includes(AssignmentRole.DOCTOR),
+    hasRelationshipRole: roles.includes(AssignmentRole.RELATIONSHIP),
   });
 }

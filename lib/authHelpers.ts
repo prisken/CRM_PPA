@@ -1,4 +1,4 @@
-import { AssignmentRole, ClientStatus, UserRole, UserStatus } from '@prisma/client';
+import { AssignmentRole, ClientStatus, DealParticipantRole, UserRole, UserStatus } from '@prisma/client';
 import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
 import {
@@ -78,28 +78,30 @@ export async function getAuthenticatedUser() {
 export async function getAuthenticatedUserFromRequest(request: Request) {
   const authHeader = request.headers.get('authorization');
   if (authHeader?.startsWith('Bearer ')) {
-    const token = authHeader.slice(7);
+    const token = authHeader.slice(7).trim();
 
-    try {
-      const { verifyAuthToken } = await import('@/lib/jwt');
-      const payload = await verifyAuthToken(token);
+    if (token) {
+      try {
+        const { verifyAuthToken } = await import('@/lib/jwt');
+        const payload = await verifyAuthToken(token);
 
-      const dbUser = await prisma.user.findUnique({
-        where: { id: payload.id },
-        select: { id: true, role: true, name: true, email: true, status: true },
-      });
+        const dbUser = await prisma.user.findUnique({
+          where: { id: payload.id },
+          select: { id: true, role: true, name: true, email: true, status: true },
+        });
 
-      if (dbUser) {
-        if (dbUser.status !== UserStatus.ACTIVE) {
-          return {
-            error: NextResponse.json({ error: 'Account deactivated' }, { status: 403 }),
-          };
+        if (dbUser) {
+          if (dbUser.status !== UserStatus.ACTIVE) {
+            return {
+              error: NextResponse.json({ error: 'Account deactivated' }, { status: 403 }),
+            };
+          }
+
+          return { user: dbUser };
         }
-
-        return { user: dbUser };
+      } catch {
+        // Fall back to the Supabase session cookie when the Bearer token is invalid.
       }
-    } catch {
-      return { error: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }) };
     }
   }
 
@@ -193,6 +195,119 @@ export async function hasClientAssignment(
   return assignment;
 }
 
+/** True when the user is a DealParticipant (any role) on at least one deal for this client. */
+export async function hasDealParticipantOnClient(
+  userId: string,
+  clientId: string
+) {
+  const participant = await prisma.dealParticipant.findFirst({
+    where: {
+      userId,
+      deal: { clientId },
+    },
+    select: { id: true },
+  });
+
+  return participant;
+}
+
+export async function canReadClientCore(
+  userId: string,
+  userRole: UserRole,
+  clientId: string
+) {
+  if (userRole === UserRole.SUPER_ADMIN) {
+    return true;
+  }
+
+  const assignment = await hasClientAssignment(userId, clientId);
+  if (assignment) {
+    return true;
+  }
+
+  const participant = await hasDealParticipantOnClient(userId, clientId);
+  return Boolean(participant);
+}
+
+export async function canAccessClientHierarchy(
+  userId: string,
+  userRole: UserRole,
+  clientId: string
+) {
+  if (userRole === UserRole.SUPER_ADMIN) {
+    return true;
+  }
+
+  const assignment = await hasClientAssignment(userId, clientId);
+  return Boolean(assignment);
+}
+
+async function resolveAuthenticatedUser(request?: Request) {
+  return request
+    ? getAuthenticatedUserFromRequest(request)
+    : getAuthenticatedUser();
+}
+
+/**
+ * Client 360 core read: SUPER_ADMIN, any ClientAssignment, or any DealParticipant on the client.
+ */
+export async function requireClientCoreReadAccess(
+  clientId: string,
+  request?: Request
+) {
+  const auth = await resolveAuthenticatedUser(request);
+  if (auth.error) {
+    return auth;
+  }
+
+  const allowed = await canReadClientCore(
+    auth.user.id,
+    auth.user.role,
+    clientId
+  );
+
+  if (!allowed) {
+    return { error: NextResponse.json({ error: 'Forbidden' }, { status: 403 }) };
+  }
+
+  return auth;
+}
+
+/**
+ * Company hierarchy view: SUPER_ADMIN or any ClientAssignment (not deal-only participants).
+ */
+export async function requireClientHierarchyAccess(
+  clientId: string,
+  request?: Request
+) {
+  const auth = await resolveAuthenticatedUser(request);
+  if (auth.error) {
+    return auth;
+  }
+
+  const allowed = await canAccessClientHierarchy(
+    auth.user.id,
+    auth.user.role,
+    clientId
+  );
+
+  if (!allowed) {
+    return { error: NextResponse.json({ error: 'Forbidden' }, { status: 403 }) };
+  }
+
+  return auth;
+}
+
+/**
+ * Create employee lead: SUPER_ADMIN or any ClientAssignment (not deal-only participants).
+ */
+export async function requireClientEmployeeLeadCreateAccess(
+  clientId: string,
+  request?: Request
+) {
+  return requireClientHierarchyAccess(clientId, request);
+}
+
 export async function requireSuperAdminOrClientRole(
   clientId: string,
   roles: AssignmentRole[]
@@ -212,6 +327,164 @@ export async function requireSuperAdminOrClientRole(
   }
 
   return { ...auth, assignment };
+}
+
+const DEAL_VIEW_CLIENT_ROLES: AssignmentRole[] = [
+  AssignmentRole.RELATIONSHIP,
+  AssignmentRole.ACCOUNT_SERVICE,
+  AssignmentRole.DOCTOR,
+];
+
+const DEAL_CREATE_CLIENT_ROLES: AssignmentRole[] = [
+  AssignmentRole.RELATIONSHIP,
+  AssignmentRole.ACCOUNT_SERVICE,
+  AssignmentRole.DOCTOR,
+];
+
+export type DealAccessForClient = {
+  canView: boolean;
+  canCreate: boolean;
+  canManageAll: boolean;
+  manageableDealIds: string[];
+};
+
+export async function getDealAccessForClient(
+  userId: string,
+  userRole: UserRole,
+  clientId: string
+): Promise<DealAccessForClient> {
+  if (userRole === UserRole.SUPER_ADMIN) {
+    const deals = await prisma.deal.findMany({
+      where: { clientId },
+      select: { id: true },
+    });
+
+    return {
+      canView: true,
+      canCreate: true,
+      canManageAll: true,
+      manageableDealIds: deals.map((deal) => deal.id),
+    };
+  }
+
+  const assignments = await prisma.clientAssignment.findMany({
+    where: { clientId, userId },
+    select: { role: true },
+  });
+  const assignmentRoles = new Set(assignments.map((assignment) => assignment.role));
+
+  const doctorParticipantRows = await prisma.dealParticipant.findMany({
+    where: {
+      userId,
+      role: DealParticipantRole.DOCTOR,
+      deal: { clientId },
+    },
+    select: { dealId: true },
+  });
+
+  const manageableDealIds = doctorParticipantRows.map((row) => row.dealId);
+  const canView =
+    DEAL_VIEW_CLIENT_ROLES.some((role) => assignmentRoles.has(role)) ||
+    manageableDealIds.length > 0;
+  const canCreate = DEAL_CREATE_CLIENT_ROLES.some((role) => assignmentRoles.has(role));
+  const canManageAll = assignmentRoles.has(AssignmentRole.DOCTOR);
+
+  return {
+    canView,
+    canCreate,
+    canManageAll,
+    manageableDealIds,
+  };
+}
+
+export function canUseDealParticipantPicker(
+  userRole: UserRole,
+  access: DealAccessForClient
+) {
+  return (
+    userRole === UserRole.SUPER_ADMIN ||
+    access.canCreate ||
+    access.canManageAll ||
+    access.manageableDealIds.length > 0
+  );
+}
+
+async function requireAuthenticatedActiveUser() {
+  return getAuthenticatedUser();
+}
+
+export async function requireDealViewAccess(clientId: string) {
+  const auth = await requireAuthenticatedActiveUser();
+  if (auth.error) {
+    return auth;
+  }
+
+  const access = await getDealAccessForClient(
+    auth.user.id,
+    auth.user.role,
+    clientId
+  );
+
+  if (!access.canView) {
+    return { error: NextResponse.json({ error: 'Forbidden' }, { status: 403 }) };
+  }
+
+  return { ...auth, dealAccess: access };
+}
+
+export async function requireDealCreateAccess(clientId: string) {
+  const auth = await requireAuthenticatedActiveUser();
+  if (auth.error) {
+    return auth;
+  }
+
+  const access = await getDealAccessForClient(
+    auth.user.id,
+    auth.user.role,
+    clientId
+  );
+
+  if (!access.canCreate) {
+    return { error: NextResponse.json({ error: 'Forbidden' }, { status: 403 }) };
+  }
+
+  return { ...auth, dealAccess: access };
+}
+
+export async function requireDealManageAccess(clientId: string, dealId: string) {
+  const auth = await requireAuthenticatedActiveUser();
+  if (auth.error) {
+    return auth;
+  }
+
+  const access = await getDealAccessForClient(
+    auth.user.id,
+    auth.user.role,
+    clientId
+  );
+
+  if (access.canManageAll || access.manageableDealIds.includes(dealId)) {
+    return { ...auth, dealAccess: access };
+  }
+
+  return { error: NextResponse.json({ error: 'Forbidden' }, { status: 403 }) };
+}
+
+export async function hasDealParticipantRole(
+  userId: string,
+  dealId: string,
+  role: DealParticipantRole
+) {
+  const participant = await prisma.dealParticipant.findFirst({
+    where: {
+      dealId,
+      userId,
+      role,
+    },
+    select: { id: true },
+  });
+
+  return participant;
 }
 
 export async function requireSuperAdminOrClientAccess(clientId: string) {

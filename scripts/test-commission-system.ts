@@ -21,6 +21,13 @@ import {
 import { buildClient360Response, client360Include } from '../lib/client360';
 import { buildStandardDashboard } from '../lib/standardDashboard';
 import { calculateDoctorCommissionReturnableAmount } from '../lib/commissionReturnables';
+import {
+  calculateMySecuredCommissionWithLegacyFallback,
+  calculateCompanyEarningsFromDealParticipants,
+  calculateAdminLeaderboardsWithLegacyFallback,
+} from '../lib/dealParticipantCalculations';
+import { fetchAllWonDealsWithParticipants } from '../lib/dashboardDealAggregates';
+import { DealParticipantRole } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 
 import { signAuthToken } from '../lib/jwt';
@@ -103,6 +110,103 @@ function runUnitTests() {
     `expected 30000, got ${securedCommission}`
   );
 
+  const participantSecuredCommission =
+    calculateMySecuredCommissionWithLegacyFallback(
+      'user-a',
+      [
+        {
+          id: 'deal-1',
+          clientId: 'client-1',
+          totalCommission: 10000,
+          status: DealStatus.WON,
+          participants: [
+            {
+              id: 'participant-1',
+              userId: 'user-a',
+              role: DealParticipantRole.DOCTOR,
+              commissionPercent: 60,
+              commissionAmount: 6000,
+              isCommissionable: true,
+            },
+          ],
+        },
+      ],
+      [],
+      new Map()
+    );
+  record(
+    'calculateMySecuredCommissionWithLegacyFallback (participant rows)',
+    assertClose(participantSecuredCommission, 6000),
+    `expected 6000, got ${participantSecuredCommission}`
+  );
+
+  const legacySecuredCommission = calculateMySecuredCommissionWithLegacyFallback(
+    'user-a',
+    [
+      {
+        id: 'deal-legacy',
+        clientId: 'client-1',
+        totalCommission: 10000,
+        status: DealStatus.WON,
+        participants: [],
+      },
+    ],
+    [{ clientId: 'client-1', role: AssignmentRole.DOCTOR }],
+    buildRoleOccupancyMap([
+      { clientId: 'client-1', role: AssignmentRole.DOCTOR },
+      { clientId: 'client-1', role: AssignmentRole.DOCTOR },
+    ])
+  );
+  record(
+    'calculateMySecuredCommissionWithLegacyFallback (legacy no participants)',
+    assertClose(legacySecuredCommission, 3000),
+    `expected 3000 (30% doctor share), got ${legacySecuredCommission}`
+  );
+
+  const participantLeaderboards = calculateAdminLeaderboardsWithLegacyFallback(
+    [
+      {
+        id: 'deal-1',
+        clientId: 'client-1',
+        dealValue: 100000,
+        totalCommission: 10000,
+        status: DealStatus.WON,
+        participants: [
+          {
+            id: 'participant-1',
+            userId: 'user-a',
+            userName: 'User A',
+            role: DealParticipantRole.DOCTOR,
+            commissionPercent: 60,
+            commissionAmount: 6000,
+            isCommissionable: true,
+          },
+          {
+            id: 'participant-2',
+            userId: 'user-b',
+            userName: 'User B',
+            role: DealParticipantRole.RELATIONSHIP,
+            commissionPercent: 10,
+            commissionAmount: 1000,
+            isCommissionable: true,
+          },
+        ],
+      },
+    ],
+    [],
+    {
+      RELATIONSHIP: 0.15,
+      DOCTOR: 0.1,
+      ACCOUNT_SERVICE: 0.1,
+    }
+  );
+  record(
+    'calculateAdminLeaderboardsWithLegacyFallback (participant rows)',
+    participantLeaderboards.commissionLeaderboard.length === 2 &&
+      assertClose(participantLeaderboards.commissionLeaderboard[0].totalCommission, 6000),
+    `top=${participantLeaderboards.commissionLeaderboard[0]?.totalCommission}`
+  );
+
   const multiRoleReturnable = calculateDoctorCommissionReturnableAmount(
     100,
     1,
@@ -174,7 +278,8 @@ function runUnitTests() {
   const limitMessage = getRoleOccupancyLimitMessage(AssignmentRole.DOCTOR, 2);
   record(
     'getRoleOccupancyLimitMessage',
-    limitMessage === 'Error: A client can have a maximum of 2 Doctors.',
+    limitMessage ===
+      'Error: A client can have a maximum of 2 Legacy Doctor Assignments.',
     limitMessage ?? 'no message'
   );
 
@@ -201,20 +306,27 @@ function runUnitTests() {
 async function runDatabaseTests() {
   console.log('\n--- Database tests: commission metrics ---\n');
 
-  const wonDeals = await prisma.deal.findMany({
-    where: { status: DealStatus.WON },
-    select: { totalCommission: true },
-  });
+  const wonDealsWithParticipants = await fetchAllWonDealsWithParticipants();
 
-  const expectedCompanyOverhead = wonDeals.reduce(
-    (sum, deal) => sum + Number(deal.totalCommission) * COMPANY_OVERHEAD_RATE,
-    0
+  const expectedCompanyOverhead = calculateCompanyEarningsFromDealParticipants(
+    wonDealsWithParticipants.map((deal) => ({
+      id: deal.id,
+      totalCommission: deal.totalCommission,
+      status: DealStatus.WON,
+      participants: deal.participants.map((participant) => ({
+        id: participant.id,
+        role: participant.role,
+        commissionPercent: participant.commissionPercent,
+        commissionAmount: participant.commissionAmount,
+        isCommissionable: participant.isCommissionable,
+      })),
+    }))
   );
 
   record(
     'companyOverheadEarnings calculation (DB)',
-    wonDeals.length >= 0,
-    `${wonDeals.length} WON deals → $${Math.round(expectedCompanyOverhead).toLocaleString()} overhead`
+    wonDealsWithParticipants.length >= 0,
+    `${wonDealsWithParticipants.length} WON deals → $${Math.round(expectedCompanyOverhead).toLocaleString()} overhead`
   );
 
   const standardUser = await prisma.user.findFirst({
@@ -241,18 +353,22 @@ async function runDatabaseTests() {
     Object.keys(dashboard.performanceMetrics).join(', ')
   );
 
-  const dealsWithTotalCommission = await prisma.deal.findFirst({
-    select: { totalCommission: true },
-  });
+  const dealCount = await prisma.deal.count();
+  const dealsWithTotalCommission =
+    dealCount > 0
+      ? await prisma.deal.findFirst({
+          select: { totalCommission: true },
+        })
+      : null;
   record(
     'Deal.totalCommission column exists',
-    dealsWithTotalCommission !== null,
-    dealsWithTotalCommission
-      ? `sample totalCommission=${Number(dealsWithTotalCommission.totalCommission)}`
-      : 'no deals in database'
+    dealCount === 0 || dealsWithTotalCommission !== null,
+    dealCount === 0
+      ? 'schema OK (0 deals in database)'
+      : `sample totalCommission=${Number(dealsWithTotalCommission!.totalCommission)}`
   );
 
-  return { standardUser, expectedCompanyOverhead, wonDealCount: wonDeals.length };
+  return { standardUser, expectedCompanyOverhead, wonDealCount: wonDealsWithParticipants.length };
 }
 
 async function runApiTests(

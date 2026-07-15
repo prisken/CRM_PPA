@@ -16,11 +16,11 @@ export default function CollapsibleActivityWidgetSkeleton({
     <section className={dashboardWidgetSectionClassName}>
       <h2 className={dashboardWidgetHeadingClassName}>{title}</h2>
 
-      <div className="mt-4 divide-y divide-gray-200 rounded-lg border border-gray-200">
-        {Array.from({ length: 4 }).map((_, index) => (
+      <div className="mt-3 divide-y divide-gray-200 rounded-lg border border-gray-200">
+        {Array.from({ length: 3 }).map((_, index) => (
           <div
             key={index}
-            className="flex w-full items-center justify-between gap-3 px-4 py-3"
+            className="flex w-full items-center justify-between gap-3 px-3 py-2"
           >
             <SkeletonPulse className="h-4 w-40 max-w-full" />
             <ChevronDown

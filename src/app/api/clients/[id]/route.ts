@@ -8,6 +8,7 @@ import { prisma } from '@/lib/prisma';
 import {
   authorizePipelineStatusChange,
   getAuthenticatedUser,
+  requireClientCoreReadAccess,
   requireSuperAdminFromRequest,
   verifyAdminPassword,
 } from '@/lib/authHelpers';
@@ -31,11 +32,11 @@ function hasNonStatusUpdates(body: Record<string, unknown>) {
 }
 
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const auth = await getAuthenticatedUser();
+  const auth = await requireClientCoreReadAccess(id, request);
   if (auth.error) {
     return auth.error;
   }

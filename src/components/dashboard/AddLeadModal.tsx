@@ -77,7 +77,7 @@ export default function AddLeadModal({ onClose, onCreated }: AddLeadModalProps) 
         <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl bg-white p-4 shadow-xl sm:p-6">
           <h3 className="text-lg font-semibold text-gray-900">Add Lead</h3>
           <p className="mt-1 text-sm text-gray-500">
-            Create a new lead. You will be assigned as the relationship specialist.
+            Create a new lead. You will be assigned as the Relationship Officer.
           </p>
 
           <form onSubmit={handleSubmit} className="mt-5 space-y-4">

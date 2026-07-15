@@ -7,9 +7,9 @@ export const COMMISSION_RATES: Record<AssignmentRole, number> = {
 };
 
 export const ASSIGNMENT_ROLE_LABELS: Record<AssignmentRole, string> = {
-  RELATIONSHIP: 'Relationship',
-  DOCTOR: 'Doctor',
-  ACCOUNT_SERVICE: 'Account Service',
+  RELATIONSHIP: 'Relationship Officer',
+  DOCTOR: 'Legacy Doctor Assignment',
+  ACCOUNT_SERVICE: 'Follow-up Officer',
 };
 
 export function formatAssignmentRole(role: AssignmentRole) {

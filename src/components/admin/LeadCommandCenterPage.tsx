@@ -9,11 +9,20 @@ import LeadPreviewDrawer from '@/components/admin/LeadPreviewDrawer';
 import LeadDuplicatesPanel from '@/components/admin/LeadDuplicatesPanel';
 import Logo from '@/components/Logo';
 import LeadSourceBadges from '@/components/clients/LeadSourceBadges';
-import LeadTagBadges from '@/components/clients/LeadTagBadges';
+import CompactPill from '@/components/ui/CompactPill';
+import EmptyMuted from '@/components/ui/EmptyMuted';
+import LimitedInlineList from '@/components/ui/LimitedInlineList';
+import StatusPill from '@/components/ui/StatusPill';
+import {
+  DisplayDensityToggle,
+  useDisplayDensity,
+} from '@/components/ui/DisplayDensityProvider';
 import { useUserProfile } from '@/hooks/useUserProfile';
 import { authenticatedFetch } from '@/lib/authenticatedFetch';
-import { CLIENT_STAGES, formatClientStage, getStatusBadgeStyles } from '@/lib/clientStages';
+import { CLIENT_STAGES } from '@/lib/clientStages';
+import type { MergeModalResult } from '@/components/admin/MergeClientsModal';
 import type { LeadCommandCenterRow } from '@/lib/leadCommandCenter';
+import type { DuplicateReviewClient } from '@/lib/leadDuplicates';
 import { supabase } from '@/lib/supabaseClient';
 
 const QuickNoteModal = dynamic(() => import('@/components/admin/QuickNoteModal'), {
@@ -36,6 +45,12 @@ const BulkAssignRelationshipModal = dynamic(
 const BulkTagsModal = dynamic(() => import('@/components/admin/BulkTagsModal'), {
   ssr: false,
 });
+
+const MergeClientsModal = dynamic(() => import('@/components/admin/MergeClientsModal'), {
+  ssr: false,
+});
+
+const MAX_MERGE_SELECTED = 10;
 
 type AdminTagOption = {
   id: string;
@@ -67,18 +82,43 @@ type FilterChipKey =
   | 'dueToday'
   | 'noNextAction';
 
-const FILTER_CHIPS: { key: FilterChipKey; label: string }[] = [
-  { key: 'needsAttention', label: 'Needs attention' },
-  { key: 'missingPhone', label: 'Missing phone' },
-  { key: 'missingEmail', label: 'Missing email' },
-  { key: 'unassigned', label: 'Unassigned' },
-  { key: 'duplicateEmail', label: 'Duplicate email' },
-  { key: 'duplicatePhone', label: 'Duplicate phone' },
-  { key: 'overdueFollowUp', label: 'Overdue' },
-  { key: 'dueToday', label: 'Due today' },
-  { key: 'noNextAction', label: 'No next action' },
-  { key: 'googleForms', label: 'Google Forms' },
-  { key: 'profitPulseAlly', label: 'Profit Pulse Ally' },
+const FILTER_CHIP_LABELS: Record<FilterChipKey, string> = {
+  needsAttention: 'Needs attention',
+  missingPhone: 'Missing phone',
+  missingEmail: 'Missing email',
+  unassigned: 'Unassigned',
+  duplicateEmail: 'Duplicate email',
+  duplicatePhone: 'Duplicate phone',
+  overdueFollowUp: 'Overdue',
+  dueToday: 'Due today',
+  noNextAction: 'No next action',
+  googleForms: 'Google Forms',
+  profitPulseAlly: 'Profit Pulse Ally',
+};
+
+const ADVANCED_BOOLEAN_CHIPS: { key: FilterChipKey; label: string }[] = [
+  { key: 'missingPhone', label: FILTER_CHIP_LABELS.missingPhone },
+  { key: 'missingEmail', label: FILTER_CHIP_LABELS.missingEmail },
+  { key: 'duplicateEmail', label: FILTER_CHIP_LABELS.duplicateEmail },
+  { key: 'duplicatePhone', label: FILTER_CHIP_LABELS.duplicatePhone },
+  { key: 'overdueFollowUp', label: FILTER_CHIP_LABELS.overdueFollowUp },
+  { key: 'dueToday', label: FILTER_CHIP_LABELS.dueToday },
+  { key: 'noNextAction', label: FILTER_CHIP_LABELS.noNextAction },
+];
+
+const SOURCE_FILTER_CHIPS: { key: FilterChipKey; label: string }[] = [
+  { key: 'googleForms', label: FILTER_CHIP_LABELS.googleForms },
+  { key: 'profitPulseAlly', label: FILTER_CHIP_LABELS.profitPulseAlly },
+];
+
+type ViewPresetId = 'attention' | 'new' | 'unassigned' | 'duplicates' | 'followUp';
+
+const VIEW_PRESETS: { id: ViewPresetId; label: string }[] = [
+  { id: 'attention', label: 'Attention' },
+  { id: 'new', label: 'New' },
+  { id: 'unassigned', label: 'Unassigned' },
+  { id: 'duplicates', label: 'Duplicates' },
+  { id: 'followUp', label: 'Follow-up' },
 ];
 
 const STATUS_FILTER_OPTIONS = [
@@ -108,11 +148,6 @@ function formatDateTime(value: string | null) {
   });
 }
 
-const PRIORITY_BADGE_STYLES: Record<string, string> = {
-  LOW: 'bg-gray-100 text-gray-700',
-  MEDIUM: 'bg-amber-100 text-amber-800',
-  HIGH: 'bg-red-100 text-red-800',
-};
 
 function truncateText(value: string, maxLength = 72) {
   const trimmed = value.trim();
@@ -123,41 +158,219 @@ function truncateText(value: string, maxLength = 72) {
   return `${trimmed.slice(0, maxLength - 1)}…`;
 }
 
-function PriorityBadge({ priority }: { priority: string | null }) {
-  if (!priority) {
+function formatShortDateTime(value: string | null) {
+  if (!value) {
     return null;
   }
 
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return null;
+  }
+
+  return parsed.toLocaleString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+}
+
+function getLeadAttentionItems(lead: LeadCommandCenterRow) {
+  return [
+    ...lead.attentionReasons,
+    ...lead.dataQualityWarnings,
+    ...lead.duplicateWarnings,
+  ];
+}
+
+function getRelationshipOwner(lead: LeadCommandCenterRow) {
+  return lead.assignedUsers.find((user) => user.role === 'RELATIONSHIP') ?? null;
+}
+
+function mapLeadRowToDuplicateReviewClient(
+  lead: LeadCommandCenterRow
+): DuplicateReviewClient {
+  return {
+    clientId: lead.clientId,
+    name: lead.name,
+    company: lead.company,
+    email: lead.email,
+    phone: lead.phone,
+    leadSource: lead.leadSource,
+    roleInCompany: lead.roleInCompany,
+    employeeCount: lead.employeeCount,
+    expectations: lead.expectations,
+    priority: lead.priority,
+    nextAction: lead.nextAction,
+    nextFollowUpAt: lead.nextFollowUpAt,
+    contactInfo: null,
+    status: lead.status,
+    createdAt: lead.createdAt,
+    lastModified: lead.lastModified,
+    sourceLabels: lead.sourceLabels,
+    assignedUsers: lead.assignedUsers.map((user) => ({
+      assignmentId: user.assignmentId,
+      userId: user.userId,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+    })),
+    activityCount: lead.lastActivityAt ? 1 : 0,
+    dealCount: 0,
+  };
+}
+
+function LeadContactCell({ lead }: { lead: LeadCommandCenterRow }) {
   return (
-    <span
-      className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${
-        PRIORITY_BADGE_STYLES[priority] ?? 'bg-gray-100 text-gray-700'
-      }`}
-    >
-      {priority}
-    </span>
+    <div className="min-w-0 space-y-0.5">
+      <p className="truncate text-xs text-gray-600" title={lead.email ?? undefined}>
+        {lead.email ? lead.email : <EmptyMuted />}
+      </p>
+      <p className="truncate text-xs text-gray-600" title={lead.phone ?? undefined}>
+        {lead.phone ? lead.phone : <EmptyMuted />}
+      </p>
+    </div>
   );
 }
 
-function LeadFollowUpSummary({ lead }: { lead: LeadCommandCenterRow }) {
-  const hasFollowUp =
-    lead.priority || lead.nextFollowUpAt || lead.nextAction?.trim();
+function LeadOwnerCell({ lead }: { lead: LeadCommandCenterRow }) {
+  const relationshipOwner = getRelationshipOwner(lead);
+  const teamCount = lead.assignedUsers.length;
 
-  if (!hasFollowUp) {
-    return <span className="text-xs text-gray-400">—</span>;
+  if (!relationshipOwner && teamCount === 0) {
+    return <EmptyMuted label="Unassigned">Unassigned</EmptyMuted>;
   }
+
+  const extraTeamCount = relationshipOwner ? teamCount - 1 : teamCount;
+
+  return (
+    <div className="min-w-0">
+      <p className="truncate text-sm text-gray-700">
+        {relationshipOwner ? relationshipOwner.name : <EmptyMuted label="Unassigned">Unassigned</EmptyMuted>}
+      </p>
+      {extraTeamCount > 0 && (
+        <p className="text-xs text-gray-500">+{extraTeamCount} team</p>
+      )}
+    </div>
+  );
+}
+
+function LeadStageCell({ lead }: { lead: LeadCommandCenterRow }) {
+  const followUpLabel = formatShortDateTime(lead.nextFollowUpAt);
 
   return (
     <div className="space-y-1">
-      {lead.priority && <PriorityBadge priority={lead.priority} />}
-      {lead.nextFollowUpAt && (
-        <p className="text-sm text-gray-700">{formatDateTime(lead.nextFollowUpAt)}</p>
+      <StatusPill status={lead.status} />
+      {(lead.priority || followUpLabel) && (
+        <div className="flex flex-wrap items-center gap-1">
+          {lead.priority && (
+            <CompactPill
+              tone={
+                lead.priority === 'HIGH'
+                  ? 'red'
+                  : lead.priority === 'MEDIUM'
+                    ? 'yellow'
+                    : 'gray'
+              }
+              size="xs"
+              title={`Priority: ${lead.priority}`}
+            >
+              {lead.priority}
+            </CompactPill>
+          )}
+          {followUpLabel && (
+            <span className="text-[11px] text-gray-500" title={formatDateTime(lead.nextFollowUpAt)}>
+              {followUpLabel}
+            </span>
+          )}
+        </div>
       )}
-      {lead.nextAction?.trim() && (
-        <p className="text-xs text-gray-500" title={lead.nextAction}>
-          {truncateText(lead.nextAction)}
+    </div>
+  );
+}
+
+function LeadAttentionCell({
+  lead,
+  maxVisible,
+}: {
+  lead: LeadCommandCenterRow;
+  maxVisible: number;
+}) {
+  const allItems = getLeadAttentionItems(lead);
+
+  if (lead.attentionScore <= 0 && allItems.length === 0) {
+    return <EmptyMuted />;
+  }
+
+  return (
+    <div className="min-w-0 space-y-1">
+      <AttentionScoreBadge score={lead.attentionScore} />
+      {allItems.length > 0 && (
+        <LimitedInlineList
+          max={maxVisible}
+          moreTitle={allItems.join(' · ')}
+          items={allItems.map((item, index) => (
+            <CompactPill
+              key={`${item}-${index}`}
+              tone="orange"
+              size="xs"
+              title={item}
+              className="max-w-[9rem]"
+            >
+              {truncateText(item, 28)}
+            </CompactPill>
+          ))}
+        />
+      )}
+    </div>
+  );
+}
+
+function LeadNextStepCell({ lead }: { lead: LeadCommandCenterRow }) {
+  const followUpLabel = formatShortDateTime(lead.nextFollowUpAt);
+  const nextAction = lead.nextAction?.trim();
+
+  if (!nextAction && !followUpLabel) {
+    return <EmptyMuted label="No next step">—</EmptyMuted>;
+  }
+
+  return (
+    <div className="min-w-0 space-y-0.5">
+      {nextAction && (
+        <p className="truncate text-xs text-gray-700" title={nextAction}>
+          {truncateText(nextAction, 48)}
         </p>
       )}
+      {followUpLabel && (
+        <p className="text-[11px] text-gray-500" title={formatDateTime(lead.nextFollowUpAt)}>
+          {followUpLabel}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function LeadRowActions({
+  lead,
+  onPreview,
+}: {
+  lead: LeadCommandCenterRow;
+  onPreview: (lead: LeadCommandCenterRow) => void;
+}) {
+  return (
+    <div
+      className="flex items-center"
+      onClick={(event) => event.stopPropagation()}
+      onKeyDown={(event) => event.stopPropagation()}
+    >
+      <button
+        type="button"
+        onClick={() => onPreview(lead)}
+        className="rounded-md border border-gray-300 px-2 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50"
+      >
+        Preview
+      </button>
     </div>
   );
 }
@@ -215,127 +428,94 @@ function buildLeadsQueryString(options: {
   return params.toString();
 }
 
-function BadgeList({
-  items,
-  tone,
-}: {
-  items: string[];
-  tone: 'attention' | 'quality' | 'duplicate' | 'source';
+function countActiveFilters(options: {
+  statusFilter: string;
+  activeChips: Set<FilterChipKey>;
+  activeTagFilter: string | null;
 }) {
-  if (items.length === 0) {
-    return null;
+  let count = 0;
+
+  if (options.statusFilter !== 'ALL_ACTIVE') {
+    count += 1;
   }
 
-  const toneClasses = {
-    attention: 'bg-orange-100 text-orange-800',
-    quality: 'bg-amber-100 text-amber-800',
-    duplicate: 'bg-red-100 text-red-800',
-    source: 'bg-sky-100 text-sky-800',
-  }[tone];
+  if (options.activeTagFilter) {
+    count += 1;
+  }
 
+  count += options.activeChips.size;
+
+  return count;
+}
+
+function buildActiveFilterSummaries(options: {
+  statusFilter: string;
+  activeChips: Set<FilterChipKey>;
+  activeTagFilter: string | null;
+}) {
+  const summaries: string[] = [];
+
+  if (options.statusFilter !== 'ALL_ACTIVE') {
+    const statusLabel = STATUS_FILTER_OPTIONS.find(
+      (option) => option.value === options.statusFilter
+    )?.label;
+    summaries.push(statusLabel ?? options.statusFilter);
+  }
+
+  for (const chipKey of Object.keys(FILTER_CHIP_LABELS) as FilterChipKey[]) {
+    if (options.activeChips.has(chipKey)) {
+      summaries.push(FILTER_CHIP_LABELS[chipKey]);
+    }
+  }
+
+  if (options.activeTagFilter) {
+    summaries.push(`Tag: ${options.activeTagFilter}`);
+  }
+
+  return summaries;
+}
+
+function FilterChipButton({
+  label,
+  isActive,
+  onClick,
+  tone = 'blue',
+}: {
+  label: string;
+  isActive: boolean;
+  onClick: () => void;
+  tone?: 'blue' | 'purple';
+}) {
   return (
-    <div className="flex flex-wrap gap-1">
-      {items.map((item) => (
-        <span
-          key={item}
-          className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${toneClasses}`}
-        >
-          {item}
-        </span>
-      ))}
-    </div>
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={isActive}
+      className={`rounded-full border px-2.5 py-1 text-xs font-medium transition ${
+        isActive
+          ? tone === 'purple'
+            ? 'border-violet-600 bg-violet-600 text-white'
+            : 'border-blue-600 bg-blue-600 text-white'
+          : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50'
+      }`}
+    >
+      {label}
+    </button>
   );
 }
 
 function AttentionScoreBadge({ score }: { score: number }) {
   if (score <= 0) {
-    return <span className="text-xs text-gray-400">—</span>;
+    return <EmptyMuted />;
   }
 
   const tone =
-    score >= 80
-      ? 'bg-red-100 text-red-800'
-      : score >= 40
-        ? 'bg-orange-100 text-orange-800'
-        : 'bg-amber-100 text-amber-800';
+    score >= 80 ? 'red' : score >= 40 ? 'orange' : 'yellow';
 
   return (
-    <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${tone}`}>
+    <CompactPill tone={tone} size="xs" title={`Attention score: ${score}`}>
       {score}
-    </span>
-  );
-}
-
-function LeadActions({
-  lead,
-  onCopied,
-  onPreview,
-  onAddNote,
-}: {
-  lead: LeadCommandCenterRow;
-  onCopied: (label: string) => void;
-  onPreview: (lead: LeadCommandCenterRow) => void;
-  onAddNote: (lead: LeadCommandCenterRow) => void;
-}) {
-  async function handleCopy(value: string | null, label: string) {
-    if (!value?.trim()) {
-      return;
-    }
-
-    try {
-      await navigator.clipboard.writeText(value);
-      onCopied(label);
-    } catch {
-      onCopied(`Failed to copy ${label.toLowerCase()}`);
-    }
-  }
-
-  return (
-    <div
-      className="flex flex-wrap gap-2"
-      onClick={(event) => event.stopPropagation()}
-      onKeyDown={(event) => event.stopPropagation()}
-    >
-      <button
-        type="button"
-        onClick={() => onPreview(lead)}
-        className="rounded-lg border border-gray-300 px-2 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50"
-      >
-        Preview
-      </button>
-      <button
-        type="button"
-        onClick={() => onAddNote(lead)}
-        className="rounded-lg border border-gray-300 px-2 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50"
-      >
-        Add note
-      </button>
-      <Link
-        href={`/clients/${lead.clientId}`}
-        onClick={(event) => event.stopPropagation()}
-        className="rounded-lg border border-blue-200 px-2 py-1 text-xs font-medium text-blue-700 hover:bg-blue-50"
-      >
-        Open Client 360
-      </Link>
-      {lead.email && (
-        <button
-          type="button"
-          onClick={() => handleCopy(lead.email, 'Email')}
-          className="rounded-lg border border-gray-200 px-2 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50"
-        >
-          Copy email
-        </button>
-      )}
-      {lead.phone && (
-        <button
-          type="button"
-          onClick={() => handleCopy(lead.phone, 'Phone')}
-          className="rounded-lg border border-gray-200 px-2 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50"
-        >
-          Copy phone
-        </button>
-      )}
-    </div>
+    </CompactPill>
   );
 }
 
@@ -343,30 +523,23 @@ const LeadTableRow = memo(function LeadTableRow({
   lead,
   isSelected,
   onToggleSelect,
-  onCopied,
   onPreview,
-  onAddNote,
 }: {
   lead: LeadCommandCenterRow;
   isSelected: boolean;
   onToggleSelect: (clientId: string) => void;
-  onCopied: (label: string) => void;
   onPreview: (lead: LeadCommandCenterRow) => void;
-  onAddNote: (lead: LeadCommandCenterRow) => void;
 }) {
-  const ownerSummary =
-    lead.assignedUsers.length > 0
-      ? lead.assignedUsers
-          .map((user) => `${user.name} (${user.role.replace(/_/g, ' ')})`)
-          .join(', ')
-      : 'Unassigned';
+  const { density } = useDisplayDensity();
+  const rowPaddingClass = density === 'compact' ? 'py-2' : 'py-3';
+  const attentionReasonsMaxVisible = 2;
 
   return (
     <tr
       className={`cursor-pointer align-top hover:bg-gray-50 ${isSelected ? 'bg-blue-50/60' : ''}`}
       onClick={() => onPreview(lead)}
     >
-      <td className="w-10 px-4 py-3">
+      <td className={`w-10 px-3 ${rowPaddingClass}`}>
         <input
           type="checkbox"
           checked={isSelected}
@@ -376,171 +549,157 @@ const LeadTableRow = memo(function LeadTableRow({
           className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
         />
       </td>
-      <td className="px-4 py-3">
-        <p className="font-medium text-blue-600">{lead.name}</p>
-        {lead.company && <p className="mt-1 text-xs text-gray-500">{lead.company}</p>}
-      </td>
-      <td className="px-4 py-3">
-        <span
-          className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${getStatusBadgeStyles(lead.status)}`}
-        >
-          {formatClientStage(lead.status)}
-        </span>
-      </td>
-      <td className="px-4 py-3">
-        <LeadSourceBadges sources={lead.sourceLabels} />
-      </td>
-      <td className="px-4 py-3">
-        <LeadTagBadges tags={lead.tags} />
-      </td>
-      <td className="px-4 py-3 text-sm text-gray-700">
-        <p>{lead.email ?? <span className="text-gray-400">Missing</span>}</p>
-        <p className="mt-1">{lead.phone ?? <span className="text-gray-400">Missing</span>}</p>
-      </td>
-      <td className="px-4 py-3 text-sm text-gray-700">{ownerSummary}</td>
-      <td className="px-4 py-3 text-sm text-gray-700">
-        <LeadFollowUpSummary lead={lead} />
-      </td>
-      <td className="px-4 py-3 text-sm text-gray-700">
-        <p>{formatDateTime(lead.lastActivityAt)}</p>
-        {lead.lastActivitySummary && (
-          <p className="mt-1 text-xs text-gray-500">{lead.lastActivitySummary}</p>
+      <td className={`min-w-0 px-3 ${rowPaddingClass}`}>
+        <p className="truncate font-medium text-gray-900">{lead.name}</p>
+        {lead.company && (
+          <p className="mt-0.5 truncate text-xs text-gray-500">{lead.company}</p>
         )}
-      </td>
-      <td className="px-4 py-3">
-        <div className="space-y-2">
-          <AttentionScoreBadge score={lead.attentionScore} />
-          <BadgeList items={lead.attentionReasons} tone="attention" />
-          <BadgeList items={lead.dataQualityWarnings} tone="quality" />
-          <BadgeList items={lead.duplicateWarnings} tone="duplicate" />
+        <div className="mt-1 min-w-0">
+          <LeadSourceBadges sources={lead.sourceLabels} maxVisible={2} />
         </div>
       </td>
-      <td className="px-4 py-3">
-        <LeadActions
-          lead={lead}
-          onCopied={onCopied}
-          onPreview={onPreview}
-          onAddNote={onAddNote}
-        />
+      <td className={`px-3 ${rowPaddingClass}`}>
+        <LeadStageCell lead={lead} />
+      </td>
+      <td className={`min-w-0 px-3 ${rowPaddingClass}`}>
+        <LeadContactCell lead={lead} />
+      </td>
+      <td className={`min-w-0 px-3 ${rowPaddingClass}`}>
+        <LeadOwnerCell lead={lead} />
+      </td>
+      <td className={`min-w-0 px-3 ${rowPaddingClass}`}>
+        <LeadAttentionCell lead={lead} maxVisible={attentionReasonsMaxVisible} />
+      </td>
+      <td className={`min-w-0 px-3 ${rowPaddingClass}`}>
+        <LeadNextStepCell lead={lead} />
+      </td>
+      <td className={`w-28 shrink-0 px-3 ${rowPaddingClass}`}>
+        <LeadRowActions lead={lead} onPreview={onPreview} />
       </td>
     </tr>
   );
 });
 
+function LeadMobileAttentionHint({ lead }: { lead: LeadCommandCenterRow }) {
+  const items = getLeadAttentionItems(lead);
+  if (items.length === 0) {
+    return null;
+  }
+
+  const primary = items[0];
+  const extraCount = items.length - 1;
+
+  return (
+    <p className="truncate text-xs text-gray-500" title={items.join(' · ')}>
+      {truncateText(primary, 44)}
+      {extraCount > 0 && <span className="text-gray-400">{` · +${extraCount} more`}</span>}
+    </p>
+  );
+}
+
+function LeadMobileOwnerLabel({ lead }: { lead: LeadCommandCenterRow }) {
+  const relationshipOwner = getRelationshipOwner(lead);
+  const extraTeamCount = relationshipOwner
+    ? lead.assignedUsers.length - 1
+    : lead.assignedUsers.length;
+
+  if (!relationshipOwner && lead.assignedUsers.length === 0) {
+    return <EmptyMuted label="Unassigned">Unassigned</EmptyMuted>;
+  }
+
+  return (
+    <span className="min-w-0 truncate" title={relationshipOwner?.name ?? 'Unassigned'}>
+      {relationshipOwner ? relationshipOwner.name : 'Unassigned'}
+      {extraTeamCount > 0 && (
+        <span className="text-gray-400">{` (+${extraTeamCount})`}</span>
+      )}
+    </span>
+  );
+}
+
 const LeadMobileCard = memo(function LeadMobileCard({
   lead,
   isSelected,
   onToggleSelect,
-  onCopied,
   onPreview,
-  onAddNote,
 }: {
   lead: LeadCommandCenterRow;
   isSelected: boolean;
   onToggleSelect: (clientId: string) => void;
-  onCopied: (label: string) => void;
   onPreview: (lead: LeadCommandCenterRow) => void;
-  onAddNote: (lead: LeadCommandCenterRow) => void;
 }) {
-  const ownerSummary =
-    lead.assignedUsers.length > 0
-      ? lead.assignedUsers
-          .map((user) => `${user.name} (${user.role.replace(/_/g, ' ')})`)
-          .join(', ')
-      : 'Unassigned';
+  const { density } = useDisplayDensity();
+  const cardPaddingClass = density === 'compact' ? 'p-2.5' : 'p-3.5';
+  const nextAction = lead.nextAction?.trim();
+  const followUpLabel = formatShortDateTime(lead.nextFollowUpAt);
+  const hasNextStep = Boolean(nextAction || followUpLabel);
+  const attentionItems = getLeadAttentionItems(lead);
 
   return (
     <article
-      className={`cursor-pointer rounded-xl border bg-white p-4 shadow-sm hover:border-blue-200 hover:bg-blue-50/30 ${
-        isSelected ? 'border-blue-400 bg-blue-50/60' : 'border-gray-200'
+      className={`cursor-pointer rounded-lg border bg-white ${cardPaddingClass} transition-colors hover:bg-gray-50/80 ${
+        isSelected ? 'border-blue-300 bg-blue-50/40' : 'border-gray-200'
       }`}
       onClick={() => onPreview(lead)}
     >
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex min-w-0 items-start gap-3">
-          <input
-            type="checkbox"
-            checked={isSelected}
-            onChange={() => onToggleSelect(lead.clientId)}
-            onClick={(event) => event.stopPropagation()}
-            aria-label={`Select ${lead.name}`}
-            className="mt-1 h-4 w-4 shrink-0 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-          />
-          <div className="min-w-0">
-            <p className="text-base font-semibold text-blue-600">{lead.name}</p>
-            {lead.company && <p className="mt-1 text-sm text-gray-500">{lead.company}</p>}
-          </div>
-        </div>
-        <span
-          className={`inline-flex shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold ${getStatusBadgeStyles(lead.status)}`}
-        >
-          {formatClientStage(lead.status)}
-        </span>
-      </div>
-
-      <div className="mt-3 space-y-3">
-        <div>
-          <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Sources</p>
-          <div className="mt-1">
-            <LeadSourceBadges sources={lead.sourceLabels} />
-          </div>
-        </div>
-
-        <div>
-          <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Tags</p>
-          <div className="mt-1">
-            <LeadTagBadges tags={lead.tags} />
-          </div>
-        </div>
-
-        <div>
-          <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Contact</p>
-          <p className="mt-1 text-sm text-gray-700">
-            {lead.email ?? <span className="text-gray-400">Missing email</span>}
-          </p>
-          <p className="mt-1 text-sm text-gray-700">
-            {lead.phone ?? <span className="text-gray-400">Missing phone</span>}
-          </p>
-        </div>
-
-        <div>
-          <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Owner</p>
-          <p className="mt-1 text-sm text-gray-700">{ownerSummary}</p>
-        </div>
-
-        <div>
-          <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Follow-up</p>
-          <div className="mt-1">
-            <LeadFollowUpSummary lead={lead} />
-          </div>
-        </div>
-
-        <div>
-          <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Attention</p>
-          <div className="mt-1 space-y-2">
-            <AttentionScoreBadge score={lead.attentionScore} />
-            <BadgeList items={lead.attentionReasons} tone="attention" />
-            <BadgeList items={lead.dataQualityWarnings} tone="quality" />
-            <BadgeList items={lead.duplicateWarnings} tone="duplicate" />
-          </div>
-        </div>
-
-        <div>
-          <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
-            Last Activity
-          </p>
-          <p className="mt-1 text-sm text-gray-700">{formatDateTime(lead.lastActivityAt)}</p>
-          {lead.lastActivitySummary && (
-            <p className="mt-1 text-xs text-gray-500">{lead.lastActivitySummary}</p>
-          )}
-        </div>
-
-        <LeadActions
-          lead={lead}
-          onCopied={onCopied}
-          onPreview={onPreview}
-          onAddNote={onAddNote}
+      <div className="flex items-start gap-2.5">
+        <input
+          type="checkbox"
+          checked={isSelected}
+          onChange={() => onToggleSelect(lead.clientId)}
+          onClick={(event) => event.stopPropagation()}
+          aria-label={`Select ${lead.name}`}
+          className="mt-0.5 h-4 w-4 shrink-0 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
         />
+
+        <div className="min-w-0 flex-1 space-y-1.5">
+          <div className="flex items-start justify-between gap-2">
+            <p className="min-w-0 truncate text-sm font-medium text-gray-900">{lead.name}</p>
+            <div className="shrink-0">
+              <AttentionScoreBadge score={lead.attentionScore} />
+            </div>
+          </div>
+
+          {lead.company && (
+            <p className="truncate text-xs text-gray-500">{lead.company}</p>
+          )}
+
+          <div className="flex min-w-0 items-center gap-2 text-xs text-gray-600">
+            <StatusPill status={lead.status} className="shrink-0" />
+            <span className="text-gray-300">·</span>
+            <div className="min-w-0 shrink">
+              <LeadSourceBadges sources={lead.sourceLabels} maxVisible={2} />
+            </div>
+            <span className="text-gray-300">·</span>
+            <LeadMobileOwnerLabel lead={lead} />
+          </div>
+
+          <p className="truncate text-xs text-gray-600">
+            {lead.email ? (
+              <span title={lead.email}>{lead.email}</span>
+            ) : (
+              <EmptyMuted />
+            )}
+            <span className="text-gray-300"> · </span>
+            {lead.phone ? (
+              <span title={lead.phone}>{lead.phone}</span>
+            ) : (
+              <EmptyMuted />
+            )}
+          </p>
+
+          {hasNextStep && (
+            <p className="truncate text-xs text-gray-600" title={[nextAction, followUpLabel].filter(Boolean).join(' · ')}>
+              {nextAction && truncateText(nextAction, 56)}
+              {nextAction && followUpLabel && <span className="text-gray-300"> · </span>}
+              {followUpLabel && (
+                <span className="text-gray-500">{followUpLabel}</span>
+              )}
+            </p>
+          )}
+
+          {attentionItems.length > 0 && <LeadMobileAttentionHint lead={lead} />}
+        </div>
       </div>
     </article>
   );
@@ -559,7 +718,7 @@ function LeadsLoadingState() {
       </div>
       <div className="space-y-3 lg:hidden">
         {Array.from({ length: 3 }).map((_, index) => (
-          <div key={index} className="h-48 animate-pulse rounded-xl bg-gray-100" />
+          <div key={index} className="h-32 animate-pulse rounded-lg bg-gray-100" />
         ))}
       </div>
     </div>
@@ -587,11 +746,14 @@ export default function LeadCommandCenterPage() {
   const [bulkStatusOpen, setBulkStatusOpen] = useState(false);
   const [bulkAssignRelationshipOpen, setBulkAssignRelationshipOpen] = useState(false);
   const [bulkTagsOpen, setBulkTagsOpen] = useState(false);
+  const [bulkMergeOpen, setBulkMergeOpen] = useState(false);
+  const [duplicatesRefreshKey, setDuplicatesRefreshKey] = useState(0);
   const [selectedClientIds, setSelectedClientIds] = useState<Set<string>>(new Set());
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<LeadCommandCenterTab>('inbox');
   const [availableTags, setAvailableTags] = useState<AdminTagOption[]>([]);
   const [activeTagFilter, setActiveTagFilter] = useState<string | null>(null);
+  const [filtersPanelOpen, setFiltersPanelOpen] = useState(false);
 
   const queryString = useMemo(
     () =>
@@ -630,9 +792,9 @@ export default function LeadCommandCenterPage() {
 
       if (!response.ok) {
         const data = await response.json().catch(() => ({}));
-        throw new Error(
-          typeof data.error === 'string' ? data.error : 'Failed to load leads'
-        );
+        const apiError =
+          typeof data.error === 'string' ? data.error : 'Failed to load leads';
+        throw new Error(`${apiError} (${response.status})`);
       }
 
       const data = (await response.json()) as LeadsApiResponse;
@@ -713,6 +875,25 @@ export default function LeadCommandCenterPage() {
     [selectedClientIds]
   );
 
+  const selectedLeads = useMemo(
+    () => leads.filter((lead) => selectedClientIds.has(lead.clientId)),
+    [leads, selectedClientIds]
+  );
+
+  const selectedMergeClients = useMemo(
+    () => selectedLeads.map(mapLeadRowToDuplicateReviewClient),
+    [selectedLeads]
+  );
+
+  const canMergeSelected =
+    selectedCount >= 2 && selectedCount <= MAX_MERGE_SELECTED;
+  const mergeDisabledReason =
+    selectedCount < 2
+      ? 'Select at least 2 leads to merge'
+      : selectedCount > MAX_MERGE_SELECTED
+        ? 'Merge supports up to 10 records at a time.'
+        : undefined;
+
   useEffect(() => {
     if (!previewOpen || !previewLead) {
       return;
@@ -750,6 +931,118 @@ export default function LeadCommandCenterPage() {
       return next;
     });
   }, []);
+
+  const clearAllFilters = useCallback(() => {
+    setStatusFilter('ALL_ACTIVE');
+    setActiveChips(new Set());
+    setActiveTagFilter(null);
+  }, []);
+
+  const toggleViewPreset = useCallback((presetId: ViewPresetId) => {
+    switch (presetId) {
+      case 'attention':
+        toggleChip('needsAttention');
+        break;
+      case 'new':
+        setStatusFilter((current) =>
+          current === 'NEW_LEAD' ? 'ALL_ACTIVE' : 'NEW_LEAD'
+        );
+        break;
+      case 'unassigned':
+        toggleChip('unassigned');
+        break;
+      case 'duplicates':
+        setActiveChips((current) => {
+          const next = new Set(current);
+          const isActive =
+            next.has('duplicateEmail') && next.has('duplicatePhone');
+
+          if (isActive) {
+            next.delete('duplicateEmail');
+            next.delete('duplicatePhone');
+          } else {
+            next.add('duplicateEmail');
+            next.add('duplicatePhone');
+          }
+
+          return next;
+        });
+        break;
+      case 'followUp':
+        setActiveChips((current) => {
+          const next = new Set(current);
+          const isActive =
+            next.has('overdueFollowUp') ||
+            next.has('dueToday') ||
+            next.has('noNextAction');
+
+          if (isActive) {
+            next.delete('overdueFollowUp');
+            next.delete('dueToday');
+            next.delete('noNextAction');
+          } else {
+            next.add('overdueFollowUp');
+          }
+
+          return next;
+        });
+        break;
+      default:
+        break;
+    }
+  }, [toggleChip]);
+
+  const isViewPresetActive = useCallback(
+    (presetId: ViewPresetId) => {
+      switch (presetId) {
+        case 'attention':
+          return activeChips.has('needsAttention');
+        case 'new':
+          return statusFilter === 'NEW_LEAD';
+        case 'unassigned':
+          return activeChips.has('unassigned');
+        case 'duplicates':
+          return (
+            activeChips.has('duplicateEmail') && activeChips.has('duplicatePhone')
+          );
+        case 'followUp':
+          return (
+            activeChips.has('overdueFollowUp') ||
+            activeChips.has('dueToday') ||
+            activeChips.has('noNextAction')
+          );
+        default:
+          return false;
+      }
+    },
+    [activeChips, statusFilter]
+  );
+
+  const activeFilterCount = useMemo(
+    () =>
+      countActiveFilters({
+        statusFilter,
+        activeChips,
+        activeTagFilter,
+      }),
+    [statusFilter, activeChips, activeTagFilter]
+  );
+
+  const activeFilterSummaries = useMemo(
+    () =>
+      buildActiveFilterSummaries({
+        statusFilter,
+        activeChips,
+        activeTagFilter,
+      }),
+    [statusFilter, activeChips, activeTagFilter]
+  );
+
+  const visibleFilterSummaries = activeFilterSummaries.slice(0, 3);
+  const hiddenFilterSummaryCount = Math.max(
+    0,
+    activeFilterSummaries.length - visibleFilterSummaries.length
+  );
 
   const handleCopied = useCallback((label: string) => {
     setCopyMessage(
@@ -849,6 +1142,41 @@ export default function LeadCommandCenterPage() {
   const closeBulkTags = useCallback(() => {
     setBulkTagsOpen(false);
   }, []);
+
+  const openBulkMerge = useCallback(() => {
+    if (selectedClientIds.size < 2 || selectedClientIds.size > MAX_MERGE_SELECTED) {
+      return;
+    }
+
+    setBulkMergeOpen(true);
+    setSuccessMessage(null);
+  }, [selectedClientIds.size]);
+
+  const closeBulkMerge = useCallback(() => {
+    setBulkMergeOpen(false);
+  }, []);
+
+  const handleBulkMergeCompleted = useCallback(
+    (summary: MergeModalResult) => {
+      const conflictCount =
+        summary.conflicts.assignments.length + summary.conflicts.sourceRecords.length;
+      const conflictSuffix =
+        conflictCount > 0 ? ` ${conflictCount} conflict(s) recorded in audit.` : '';
+      const mergedCount =
+        'mergedClientIds' in summary ? summary.mergedClientIds.length : 1;
+
+      setSuccessMessage(
+        `Merged ${mergedCount} client${mergedCount === 1 ? '' : 's'} successfully. Duplicate${mergedCount === 1 ? '' : 's'} archived.${conflictSuffix}`
+      );
+      setSelectedClientIds(new Set());
+      setBulkMergeOpen(false);
+      void loadLeads({ silent: true });
+      if (activeTab === 'duplicates') {
+        setDuplicatesRefreshKey((key) => key + 1);
+      }
+    },
+    [activeTab, loadLeads]
+  );
 
   const handleBulkNoteSaved = useCallback(
     (count: number) => {
@@ -1002,11 +1330,11 @@ export default function LeadCommandCenterPage() {
 
         {activeTab === 'inbox' ? (
           <>
-        <section className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-            <div className="flex-1">
-              <label htmlFor="lead-search" className="mb-1 block text-sm font-medium text-gray-700">
-                Search
+        <div className="mb-4 space-y-2">
+          <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
+            <div className="w-full min-w-0 lg:flex-1">
+              <label htmlFor="lead-search" className="sr-only">
+                Search leads
               </label>
               <input
                 id="lead-search"
@@ -1014,91 +1342,171 @@ export default function LeadCommandCenterPage() {
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
                 placeholder="Search name, company, email, phone..."
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                className="w-full rounded-lg border border-gray-300 px-3 py-1.5 text-sm"
               />
             </div>
-            <div className="w-full lg:w-64">
-              <label htmlFor="status-filter" className="mb-1 block text-sm font-medium text-gray-700">
-                Status
-              </label>
-              <select
-                id="status-filter"
-                value={statusFilter}
-                onChange={(event) => setStatusFilter(event.target.value)}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-700"
+
+            <div className="flex min-w-0 items-center gap-2">
+              <DisplayDensityToggle />
+
+              <div
+                className="flex min-w-0 flex-1 gap-1.5 overflow-x-auto pb-0.5 lg:flex-none"
+                role="group"
+                aria-label="View presets"
               >
-                {STATUS_FILTER_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          <div className="mt-4 flex flex-wrap gap-2">
-            {FILTER_CHIPS.map((chip) => {
-              const isActive = activeChips.has(chip.key);
-              return (
-                <button
-                  key={chip.key}
-                  type="button"
-                  onClick={() => toggleChip(chip.key)}
-                  className={`rounded-full px-3 py-1.5 text-sm font-medium transition ${
-                    isActive
-                      ? 'bg-blue-600 text-white'
-                      : 'border border-gray-300 bg-white text-gray-700 hover:bg-gray-50'
-                  }`}
-                >
-                  {chip.label}
-                </button>
-              );
-            })}
-          </div>
-
-          {availableTags.length > 0 && (
-            <div className="mt-4">
-              <p className="mb-2 text-sm font-medium text-gray-700">Filter by tag</p>
-              <div className="flex flex-wrap gap-2">
-                {availableTags.map((tag) => {
-                  const isActive = activeTagFilter === tag.name;
+                {VIEW_PRESETS.map((preset) => {
+                  const isActive = isViewPresetActive(preset.id);
                   return (
                     <button
-                      key={tag.id}
+                      key={preset.id}
                       type="button"
-                      onClick={() =>
-                        setActiveTagFilter((current) =>
-                          current === tag.name ? null : tag.name
-                        )
-                      }
-                      className={`rounded-full px-3 py-1.5 text-sm font-medium transition ${
+                      onClick={() => toggleViewPreset(preset.id)}
+                      aria-pressed={isActive}
+                      className={`shrink-0 rounded-full border px-2.5 py-1 text-xs font-medium transition ${
                         isActive
-                          ? 'bg-violet-600 text-white'
-                          : 'border border-gray-300 bg-white text-gray-700 hover:bg-gray-50'
+                          ? 'border-blue-600 bg-blue-600 text-white'
+                          : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50'
                       }`}
                     >
-                      {tag.name}
+                      {preset.label}
                     </button>
                   );
                 })}
               </div>
+
+              <button
+                type="button"
+                onClick={() => setFiltersPanelOpen((current) => !current)}
+                aria-expanded={filtersPanelOpen}
+                className="shrink-0 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 sm:text-sm"
+              >
+                Filters
+                {activeFilterCount > 0 && (
+                  <span className="ml-1.5 inline-flex min-w-[1.25rem] items-center justify-center rounded-full bg-blue-600 px-1.5 py-0.5 text-[10px] font-semibold text-white">
+                    {activeFilterCount}
+                  </span>
+                )}
+              </button>
+            </div>
+          </div>
+
+          {activeFilterSummaries.length > 0 && (
+            <p className="text-xs text-gray-600">
+              <span className="font-medium text-gray-700">Filters:</span>{' '}
+              {visibleFilterSummaries.join(', ')}
+              {hiddenFilterSummaryCount > 0 && (
+                <span className="text-gray-500">
+                  {`, +${hiddenFilterSummaryCount} more`}
+                </span>
+              )}
+            </p>
+          )}
+
+          {filtersPanelOpen && (
+            <div className="rounded-lg border border-gray-200 bg-white px-3 py-3 shadow-sm sm:px-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+                <div className="w-full sm:max-w-xs">
+                  <label
+                    htmlFor="status-filter"
+                    className="mb-1 block text-xs font-medium text-gray-700"
+                  >
+                    Status
+                  </label>
+                  <select
+                    id="status-filter"
+                    value={statusFilter}
+                    onChange={(event) => setStatusFilter(event.target.value)}
+                    className="w-full rounded-lg border border-gray-300 px-2.5 py-1.5 text-sm text-gray-700"
+                  >
+                    {STATUS_FILTER_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={clearAllFilters}
+                  disabled={activeFilterCount === 0}
+                  className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Clear filters
+                </button>
+              </div>
+
+              <div className="mt-3">
+                <p className="mb-1.5 text-xs font-medium text-gray-700">Source</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {SOURCE_FILTER_CHIPS.map((chip) => (
+                    <FilterChipButton
+                      key={chip.key}
+                      label={chip.label}
+                      isActive={activeChips.has(chip.key)}
+                      onClick={() => toggleChip(chip.key)}
+                    />
+                  ))}
+                </div>
+              </div>
+
+              <div className="mt-3">
+                <p className="mb-1.5 text-xs font-medium text-gray-700">Quality & follow-up</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {ADVANCED_BOOLEAN_CHIPS.map((chip) => (
+                    <FilterChipButton
+                      key={chip.key}
+                      label={chip.label}
+                      isActive={activeChips.has(chip.key)}
+                      onClick={() => toggleChip(chip.key)}
+                    />
+                  ))}
+                </div>
+              </div>
+
+              {availableTags.length > 0 && (
+                <div className="mt-3">
+                  <p className="mb-1.5 text-xs font-medium text-gray-700">Tags</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {availableTags.map((tag) => (
+                      <FilterChipButton
+                        key={tag.id}
+                        label={tag.name}
+                        isActive={activeTagFilter === tag.name}
+                        tone="purple"
+                        onClick={() =>
+                          setActiveTagFilter((current) =>
+                            current === tag.name ? null : tag.name
+                          )
+                        }
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
-          {copyMessage && (
-            <p className="mt-4 text-sm text-green-700" role="status">
-              {copyMessage}
-            </p>
+          {(copyMessage || successMessage) && (
+            <div className="space-y-1">
+              {copyMessage && (
+                <p className="text-xs text-green-700" role="status">
+                  {copyMessage}
+                </p>
+              )}
+              {successMessage && (
+                <p
+                  className="rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-800"
+                  role="status"
+                >
+                  {successMessage}
+                </p>
+              )}
+            </div>
           )}
+        </div>
 
-          {successMessage && (
-            <p className="mt-4 text-sm text-green-700" role="status">
-              {successMessage}
-            </p>
-          )}
-        </section>
-
-        <div className="mt-6">
+        <div className="mt-4">
           {leadsError ? (
             <section className="rounded-xl border border-red-200 bg-red-50 p-6 text-sm text-red-700">
               {leadsError}
@@ -1116,84 +1524,69 @@ export default function LeadCommandCenterPage() {
               </p>
 
               <section className="hidden overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm lg:block">
-                <div className="overflow-x-auto">
-                  <table className="min-w-full divide-y divide-gray-200 text-sm">
-                    <thead className="bg-gray-50">
-                      <tr>
-                        <th className="w-10 px-4 py-3">
-                          <input
-                            type="checkbox"
-                            checked={allLoadedSelected}
-                            ref={(input) => {
-                              if (input) {
-                                input.indeterminate =
-                                  someLoadedSelected && !allLoadedSelected;
-                              }
-                            }}
-                            onChange={toggleSelectAllLoaded}
-                            aria-label="Select all loaded leads"
-                            className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                          />
-                        </th>
-                        <th className="px-4 py-3 text-left font-semibold text-gray-700">
-                          Name / Company
-                        </th>
-                        <th className="px-4 py-3 text-left font-semibold text-gray-700">
-                          Status
-                        </th>
-                        <th className="px-4 py-3 text-left font-semibold text-gray-700">
-                          Sources
-                        </th>
-                        <th className="px-4 py-3 text-left font-semibold text-gray-700">
-                          Tags
-                        </th>
-                        <th className="px-4 py-3 text-left font-semibold text-gray-700">
-                          Contact
-                        </th>
-                        <th className="px-4 py-3 text-left font-semibold text-gray-700">
-                          Owner
-                        </th>
-                        <th className="px-4 py-3 text-left font-semibold text-gray-700">
-                          Follow-up
-                        </th>
-                        <th className="px-4 py-3 text-left font-semibold text-gray-700">
-                          Last Activity
-                        </th>
-                        <th className="px-4 py-3 text-left font-semibold text-gray-700">
-                          Attention
-                        </th>
-                        <th className="px-4 py-3 text-left font-semibold text-gray-700">
-                          Actions
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-100">
-                      {leads.map((lead) => (
-                        <LeadTableRow
-                          key={lead.clientId}
-                          lead={lead}
-                          isSelected={selectedClientIds.has(lead.clientId)}
-                          onToggleSelect={toggleLeadSelection}
-                          onCopied={handleCopied}
-                          onPreview={openPreview}
-                          onAddNote={openQuickNote}
+                <table className="w-full table-fixed divide-y divide-gray-200 text-sm">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="w-10 px-3 py-2.5">
+                        <input
+                          type="checkbox"
+                          checked={allLoadedSelected}
+                          ref={(input) => {
+                            if (input) {
+                              input.indeterminate =
+                                someLoadedSelected && !allLoadedSelected;
+                            }
+                          }}
+                          onChange={toggleSelectAllLoaded}
+                          aria-label="Select all loaded leads"
+                          className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                         />
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                      </th>
+                      <th className="w-[18%] px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
+                        Lead
+                      </th>
+                      <th className="w-[11%] px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
+                        Stage
+                      </th>
+                      <th className="w-[14%] px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
+                        Contact
+                      </th>
+                      <th className="w-[11%] px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
+                        Owner
+                      </th>
+                      <th className="w-[14%] px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
+                        Attention
+                      </th>
+                      <th className="w-[16%] px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
+                        Next step
+                      </th>
+                      <th className="w-28 px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
+                        Actions
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {leads.map((lead) => (
+                      <LeadTableRow
+                        key={lead.clientId}
+                        lead={lead}
+                        isSelected={selectedClientIds.has(lead.clientId)}
+                        onToggleSelect={toggleLeadSelection}
+                        onPreview={openPreview}
+                      />
+                    ))}
+                  </tbody>
+                </table>
               </section>
 
-              <div className="space-y-4 lg:hidden">
+              <div className="space-y-3 lg:hidden">
                 {leads.map((lead) => (
                   <LeadMobileCard
                     key={lead.clientId}
                     lead={lead}
                     isSelected={selectedClientIds.has(lead.clientId)}
                     onToggleSelect={toggleLeadSelection}
-                    onCopied={handleCopied}
                     onPreview={openPreview}
-                    onAddNote={openQuickNote}
                   />
                 ))}
               </div>
@@ -1202,7 +1595,10 @@ export default function LeadCommandCenterPage() {
         </div>
           </>
         ) : (
-          <LeadDuplicatesPanel onMergeSuccess={() => loadLeads({ silent: true })} />
+          <LeadDuplicatesPanel
+            refreshKey={duplicatesRefreshKey}
+            onMergeSuccess={() => loadLeads({ silent: true })}
+          />
         )}
       </div>
 
@@ -1256,12 +1652,31 @@ export default function LeadCommandCenterPage() {
         onSaved={handleBulkTagsSaved}
       />
 
+      {bulkMergeOpen &&
+        selectedMergeClients.length >= 2 &&
+        selectedMergeClients.length <= MAX_MERGE_SELECTED && (
+        <MergeClientsModal
+          mode="manual-multi"
+          clients={selectedMergeClients}
+          open={bulkMergeOpen}
+          onClose={closeBulkMerge}
+          onMerged={handleBulkMergeCompleted}
+        />
+      )}
+
       {activeTab === 'inbox' && selectedCount > 0 && (
         <div className="fixed inset-x-0 bottom-0 z-40 border-t border-gray-200 bg-white/95 px-4 py-3 shadow-lg backdrop-blur sm:px-6">
-          <div className="mx-auto flex max-w-7xl flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <p className="text-sm font-medium text-gray-900">
-              {selectedCount} selected
-            </p>
+            <div className="mx-auto flex max-w-7xl flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="space-y-1">
+                <p className="text-sm font-medium text-gray-900">
+                  {selectedCount} selected
+                </p>
+                {selectedCount > MAX_MERGE_SELECTED && (
+                  <p className="text-xs text-amber-700">
+                    Merge supports up to 10 records at a time.
+                  </p>
+                )}
+              </div>
             <div className="flex flex-wrap gap-2">
               <button
                 type="button"
@@ -1283,6 +1698,15 @@ export default function LeadCommandCenterPage() {
                 className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
               >
                 Change status
+              </button>
+              <button
+                type="button"
+                onClick={openBulkMerge}
+                disabled={!canMergeSelected}
+                title={mergeDisabledReason}
+                className="rounded-lg border border-violet-300 px-4 py-2 text-sm font-medium text-violet-800 hover:bg-violet-50 disabled:cursor-not-allowed disabled:border-gray-200 disabled:text-gray-400 disabled:hover:bg-transparent"
+              >
+                Merge selected
               </button>
               <button
                 type="button"

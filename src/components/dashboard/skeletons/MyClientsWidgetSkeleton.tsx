@@ -4,16 +4,17 @@ import {
   SkeletonPulse,
 } from '@/components/dashboard/skeletons/skeletonUtils';
 
-const TABLE_HEADERS = ['Client Name', 'My Role', 'Client Status', 'Deal Value'];
+const TABLE_HEADERS = ['Client', 'Client role', 'Status', 'Deal value'];
 
 export default function MyClientsWidgetSkeleton() {
   return (
     <section className={dashboardWidgetSectionClassName}>
       <h2 className={dashboardWidgetHeadingClassName}>My Assigned Clients</h2>
+      <SkeletonPulse className="mt-2 h-3 w-72" />
 
-      <SkeletonPulse className="mt-4 h-[38px] w-full rounded-lg" />
+      <SkeletonPulse className="mt-3 h-[38px] w-full rounded-lg" />
 
-      <div className="mt-4 overflow-x-auto">
+      <div className="mt-3 overflow-x-auto">
         <table className="min-w-full text-left text-sm">
           <thead>
             <tr className="border-b border-gray-200 text-xs uppercase tracking-wide text-gray-500">

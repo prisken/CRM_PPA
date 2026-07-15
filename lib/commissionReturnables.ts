@@ -1,6 +1,9 @@
-import { AssignmentRole, DealStatus } from '@prisma/client';
+import { AssignmentRole, DealParticipantRole, DealStatus } from '@prisma/client';
 import { calculateIndividualRoleShare } from '@/lib/commissionCalculations';
 import { COMMISSION_RATE_POOLS } from '@/lib/constants';
+import {
+  calculateParticipantReturnableAmount,
+} from '@/lib/dealParticipantCalculations';
 import { prisma } from '@/lib/prisma';
 
 type CreateCommissionReturnablesInput = {
@@ -83,7 +86,161 @@ export async function getDoctorCountForClient(clientId: string) {
   });
 }
 
-export async function createCommissionReturnablesForWonDeal({
+export type GenerateCommissionReturnablesResult = {
+  created: number;
+  updated: number;
+  skipped: number;
+  zeroed: number;
+  paidPreserved: number;
+  warnings: string[];
+};
+
+/**
+ * Generate or update commission returnables from explicit DealParticipant returnable fields.
+ * Only DOCTOR participants with isReturnableRequired generate returnables.
+ */
+export async function generateCommissionReturnablesForDealParticipants(
+  dealId: string,
+  period = getCurrentCommissionReturnablePeriod()
+): Promise<GenerateCommissionReturnablesResult> {
+  const result: GenerateCommissionReturnablesResult = {
+    created: 0,
+    updated: 0,
+    skipped: 0,
+    zeroed: 0,
+    paidPreserved: 0,
+    warnings: [],
+  };
+
+  const deal = await prisma.deal.findUnique({
+    where: { id: dealId },
+    select: {
+      id: true,
+      status: true,
+      totalCommission: true,
+      participants: {
+        select: {
+          id: true,
+          userId: true,
+          role: true,
+          commissionPercent: true,
+          commissionAmount: true,
+          isCommissionable: true,
+          returnablePercent: true,
+          returnableAmount: true,
+          isReturnableRequired: true,
+        },
+      },
+    },
+  });
+
+  if (!deal || deal.status !== DealStatus.WON) {
+    return result;
+  }
+
+  const totalCommission = Number(deal.totalCommission);
+  const targetAmountByUserId = new Map<string, number>();
+
+  for (const participant of deal.participants) {
+    if (participant.role !== DealParticipantRole.DOCTOR) {
+      continue;
+    }
+
+    if (!participant.isReturnableRequired) {
+      result.skipped += 1;
+      continue;
+    }
+
+    if (!participant.userId) {
+      result.warnings.push(
+        `Skipped doctor participant ${participant.id}: returnable required but userId is missing.`
+      );
+      continue;
+    }
+
+    if (!participant.isCommissionable) {
+      result.warnings.push(
+        `Skipped doctor participant ${participant.id}: returnable required but participant is not commissionable.`
+      );
+      continue;
+    }
+
+    const amount = calculateParticipantReturnableAmount(totalCommission, participant);
+
+    if (amount === null) {
+      result.warnings.push(
+        `Skipped doctor participant ${participant.id} (${participant.userId}): missing returnable amount/percent.`
+      );
+      continue;
+    }
+
+    targetAmountByUserId.set(participant.userId, amount);
+  }
+
+  const existingReturnables = await prisma.commissionReturnable.findMany({
+    where: { dealId },
+  });
+
+  const existingByUserId = new Map(
+    existingReturnables.map((record) => [record.userId, record])
+  );
+
+  for (const [userId, amount] of targetAmountByUserId.entries()) {
+    const existing = existingByUserId.get(userId);
+
+    if (!existing) {
+      await prisma.commissionReturnable.create({
+        data: {
+          amount,
+          status: 'UNPAID',
+          period,
+          userId,
+          dealId,
+        },
+      });
+      result.created += 1;
+      continue;
+    }
+
+    if (existing.status === 'PAID') {
+      result.paidPreserved += 1;
+      continue;
+    }
+
+    const previousAmount = Number(existing.amount);
+    if (Math.abs(previousAmount - amount) > 0.005) {
+      await prisma.commissionReturnable.update({
+        where: { id: existing.id },
+        data: { amount },
+      });
+      result.updated += 1;
+    }
+  }
+
+  for (const existing of existingReturnables) {
+    if (targetAmountByUserId.has(existing.userId)) {
+      continue;
+    }
+
+    if (existing.status === 'PAID') {
+      result.paidPreserved += 1;
+      continue;
+    }
+
+    const previousAmount = Number(existing.amount);
+    if (Math.abs(previousAmount) > 0.005) {
+      await prisma.commissionReturnable.update({
+        where: { id: existing.id },
+        data: { amount: 0 },
+      });
+      result.zeroed += 1;
+    }
+  }
+
+  return result;
+}
+
+async function createLegacyCommissionReturnablesForWonDeal({
   dealId,
   clientId,
   totalCommission,
@@ -129,6 +286,31 @@ export async function createCommissionReturnablesForWonDeal({
 
   return prisma.commissionReturnable.findMany({
     where: { dealId },
+  });
+}
+
+export async function createCommissionReturnablesForWonDeal({
+  dealId,
+  clientId,
+  totalCommission,
+  period = getCurrentCommissionReturnablePeriod(),
+}: CreateCommissionReturnablesInput) {
+  const participantCount = await prisma.dealParticipant.count({
+    where: { dealId },
+  });
+
+  if (participantCount > 0) {
+    await generateCommissionReturnablesForDealParticipants(dealId, period);
+    return prisma.commissionReturnable.findMany({
+      where: { dealId },
+    });
+  }
+
+  return createLegacyCommissionReturnablesForWonDeal({
+    dealId,
+    clientId,
+    totalCommission,
+    period,
   });
 }
 
@@ -276,9 +458,84 @@ export type CommissionReturnableRecalculationChange = {
   action: 'updated' | 'created';
 };
 
-export async function backfillCommissionReturnablesForWonDeals() {
+export type CommissionReturnableRecalculationSummary = {
+  wonDealsProcessed: number;
+  dealsWithParticipants: number;
+  dealsWithLegacyFallback: number;
+  participantReturnablesCreated: number;
+  participantReturnablesUpdated: number;
+  participantReturnablesSkippedNotRequired: number;
+  participantReturnablesSkippedInvalid: number;
+  paidRecordsPreserved: number;
+  unpaidRecordsZeroed: number;
+  legacyRecordsUpdated: number;
+  legacyRecordsCreated: number;
+  changes: CommissionReturnableRecalculationChange[];
+};
+
+export async function recalculateAllCommissionReturnablesForWonDeals(): Promise<CommissionReturnableRecalculationSummary> {
   const wonDeals = await prisma.deal.findMany({
     where: { status: DealStatus.WON },
+    select: {
+      id: true,
+      name: true,
+      clientId: true,
+      totalCommission: true,
+      _count: {
+        select: { participants: true },
+      },
+    },
+  });
+
+  const summary: CommissionReturnableRecalculationSummary = {
+    wonDealsProcessed: wonDeals.length,
+    dealsWithParticipants: 0,
+    dealsWithLegacyFallback: 0,
+    participantReturnablesCreated: 0,
+    participantReturnablesUpdated: 0,
+    participantReturnablesSkippedNotRequired: 0,
+    participantReturnablesSkippedInvalid: 0,
+    paidRecordsPreserved: 0,
+    unpaidRecordsZeroed: 0,
+    legacyRecordsUpdated: 0,
+    legacyRecordsCreated: 0,
+    changes: [],
+  };
+
+  for (const deal of wonDeals) {
+    if (deal._count.participants > 0) {
+      summary.dealsWithParticipants += 1;
+      const result = await generateCommissionReturnablesForDealParticipants(deal.id);
+      summary.participantReturnablesCreated += result.created;
+      summary.participantReturnablesUpdated += result.updated;
+      summary.participantReturnablesSkippedNotRequired += result.skipped;
+      summary.participantReturnablesSkippedInvalid += result.warnings.length;
+      summary.paidRecordsPreserved += result.paidPreserved;
+      summary.unpaidRecordsZeroed += result.zeroed;
+      continue;
+    }
+
+    summary.dealsWithLegacyFallback += 1;
+    const legacyResult = await backfillCommissionReturnablesForWonDeals({
+      dealIds: [deal.id],
+    });
+    summary.legacyRecordsUpdated += legacyResult.recordsUpdated;
+    summary.legacyRecordsCreated += legacyResult.recordsCreated;
+    summary.changes.push(...legacyResult.changes);
+  }
+
+  return summary;
+}
+
+export async function backfillCommissionReturnablesForWonDeals(options?: {
+  dealIds?: string[];
+}) {
+  const wonDeals = await prisma.deal.findMany({
+    where: {
+      status: DealStatus.WON,
+      ...(options?.dealIds ? { id: { in: options.dealIds } } : {}),
+      participants: { none: {} },
+    },
     select: {
       id: true,
       name: true,
@@ -304,6 +561,7 @@ export async function backfillCommissionReturnablesForWonDeals() {
   }
 
   const existingReturnables = await prisma.commissionReturnable.findMany({
+    where: options?.dealIds ? { dealId: { in: options.dealIds } } : undefined,
     select: {
       id: true,
       amount: true,

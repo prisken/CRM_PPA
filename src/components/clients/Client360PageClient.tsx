@@ -5,20 +5,27 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import ClientDetailsWidget from '@/components/clients/ClientDetailsWidget';
+import { classifyImportantDateRecordType } from '@/lib/importantDates';
 import AssignedTeamWidget from '@/components/clients/AssignedTeamWidget';
 import CompanyHierarchyWidget from '@/components/clients/CompanyHierarchyWidget';
 import ClientSourceRecordsWidget from '@/components/clients/ClientSourceRecordsWidget';
+import ClientStrategyBuilderWidget from '@/components/clients/ClientStrategyBuilderWidget';
 import LeadSourceBadges from '@/components/clients/LeadSourceBadges';
 import DealInfoWidget, { type ClientDeal } from '@/components/clients/DealInfoWidget';
 import WorkspacePanel from '@/components/clients/WorkspacePanel';
 import Logo from '@/components/Logo';
+import StatusPill from '@/components/ui/StatusPill';
+import { useDisplayDensity } from '@/components/ui/DisplayDensityProvider';
+import { getStackSpacingClass } from '@/components/ui/displayDensity';
+import type { MergeModalResult } from '@/components/admin/MergeClientsModal';
 import { useUserProfile } from '@/hooks/useUserProfile';
-import { formatClientStage, getStatusBadgeStyles, CLIENT_STAGES } from '@/lib/clientStages';
+import { getStatusBadgeStyles, CLIENT_STAGES } from '@/lib/clientStages';
 import { calculateUserClientCommissionShare } from '@/lib/commissionCalculations';
 import type {
   Client360CompanyHierarchyData,
   Client360CoreData,
 } from '@/lib/client360';
+import type { DuplicateReviewClient } from '@/lib/leadDuplicates';
 import {
   canUserAdvancePipelineStage,
   getNextPipelineStage,
@@ -35,11 +42,32 @@ const ClientDeletionModal = dynamic(
   { ssr: false }
 );
 
+const ClientMergePickerModal = dynamic(
+  () => import('@/components/clients/ClientMergePickerModal'),
+  { ssr: false }
+);
+
+const MergeClientsModal = dynamic(
+  () => import('@/components/admin/MergeClientsModal'),
+  { ssr: false }
+);
+
 type Client360PageClientProps = {
   clientId: string;
   initialClient: Client360CoreData;
   initialDeals: ClientDeal[];
   initialHierarchy: Client360CompanyHierarchyData;
+  canManageHierarchy?: boolean;
+  dealAccess: {
+    canView: boolean;
+    canCreate: boolean;
+    canManageAll: boolean;
+    manageableDealIds: string[];
+  };
+  strategyAccess?: {
+    canView: boolean;
+    canManage: boolean;
+  };
 };
 
 export default function Client360PageClient({
@@ -47,9 +75,14 @@ export default function Client360PageClient({
   initialClient,
   initialDeals,
   initialHierarchy,
+  canManageHierarchy = true,
+  dealAccess,
+  strategyAccess = { canView: true, canManage: false },
 }: Client360PageClientProps) {
   const router = useRouter();
   const { profile } = useUserProfile();
+  const { density } = useDisplayDensity();
+  const asideSpacingClass = getStackSpacingClass(density);
   const [client, setClient] = useState(initialClient);
   const [deals, setDeals] = useState(initialDeals);
   const [hierarchy, setHierarchy] = useState(initialHierarchy);
@@ -57,6 +90,9 @@ export default function Client360PageClient({
   const [stageError, setStageError] = useState<string | null>(null);
   const [isAdvanceModalOpen, setIsAdvanceModalOpen] = useState(false);
   const [isDeletionModalOpen, setIsDeletionModalOpen] = useState(false);
+  const [isMergePickerOpen, setIsMergePickerOpen] = useState(false);
+  const [isMergeModalOpen, setIsMergeModalOpen] = useState(false);
+  const [mergeClients, setMergeClients] = useState<DuplicateReviewClient[]>([]);
   const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
@@ -129,6 +165,38 @@ export default function Client360PageClient({
   const handleOpenDeletionModal = useCallback(() => setIsDeletionModalOpen(true), []);
   const handleCloseDeletionModal = useCallback(() => setIsDeletionModalOpen(false), []);
   const handleDeleted = useCallback(() => router.push('/admin#master-pipeline'), [router]);
+  const handleOpenMergePicker = useCallback(() => {
+    setIsMergePickerOpen(true);
+  }, []);
+  const handleCloseMergePicker = useCallback(() => {
+    setIsMergePickerOpen(false);
+  }, []);
+  const handleContinueToMerge = useCallback((clients: DuplicateReviewClient[]) => {
+    setMergeClients(clients);
+    setIsMergePickerOpen(false);
+    setIsMergeModalOpen(true);
+  }, []);
+  const handleCloseMergeModal = useCallback(() => {
+    setIsMergeModalOpen(false);
+    setMergeClients([]);
+  }, []);
+  const handleMergeCompleted = useCallback(
+    (summary: MergeModalResult) => {
+      const canonicalClientId = summary.canonicalClientId;
+
+      setIsMergeModalOpen(false);
+      setMergeClients([]);
+      setIsMergePickerOpen(false);
+
+      if (canonicalClientId === clientId) {
+        triggerDataRefresh();
+        return;
+      }
+
+      router.push(`/clients/${canonicalClientId}`);
+    },
+    [clientId, router, triggerDataRefresh]
+  );
 
   const hasClientAccess = useMemo(() => {
     if (!profile || !client) {
@@ -172,15 +240,16 @@ export default function Client360PageClient({
     );
   }, [profile, client]);
 
-  const isDoctorSpecialist = useMemo(() => {
-    if (!profile || !client) {
-      return false;
-    }
+  const manageableDealIdSet = useMemo(
+    () => new Set(dealAccess.manageableDealIds),
+    [dealAccess.manageableDealIds]
+  );
 
-    return client.assignedUsers.some(
-      (user) => user.user_id === profile.id && user.role === 'DOCTOR'
-    );
-  }, [profile, client]);
+  const canManageDeal = useCallback(
+    (dealId: string) =>
+      dealAccess.canManageAll || manageableDealIdSet.has(dealId),
+    [dealAccess.canManageAll, manageableDealIdSet]
+  );
 
   const myClientCommissionPercentage = useMemo(() => {
     if (!profile || !client) {
@@ -211,12 +280,12 @@ export default function Client360PageClient({
   return (
     <main className="min-h-screen bg-gray-100">
       <header className="border-b border-gray-200 bg-white">
-        <div className="mx-auto max-w-7xl px-4 py-5 sm:px-6 lg:px-8">
+        <div className="mx-auto max-w-7xl px-4 py-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between gap-4">
             <Link href="/" aria-label="Go to homepage">
               <Logo className="h-8 w-auto" />
             </Link>
-            <div className="flex flex-wrap items-center gap-3">
+            <div className="flex flex-wrap items-center gap-2">
               <Link
                 href="/admin#master-pipeline"
                 className="text-sm text-blue-600 hover:underline"
@@ -224,19 +293,35 @@ export default function Client360PageClient({
                 ← Back to list
               </Link>
               {isSuperAdmin && (
-                <button
-                  type="button"
-                  onClick={handleOpenDeletionModal}
-                  className="rounded-lg border border-red-200 px-3 py-1.5 text-sm font-medium text-red-700 hover:bg-red-50"
-                >
-                  Archive Client
-                </button>
+                <details className="relative">
+                  <summary className="cursor-pointer list-none rounded-lg border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 [&::-webkit-details-marker]:hidden">
+                    More actions
+                  </summary>
+                  <div className="absolute right-0 z-10 mt-1 min-w-[10rem] rounded-lg border border-gray-200 bg-white py-1 shadow-lg">
+                    <button
+                      type="button"
+                      onClick={handleOpenMergePicker}
+                      className="block w-full px-3 py-2 text-left text-sm text-violet-800 hover:bg-violet-50"
+                    >
+                      Merge clients
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleOpenDeletionModal}
+                      className="block w-full px-3 py-2 text-left text-sm text-red-700 hover:bg-red-50"
+                    >
+                      Archive client
+                    </button>
+                  </div>
+                </details>
               )}
             </div>
           </div>
 
-          <div className="mt-3 flex flex-wrap items-center gap-3">
-            <h1 className="text-2xl font-bold text-gray-900">{client.name}</h1>
+          <div className="mt-2 flex min-w-0 flex-wrap items-center gap-2.5">
+            <h1 className="min-w-0 truncate text-xl font-bold text-gray-900 sm:text-2xl" title={client.name}>
+              {client.name}
+            </h1>
             {isSuperAdmin ? (
               <select
                 value={client.status}
@@ -253,11 +338,7 @@ export default function Client360PageClient({
               </select>
             ) : (
               <>
-                <span
-                  className={`rounded-full px-3 py-1 text-xs font-semibold ${getStatusBadgeStyles(client.status)}`}
-                >
-                  {formatClientStage(client.status)}
-                </span>
+                <StatusPill status={client.status} />
                 {canAdvancePipelineStage && nextPipelineStage ? (
                   <button
                     type="button"
@@ -302,9 +383,10 @@ export default function Client360PageClient({
           />
         </div>
 
-        <aside className="min-w-0 w-full space-y-4 md:flex-1">
+        <aside className={`min-w-0 w-full md:flex-1 ${asideSpacingClass}`}>
           <ClientDetailsWidget
             clientId={clientId}
+            isLead={classifyImportantDateRecordType(client.status) === 'Lead'}
             name={client.name}
             company={client.company}
             email={client.email}
@@ -318,13 +400,22 @@ export default function Client360PageClient({
             isRelationshipSpecialist={isRelationshipSpecialist}
             onMutationSuccess={triggerDataRefresh}
           />
-          {(isSuperAdmin || isDoctorSpecialist) && (
+          {dealAccess.canView && (
             <DealInfoWidget
               clientId={clientId}
               deals={deals}
               myClientCommissionPercentage={myClientCommissionPercentage}
-              canManage={isSuperAdmin || isDoctorSpecialist}
+              canCreateDeal={dealAccess.canCreate}
+              canManageDeal={canManageDeal}
+              assignedUsers={client.assignedUsers}
+              currentUser={teamCurrentUser}
               onMutationSuccess={triggerDataRefresh}
+            />
+          )}
+          {strategyAccess.canView && (
+            <ClientStrategyBuilderWidget
+              clientId={clientId}
+              canManage={strategyAccess.canManage}
             />
           )}
           <AssignedTeamWidget
@@ -336,6 +427,7 @@ export default function Client360PageClient({
           <CompanyHierarchyWidget
             clientId={clientId}
             hierarchy={hierarchy}
+            canManageEmployees={canManageHierarchy}
             onMutationSuccess={triggerDataRefresh}
           />
           <ClientSourceRecordsWidget clientId={clientId} />
@@ -363,6 +455,27 @@ export default function Client360PageClient({
           onClose={handleCloseDeletionModal}
           onArchived={triggerDataRefresh}
           onDeleted={handleDeleted}
+        />
+      )}
+
+      {isSuperAdmin && isMergePickerOpen && (
+        <ClientMergePickerModal
+          open
+          anchorClient={client}
+          anchorDealCount={deals.length}
+          onClose={handleCloseMergePicker}
+          onContinue={handleContinueToMerge}
+        />
+      )}
+
+      {isSuperAdmin && isMergeModalOpen && mergeClients.length >= 2 && (
+        <MergeClientsModal
+          mode="manual-multi"
+          clients={mergeClients}
+          defaultCanonicalClientId={clientId}
+          open
+          onClose={handleCloseMergeModal}
+          onMerged={handleMergeCompleted}
         />
       )}
     </main>

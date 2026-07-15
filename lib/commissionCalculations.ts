@@ -4,6 +4,16 @@ import {
   countAssignmentsForRole,
 } from '@/lib/constants';
 
+/**
+ * Legacy client-assignment share helpers.
+ *
+ * ClientAssignment roles are **team / pipeline entitlement**, not the preferred
+ * commission model. Prefer DealParticipant rows for commission splits.
+ * These helpers remain for:
+ * - "My share" display when a deal has no participants (`LEGACY_FALLBACK`)
+ * - secured-commission / company-earnings fallback until deals are backfilled
+ */
+
 type AssignedUserLike = {
   user_id: string;
   role: string;

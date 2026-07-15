@@ -1,26 +1,37 @@
 /**
- * Recalculate CommissionReturnable amounts using the role-aware formula.
- * Applies credits when a doctor also holds RELATIONSHIP or ACCOUNT_SERVICE roles.
+ * Recalculate CommissionReturnable amounts.
+ * - WON deals with participants: explicit DealParticipant returnable fields.
+ * - WON deals without participants: legacy client-assignment formula fallback.
  *
  * Run: npx tsx scripts/recalculate-commission-returnables.ts
  */
-import { backfillCommissionReturnablesForWonDeals } from '../lib/commissionReturnables';
+import { recalculateAllCommissionReturnablesForWonDeals } from '../lib/commissionReturnables';
 import { prisma } from '../lib/prisma';
 
 async function main() {
-  console.log('Recalculating commission returnable amounts (role-aware formula)...\n');
+  console.log('Recalculating commission returnable amounts...\n');
 
-  const result = await backfillCommissionReturnablesForWonDeals();
+  const result = await recalculateAllCommissionReturnablesForWonDeals();
 
   console.log('Summary:');
   console.log(`- WON deals processed: ${result.wonDealsProcessed}`);
-  console.log(`- Existing records scanned: ${result.recordsProcessed}`);
-  console.log(`- Records updated: ${result.recordsUpdated}`);
-  console.log(`- Records created (missing): ${result.recordsCreated}`);
-  console.log(`- Records skipped (non-WON/missing deal): ${result.recordsSkipped}`);
+  console.log(`- Deals processed with participants: ${result.dealsWithParticipants}`);
+  console.log(`- Deals processed with legacy fallback: ${result.dealsWithLegacyFallback}`);
+  console.log(`- Participant returnables created: ${result.participantReturnablesCreated}`);
+  console.log(`- Participant returnables updated: ${result.participantReturnablesUpdated}`);
+  console.log(
+    `- Participant returnables skipped (isReturnableRequired false): ${result.participantReturnablesSkippedNotRequired}`
+  );
+  console.log(
+    `- Participant returnables skipped (invalid config): ${result.participantReturnablesSkippedInvalid}`
+  );
+  console.log(`- Paid records preserved: ${result.paidRecordsPreserved}`);
+  console.log(`- Unpaid records zeroed (no longer required): ${result.unpaidRecordsZeroed}`);
+  console.log(`- Legacy records updated: ${result.legacyRecordsUpdated}`);
+  console.log(`- Legacy records created: ${result.legacyRecordsCreated}`);
 
   if (result.changes.length > 0) {
-    console.log('\nChanges applied:');
+    console.log('\nLegacy changes applied:');
     for (const change of result.changes) {
       if (change.action === 'updated') {
         console.log(
@@ -32,8 +43,6 @@ async function main() {
         );
       }
     }
-  } else {
-    console.log('\nNo changes were required — all amounts already match the corrected formula.');
   }
 
   const records = await prisma.commissionReturnable.findMany({

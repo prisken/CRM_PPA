@@ -2,6 +2,9 @@
 
 import { memo, useEffect, useMemo, useState } from 'react';
 import LeadSourceBadges from '@/components/clients/LeadSourceBadges';
+import SectionCard from '@/components/ui/SectionCard';
+import { useDisplayDensity } from '@/components/ui/DisplayDensityProvider';
+import { getTightStackSpacingClass } from '@/components/ui/displayDensity';
 import { authenticatedFetch } from '@/lib/authenticatedFetch';
 
 type SourceRecord = {
@@ -56,9 +59,12 @@ function formatPayload(payload: unknown) {
 export default memo(function ClientSourceRecordsWidget({
   clientId,
 }: ClientSourceRecordsWidgetProps) {
+  const { density } = useDisplayDensity();
+  const recordListSpacingClass = getTightStackSpacingClass(density);
   const [records, setRecords] = useState<SourceRecord[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [showAllRecords, setShowAllRecords] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -112,81 +118,128 @@ export default memo(function ClientSourceRecordsWidget({
     [records]
   );
 
-  return (
-    <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <h3 className="text-base font-semibold text-gray-900">External Source Records</h3>
-          <p className="mt-1 text-xs text-gray-500">
-            Inbound submissions from connected integrations.
+  const latestReceivedAt = useMemo(() => {
+    if (records.length === 0) {
+      return null;
+    }
+
+    return records.reduce((latest, record) => {
+      const latestTime = new Date(latest).getTime();
+      const recordTime = new Date(record.receivedAt).getTime();
+      return recordTime > latestTime ? record.receivedAt : latest;
+    }, records[0].receivedAt);
+  }, [records]);
+
+  const collapsedSummary = useMemo(() => {
+    if (isLoading) {
+      return 'Loading source records…';
+    }
+
+    if (error) {
+      return error;
+    }
+
+    if (records.length === 0) {
+      return 'No external source records yet.';
+    }
+
+    return (
+      <div className="space-y-1.5">
+        <LeadSourceBadges sources={uniqueSourceLabels} maxVisible={2} />
+        {latestReceivedAt && (
+          <p className="text-xs text-gray-500">
+            Latest received: {formatDateTime(latestReceivedAt)}
           </p>
-        </div>
-        {!isLoading && !error && records.length > 0 && (
-          <LeadSourceBadges sources={uniqueSourceLabels} />
         )}
       </div>
+    );
+  }, [error, isLoading, latestReceivedAt, records.length, uniqueSourceLabels]);
 
+  const visibleRecords = showAllRecords ? records : records.slice(0, 3);
+  const hiddenRecordCount = Math.max(records.length - visibleRecords.length, 0);
+
+  return (
+    <SectionCard
+      title="External Source Records"
+      description={collapsedSummary}
+      collapsible
+      defaultCollapsed
+      className="shadow-sm"
+    >
       {isLoading ? (
-        <p className="mt-4 text-sm text-gray-500">Loading source records…</p>
+        <p className="text-sm text-gray-500">Loading source records…</p>
       ) : error ? (
-        <p className="mt-4 text-sm text-red-600">{error}</p>
+        <p className="text-sm text-red-600">{error}</p>
       ) : records.length === 0 ? (
-        <p className="mt-4 text-sm text-gray-500">No external source records yet.</p>
+        <p className="text-sm text-gray-500">No external source records yet.</p>
       ) : (
-        <ul className="mt-4 space-y-3">
-          {records.map((record) => (
-            <li
-              key={record.id}
-              className="rounded-lg border border-gray-100 bg-gray-50 p-3"
+        <>
+          <ul className={recordListSpacingClass}>
+            {visibleRecords.map((record) => (
+              <li
+                key={record.id}
+                className="rounded-md border border-gray-100 bg-gray-50 px-2.5 py-2"
+              >
+                <div className="flex min-w-0 flex-col gap-0.5 sm:flex-row sm:items-start sm:justify-between">
+                  <p className="truncate text-sm font-medium text-gray-900">
+                    {formatSourceLabel(record.source)}
+                  </p>
+                  <p className="shrink-0 text-xs text-gray-500">
+                    {formatDateTime(record.receivedAt)}
+                  </p>
+                </div>
+
+                <dl className="mt-1.5 space-y-0.5 text-xs text-gray-600">
+                  {record.externalId ? (
+                    <div className="min-w-0">
+                      <dt className="inline font-medium text-gray-500">External ID: </dt>
+                      <dd className="inline truncate text-gray-800" title={record.externalId}>
+                        {record.externalId}
+                      </dd>
+                    </div>
+                  ) : null}
+                  {record.normalizedEmail ? (
+                    <div className="min-w-0">
+                      <dt className="inline font-medium text-gray-500">Email: </dt>
+                      <dd className="inline truncate text-gray-800" title={record.normalizedEmail}>
+                        {record.normalizedEmail}
+                      </dd>
+                    </div>
+                  ) : null}
+                  {record.normalizedPhone ? (
+                    <div className="min-w-0">
+                      <dt className="inline font-medium text-gray-500">Phone: </dt>
+                      <dd className="inline truncate text-gray-800" title={record.normalizedPhone}>
+                        {record.normalizedPhone}
+                      </dd>
+                    </div>
+                  ) : null}
+                </dl>
+
+                <details className="mt-1.5">
+                  <summary className="cursor-pointer text-xs font-medium text-blue-600 hover:text-blue-700">
+                    View payload
+                  </summary>
+                  <pre className="mt-2 max-h-48 overflow-auto rounded-md bg-white p-2 text-[11px] leading-relaxed text-gray-800">
+                    {formatPayload(record.payload)}
+                  </pre>
+                </details>
+              </li>
+            ))}
+          </ul>
+          {hiddenRecordCount > 0 && (
+            <button
+              type="button"
+              onClick={() => setShowAllRecords((current) => !current)}
+              className="text-xs font-medium text-blue-600 hover:text-blue-700"
             >
-              <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
-                <p className="text-sm font-medium text-gray-900">
-                  {formatSourceLabel(record.source)}
-                </p>
-                <p className="text-xs text-gray-500">
-                  {formatDateTime(record.receivedAt)}
-                </p>
-              </div>
-
-              <dl className="mt-2 space-y-1 text-xs text-gray-600">
-                {record.externalId ? (
-                  <div>
-                    <dt className="inline font-medium text-gray-500">External ID: </dt>
-                    <dd className="inline break-all text-gray-800">
-                      {record.externalId}
-                    </dd>
-                  </div>
-                ) : null}
-                {record.normalizedEmail ? (
-                  <div>
-                    <dt className="inline font-medium text-gray-500">Email: </dt>
-                    <dd className="inline break-all text-gray-800">
-                      {record.normalizedEmail}
-                    </dd>
-                  </div>
-                ) : null}
-                {record.normalizedPhone ? (
-                  <div>
-                    <dt className="inline font-medium text-gray-500">Phone: </dt>
-                    <dd className="inline break-all text-gray-800">
-                      {record.normalizedPhone}
-                    </dd>
-                  </div>
-                ) : null}
-              </dl>
-
-              <details className="mt-2">
-                <summary className="cursor-pointer text-xs font-medium text-blue-600 hover:text-blue-700">
-                  View payload
-                </summary>
-                <pre className="mt-2 max-h-48 overflow-auto rounded-md bg-white p-2 text-[11px] leading-relaxed text-gray-800">
-                  {formatPayload(record.payload)}
-                </pre>
-              </details>
-            </li>
-          ))}
-        </ul>
+              {showAllRecords
+                ? 'Show fewer records'
+                : `Show ${hiddenRecordCount} more record${hiddenRecordCount === 1 ? '' : 's'}`}
+            </button>
+          )}
+        </>
       )}
-    </div>
+    </SectionCard>
   );
 });

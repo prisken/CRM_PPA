@@ -45,7 +45,7 @@ const commissionColumns = [
 ] as ColumnDef<CommissionRow>[];
 
 const dealsColumns = [
-  dealsHelper.accessor('userName', { header: 'Relationship Specialist' }),
+  dealsHelper.accessor('userName', { header: 'Relationship Officer' }),
   dealsHelper.accessor('dealsClosed', { header: 'Deals Closed' }),
   dealsHelper.accessor('averageDealValue', {
     header: 'Avg Deal Value',
@@ -177,7 +177,7 @@ export default function Leaderboards() {
         columns={commissionColumns}
       />
       <DataTable
-        title="Deals Closed — Relationship Specialists"
+        title="Deals Closed — Relationship Officers"
         data={dealsData}
         columns={dealsColumns}
       />

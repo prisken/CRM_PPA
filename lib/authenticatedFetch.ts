@@ -11,7 +11,7 @@ export async function authenticatedFetch(
   input: RequestInfo | URL,
   init?: RequestInit
 ) {
-  return fetch(input, {
+  const response = await fetch(input, {
     ...init,
     credentials: 'same-origin',
     headers: {
@@ -19,4 +19,10 @@ export async function authenticatedFetch(
       ...(init?.headers ?? {}),
     },
   });
+
+  if (response.status === 401 && typeof window !== 'undefined') {
+    localStorage.removeItem('token');
+  }
+
+  return response;
 }

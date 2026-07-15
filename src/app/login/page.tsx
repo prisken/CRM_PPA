@@ -54,6 +54,20 @@ export default function LoginPage() {
         return;
       }
 
+      const tokenResponse = await fetch('/api/auth/token', {
+        method: 'POST',
+        credentials: 'same-origin',
+      });
+
+      if (tokenResponse.ok) {
+        const tokenData = (await tokenResponse.json()) as { token?: string };
+        if (tokenData.token) {
+          localStorage.setItem('token', tokenData.token);
+        }
+      } else {
+        localStorage.removeItem('token');
+      }
+
       router.push('/dashboard');
     } catch (err) {
       console.error(err);

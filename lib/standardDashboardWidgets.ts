@@ -1,19 +1,27 @@
 import {
   AssignmentRole,
   ClientStatus,
+  DealParticipantRole,
+  DealStatus,
   TaskStatus,
 } from '@prisma/client';
 import { buildGroupedRecentActivity } from '@/lib/activityFeed';
 import {
-  calculateIndividualRoleShare,
-  getRoleOccupancy,
-} from '@/lib/commissionCalculations';
-import { formatAssignmentRole } from '@/lib/commissionRates';
+  formatAssignmentRoleLabel,
+  CLIENT_TEAM_ASSIGNMENT_ROLES,
+  formatClientTeamAssignmentRoleLabel,
+  isClientTeamAssignmentRole,
+} from '@/lib/constants';
 import { formatClientStage } from '@/lib/clientStages';
+import {
+  calculateDealParticipantAmount,
+  roundMoney,
+} from '@/lib/dealParticipantCalculations';
 import {
   fetchDealAggregatesByClientIds,
   getClientDealAggregates,
 } from '@/lib/dashboardDealAggregates';
+import { calculateMySecuredCommissionWithLegacyFallback } from '@/lib/dealParticipantCalculations';
 import { prisma } from '@/lib/prisma';
 import { timeAsync } from '@/lib/performance';
 import {
@@ -22,6 +30,14 @@ import {
 } from '@/lib/standardDashboardContext';
 
 const RECENT_ACTIVITY_LIMIT = 15;
+const DEAL_PARTICIPATION_LIMIT = 20;
+
+const DEAL_STATUS_SORT_ORDER: Record<DealStatus, number> = {
+  [DealStatus.WON]: 0,
+  [DealStatus.PROPOSED]: 1,
+  [DealStatus.ON_HOLD]: 2,
+  [DealStatus.LOST]: 3,
+};
 const OPEN_TASK_STATUSES: TaskStatus[] = [
   TaskStatus.PENDING,
   TaskStatus.IN_PROGRESS,
@@ -38,36 +54,158 @@ async function fetchAssignedClientIds(userId: string) {
 }
 
 async function loadAssignedClientsSource(userId: string) {
-  const assignmentRows = await prisma.clientAssignment.findMany({
-    where: { userId },
-    select: {
-      role: true,
-      clientId: true,
-      client: {
-        select: {
-          name: true,
-          status: true,
+  const [teamAssignmentRows, legacyDoctorRows] = await Promise.all([
+    prisma.clientAssignment.findMany({
+      where: {
+        userId,
+        role: { in: CLIENT_TEAM_ASSIGNMENT_ROLES },
+      },
+      select: {
+        role: true,
+        clientId: true,
+        client: {
+          select: {
+            name: true,
+            status: true,
+          },
         },
       },
-    },
-    orderBy: { client: { name: 'asc' } },
-  });
+      orderBy: { client: { name: 'asc' } },
+    }),
+    prisma.clientAssignment.findMany({
+      where: {
+        userId,
+        role: AssignmentRole.DOCTOR,
+      },
+      select: {
+        role: true,
+        clientId: true,
+        client: {
+          select: {
+            name: true,
+            status: true,
+          },
+        },
+      },
+      orderBy: { client: { name: 'asc' } },
+    }),
+  ]);
 
-  if (assignmentRows.length === 0) {
+  if (teamAssignmentRows.length === 0 && legacyDoctorRows.length === 0) {
     return null;
   }
 
-  const clientIds = [...new Set(assignmentRows.map((row) => row.clientId))];
+  const clientIds = [
+    ...new Set([
+      ...teamAssignmentRows.map((row) => row.clientId),
+      ...legacyDoctorRows.map((row) => row.clientId),
+    ]),
+  ];
   const dealAggregates = await fetchDealAggregatesByClientIds(clientIds);
 
   return {
-    assignments: assignmentRows.map((row) => ({
+    teamAssignments: teamAssignmentRows.map((row) => ({
+      clientId: row.clientId,
+      role: row.role,
+      clientName: row.client.name,
+      clientStatus: row.client.status,
+    })),
+    legacyDoctorAssignments: legacyDoctorRows.map((row) => ({
       clientId: row.clientId,
       role: row.role,
       clientName: row.client.name,
       clientStatus: row.client.status,
     })),
     dealAggregates,
+  };
+}
+
+type TeamAssignmentSourceRow = {
+  clientId: string;
+  role: AssignmentRole;
+  clientName: string;
+  clientStatus: ClientStatus;
+};
+
+function groupClientAssignmentsByClient(
+  assignments: TeamAssignmentSourceRow[],
+  dealAggregates: Awaited<ReturnType<typeof fetchDealAggregatesByClientIds>>,
+  options: { legacyDoctor?: boolean } = {}
+) {
+  const grouped = new Map<
+    string,
+    {
+      clientId: string;
+      clientName: string;
+      clientStatus: ClientStatus;
+      roles: AssignmentRole[];
+    }
+  >();
+
+  for (const assignment of assignments) {
+    if (!options.legacyDoctor && !isClientTeamAssignmentRole(assignment.role)) {
+      continue;
+    }
+
+    if (options.legacyDoctor && assignment.role !== AssignmentRole.DOCTOR) {
+      continue;
+    }
+
+    const existing = grouped.get(assignment.clientId);
+    if (existing) {
+      existing.roles.push(assignment.role);
+      continue;
+    }
+
+    grouped.set(assignment.clientId, {
+      clientId: assignment.clientId,
+      clientName: assignment.clientName,
+      clientStatus: assignment.clientStatus,
+      roles: [assignment.role],
+    });
+  }
+
+  return Array.from(grouped.values())
+    .sort((left, right) => left.clientName.localeCompare(right.clientName))
+    .map((entry) => {
+      const aggregates = getClientDealAggregates(dealAggregates, entry.clientId);
+      const roleLabels = options.legacyDoctor
+        ? [formatAssignmentRoleLabel(AssignmentRole.DOCTOR)]
+        : [...new Set(entry.roles.filter(isClientTeamAssignmentRole))].map((role) =>
+            formatClientTeamAssignmentRoleLabel(role)
+          );
+
+      return {
+        clientId: entry.clientId,
+        clientName: entry.clientName,
+        myRole: roleLabels.join(', '),
+        myRoles: roleLabels,
+        clientStatus: formatClientStage(entry.clientStatus),
+        dealValue: aggregates.wonDealValue + aggregates.proposedDealValue,
+      };
+    });
+}
+
+function buildAssignedClientsWidgetPayload(
+  teamAssignments: TeamAssignmentSourceRow[],
+  legacyDoctorAssignments: TeamAssignmentSourceRow[],
+  dealAggregates: Awaited<ReturnType<typeof fetchDealAggregatesByClientIds>>
+) {
+  const assignedClients = groupClientAssignmentsByClient(
+    teamAssignments,
+    dealAggregates
+  );
+  const legacyRows = groupClientAssignmentsByClient(
+    legacyDoctorAssignments,
+    dealAggregates,
+    { legacyDoctor: true }
+  );
+
+  return {
+    assignedClients,
+    ...(legacyRows.length > 0
+      ? { legacyDoctorAssignments: legacyRows }
+      : {}),
   };
 }
 
@@ -79,26 +217,22 @@ export async function buildAssignedClientsWidget(
     'widget:buildAssignedClientsWidget',
     async () => {
       if (context) {
-        if (context.assignments.length === 0) {
+        const teamAssignments = context.assignments.filter((assignment) =>
+          isClientTeamAssignmentRole(assignment.role)
+        );
+        const legacyDoctorAssignments = context.assignments.filter(
+          (assignment) => assignment.role === AssignmentRole.DOCTOR
+        );
+
+        if (teamAssignments.length === 0 && legacyDoctorAssignments.length === 0) {
           return { assignedClients: [] };
         }
 
-        return {
-          assignedClients: context.assignments.map((assignment) => {
-            const aggregates = getClientDealAggregates(
-              context.dealAggregates,
-              assignment.clientId
-            );
-
-            return {
-              clientId: assignment.clientId,
-              clientName: assignment.clientName,
-              myRole: formatAssignmentRole(assignment.role),
-              clientStatus: formatClientStage(assignment.clientStatus),
-              dealValue: aggregates.wonDealValue + aggregates.proposedDealValue,
-            };
-          }),
-        };
+        return buildAssignedClientsWidgetPayload(
+          teamAssignments,
+          legacyDoctorAssignments,
+          context.dealAggregates
+        );
       }
 
       const source = await loadAssignedClientsSource(userId);
@@ -106,26 +240,134 @@ export async function buildAssignedClientsWidget(
         return { assignedClients: [] };
       }
 
-      return {
-        assignedClients: source.assignments.map((assignment) => {
-          const aggregates = getClientDealAggregates(
-            source.dealAggregates,
-            assignment.clientId
-          );
-
-          return {
-            clientId: assignment.clientId,
-            clientName: assignment.clientName,
-            myRole: formatAssignmentRole(assignment.role),
-            clientStatus: formatClientStage(assignment.clientStatus),
-            dealValue: aggregates.wonDealValue + aggregates.proposedDealValue,
-          };
-        }),
-      };
+      return buildAssignedClientsWidgetPayload(
+        source.teamAssignments,
+        source.legacyDoctorAssignments,
+        source.dealAggregates
+      );
     },
     (result) => ({
       userId,
       assignmentCount: result.assignedClients.length,
+    })
+  );
+}
+
+export async function buildDealParticipationWidget(userId: string) {
+  return timeAsync(
+    'widget:buildDealParticipationWidget',
+    async () => {
+      const participantRows = await prisma.dealParticipant.findMany({
+        where: { userId },
+        select: {
+          role: true,
+          commissionPercent: true,
+          commissionAmount: true,
+          isCommissionable: true,
+          deal: {
+            select: {
+              id: true,
+              name: true,
+              status: true,
+              dealType: true,
+              updatedAt: true,
+              totalCommission: true,
+              clientId: true,
+              client: {
+                select: {
+                  name: true,
+                  company: true,
+                },
+              },
+            },
+          },
+        },
+      });
+
+      if (participantRows.length === 0) {
+        return { deals: [] };
+      }
+
+      type DealParticipationGroup = {
+        dealId: string;
+        dealName: string;
+        clientId: string;
+        clientName: string;
+        status: DealStatus;
+        dealType: string;
+        updatedAt: Date;
+        myRoles: Set<DealParticipantRole>;
+        myCommissionPercent: number;
+        myCommissionAmount: number;
+      };
+
+      const groupedDeals = new Map<string, DealParticipationGroup>();
+
+      for (const row of participantRows) {
+        const deal = row.deal;
+        const existing = groupedDeals.get(deal.id);
+
+        const participantAmount = calculateDealParticipantAmount(
+          deal.totalCommission,
+          row
+        );
+        const participantPercent = Number(row.commissionPercent);
+
+        if (!existing) {
+          groupedDeals.set(deal.id, {
+            dealId: deal.id,
+            dealName: deal.name,
+            clientId: deal.clientId,
+            clientName: deal.client.company?.trim() || deal.client.name,
+            status: deal.status,
+            dealType: deal.dealType,
+            updatedAt: deal.updatedAt,
+            myRoles: new Set([row.role]),
+            myCommissionPercent: participantPercent,
+            myCommissionAmount: participantAmount,
+          });
+          continue;
+        }
+
+        existing.myRoles.add(row.role);
+        existing.myCommissionPercent += participantPercent;
+        existing.myCommissionAmount += participantAmount;
+
+        if (deal.updatedAt > existing.updatedAt) {
+          existing.updatedAt = deal.updatedAt;
+        }
+      }
+
+      const deals = Array.from(groupedDeals.values())
+        .sort((left, right) => {
+          const statusDiff =
+            DEAL_STATUS_SORT_ORDER[left.status] -
+            DEAL_STATUS_SORT_ORDER[right.status];
+
+          if (statusDiff !== 0) {
+            return statusDiff;
+          }
+
+          return right.updatedAt.getTime() - left.updatedAt.getTime();
+        })
+        .slice(0, DEAL_PARTICIPATION_LIMIT)
+        .map((deal) => ({
+          dealId: deal.dealId,
+          dealName: deal.dealName,
+          clientId: deal.clientId,
+          clientName: deal.clientName,
+          status: deal.status,
+          dealType: deal.dealType,
+          myRoles: Array.from(deal.myRoles).sort(),
+          myCommissionPercent: roundMoney(deal.myCommissionPercent),
+          myCommissionAmount: roundMoney(deal.myCommissionAmount),
+        }));
+
+      return { deals };
+    },
+    (result) => ({
+      userId,
+      dealCount: result.deals.length,
     })
   );
 }
@@ -228,30 +470,42 @@ export async function buildPerformanceMetricsWidget(
 
       let totalActiveClients = 0;
       let totalPipelineValue = 0;
-      let mySecuredCommission = 0;
 
       for (const assignment of dashboardContext.assignments) {
         const aggregates = getClientDealAggregates(
           dashboardContext.dealAggregates,
           assignment.clientId
         );
-        const roleOccupancy = getRoleOccupancy(
-          dashboardContext.roleOccupancyMap,
-          assignment.clientId,
-          assignment.role
-        );
-        const individualShare = calculateIndividualRoleShare(
-          assignment.role as AssignmentRole,
-          roleOccupancy
-        );
 
         totalPipelineValue += aggregates.proposedDealValue;
-        mySecuredCommission += aggregates.wonCommission * individualShare;
 
         if (assignment.clientStatus === ClientStatus.ACTIVE_CLIENT) {
           totalActiveClients += 1;
         }
       }
+
+      const mySecuredCommission = calculateMySecuredCommissionWithLegacyFallback(
+        userId,
+        dashboardContext.wonDeals.map((deal) => ({
+          id: deal.id,
+          clientId: deal.clientId,
+          totalCommission: deal.totalCommission,
+          status: DealStatus.WON,
+          participants: deal.participants.map((participant) => ({
+            id: participant.id,
+            userId: participant.userId,
+            role: participant.role,
+            commissionPercent: participant.commissionPercent,
+            commissionAmount: participant.commissionAmount,
+            isCommissionable: participant.isCommissionable,
+          })),
+        })),
+        dashboardContext.assignments.map((assignment) => ({
+          clientId: assignment.clientId,
+          role: assignment.role as AssignmentRole,
+        })),
+        dashboardContext.roleOccupancyMap
+      );
 
       return {
         hasAnyAssignment: true,

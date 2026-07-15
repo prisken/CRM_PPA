@@ -1,6 +1,10 @@
 import { AssignmentRole, ClientStatus } from '@prisma/client';
 import { buildRoleOccupancyMap } from '@/lib/commissionCalculations';
-import { fetchDealAggregatesByClientIds } from '@/lib/dashboardDealAggregates';
+import {
+  fetchDealAggregatesByClientIds,
+  fetchWonDealsWithParticipantsByClientIds,
+  type DashboardWonDealWithParticipants,
+} from '@/lib/dashboardDealAggregates';
 import { prisma } from '@/lib/prisma';
 import { timeAsync } from '@/lib/performance';
 
@@ -15,6 +19,7 @@ export type StandardDashboardContext = {
   assignments: StandardDashboardAssignment[];
   clientIds: string[];
   dealAggregates: Awaited<ReturnType<typeof fetchDealAggregatesByClientIds>>;
+  wonDeals: DashboardWonDealWithParticipants[];
   roleOccupancyMap: Map<string, number>;
 };
 
@@ -42,14 +47,16 @@ export async function loadStandardDashboardContext(
         assignments: [],
         clientIds: [],
         dealAggregates: new Map(),
+        wonDeals: [],
         roleOccupancyMap: new Map(),
       };
     }
 
     const clientIds = [...new Set(assignmentRows.map((row) => row.clientId))];
 
-    const [dealAggregates, allClientAssignments] = await Promise.all([
+    const [dealAggregates, wonDeals, allClientAssignments] = await Promise.all([
       fetchDealAggregatesByClientIds(clientIds),
+      fetchWonDealsWithParticipantsByClientIds(clientIds),
       prisma.clientAssignment.findMany({
         where: { clientId: { in: clientIds } },
         select: { clientId: true, role: true },
@@ -65,6 +72,7 @@ export async function loadStandardDashboardContext(
       })),
       clientIds,
       dealAggregates,
+      wonDeals,
       roleOccupancyMap: buildRoleOccupancyMap(allClientAssignments),
     };
   });

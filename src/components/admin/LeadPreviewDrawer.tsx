@@ -1,11 +1,24 @@
 'use client';
 
 import Link from 'next/link';
-import { memo, useCallback, useEffect, useState, type ReactNode } from 'react';
+import { memo, useCallback, useEffect, useState } from 'react';
 import LeadSourceBadges from '@/components/clients/LeadSourceBadges';
+import LeadTagBadges from '@/components/clients/LeadTagBadges';
+import ImportantDatesPanel from '@/components/clients/ImportantDatesPanel';
+import CompactPill, { type CompactPillTone } from '@/components/ui/CompactPill';
+import EmptyMuted from '@/components/ui/EmptyMuted';
+import StatusPill from '@/components/ui/StatusPill';
+import SectionCard from '@/components/ui/SectionCard';
+import { useDisplayDensity } from '@/components/ui/DisplayDensityProvider';
+import {
+  getSectionCardBodyPaddingClass,
+  getStackSpacingClass,
+  getTightStackSpacingClass,
+} from '@/components/ui/displayDensity';
 import { authenticatedFetch } from '@/lib/authenticatedFetch';
-import { formatClientStage, getStatusBadgeStyles } from '@/lib/clientStages';
 import type { LeadCommandCenterRow } from '@/lib/leadCommandCenter';
+import { useUserProfile } from '@/hooks/useUserProfile';
+import { UserRole } from '@prisma/client';
 
 type LeadPreviewDrawerProps = {
   lead: LeadCommandCenterRow | null;
@@ -13,7 +26,16 @@ type LeadPreviewDrawerProps = {
   onClose: () => void;
   onRefresh?: () => void;
   onAddNote?: () => void;
+  /** When omitted, SUPER_ADMIN may edit (Lead Command Center is SA-only). */
+  canEditImportantDates?: boolean;
 };
+
+const PRIORITY_OPTIONS = [
+  { value: '', label: 'No priority' },
+  { value: 'LOW', label: 'Low' },
+  { value: 'MEDIUM', label: 'Medium' },
+  { value: 'HIGH', label: 'High' },
+] as const;
 
 function formatDateTime(value: string | null) {
   if (!value) {
@@ -60,58 +82,63 @@ function toDateTimeLocalValue(value: string | null) {
   return `${parsed.getFullYear()}-${pad(parsed.getMonth() + 1)}-${pad(parsed.getDate())}T${pad(parsed.getHours())}:${pad(parsed.getMinutes())}`;
 }
 
-const PRIORITY_OPTIONS = [
-  { value: '', label: 'No priority' },
-  { value: 'LOW', label: 'Low' },
-  { value: 'MEDIUM', label: 'Medium' },
-  { value: 'HIGH', label: 'High' },
-] as const;
+function getRelationshipOwner(lead: LeadCommandCenterRow) {
+  return lead.assignedUsers.find((user) => user.role === 'RELATIONSHIP') ?? null;
+}
 
-function WarningBadges({
-  items,
-  tone,
-}: {
-  items: string[];
-  tone: 'attention' | 'quality' | 'duplicate';
-}) {
-  if (items.length === 0) {
-    return <p className="text-sm text-gray-500">None</p>;
+function priorityTone(priority: string | null): CompactPillTone {
+  if (priority === 'HIGH') {
+    return 'red';
   }
+  if (priority === 'MEDIUM') {
+    return 'yellow';
+  }
+  return 'gray';
+}
 
-  const toneClasses = {
-    attention: 'bg-orange-100 text-orange-800',
-    quality: 'bg-amber-100 text-amber-800',
-    duplicate: 'bg-red-100 text-red-800',
-  }[tone];
+function WarningList({ items, tone }: { items: string[]; tone: CompactPillTone }) {
+  if (items.length === 0) {
+    return <p className="text-xs text-gray-500">None</p>;
+  }
 
   return (
     <div className="flex flex-wrap gap-1">
       {items.map((item) => (
-        <span
-          key={item}
-          className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${toneClasses}`}
-        >
+        <CompactPill key={item} tone={tone} size="xs" title={item}>
           {item}
-        </span>
+        </CompactPill>
       ))}
     </div>
   );
 }
 
-function DrawerSection({
-  title,
-  children,
+function ContactField({
+  label,
+  value,
+  onCopy,
 }: {
-  title: string;
-  children: ReactNode;
+  label: string;
+  value: string | null;
+  onCopy: (value: string | null, label: string) => void;
 }) {
   return (
-    <section>
-      <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-500">
-        {title}
-      </h3>
-      <div className="mt-2">{children}</div>
-    </section>
+    <div className="flex items-start justify-between gap-2">
+      <div className="min-w-0">
+        <p className="text-[11px] font-medium uppercase tracking-wide text-gray-400">{label}</p>
+        <p className="mt-0.5 truncate text-sm text-gray-800">
+          {value ?? <EmptyMuted label={`No ${label.toLowerCase()}`}>—</EmptyMuted>}
+        </p>
+      </div>
+      {value?.trim() && (
+        <button
+          type="button"
+          onClick={() => onCopy(value, label)}
+          className="shrink-0 rounded-md border border-gray-200 px-2 py-1 text-xs font-medium text-gray-600 hover:bg-gray-50"
+        >
+          Copy
+        </button>
+      )}
+    </div>
   );
 }
 
@@ -121,7 +148,15 @@ function LeadPreviewDrawer({
   onClose,
   onRefresh,
   onAddNote,
+  canEditImportantDates,
 }: LeadPreviewDrawerProps) {
+  const { profile } = useUserProfile();
+  const { density } = useDisplayDensity();
+  const stackSpacingClass = getStackSpacingClass(density);
+  const tightStackSpacingClass = getTightStackSpacingClass(density);
+  const bodyPaddingClass = getSectionCardBodyPaddingClass(density);
+  const canManageDates =
+    canEditImportantDates ?? profile?.role === UserRole.SUPER_ADMIN;
   const [copyMessage, setCopyMessage] = useState<string | null>(null);
   const [priority, setPriority] = useState('');
   const [nextAction, setNextAction] = useState('');
@@ -235,10 +270,11 @@ function LeadPreviewDrawer({
     return null;
   }
 
-  const assignedSummary =
-    lead.assignedUsers.length > 0
-      ? lead.assignedUsers.map((user) => `${user.name} (${user.role.replace(/_/g, ' ')})`)
-      : [];
+  const relationshipOwner = getRelationshipOwner(lead);
+  const extraTeamCount = relationshipOwner
+    ? lead.assignedUsers.length - 1
+    : lead.assignedUsers.length;
+  const attentionExpandedByDefault = lead.attentionScore > 0;
 
   return (
     <div className="fixed inset-0 z-50" role="presentation">
@@ -253,42 +289,129 @@ function LeadPreviewDrawer({
         role="dialog"
         aria-modal="true"
         aria-labelledby="lead-preview-title"
-        className="fixed inset-0 flex flex-col bg-white shadow-xl sm:inset-y-0 sm:left-auto sm:right-0 sm:w-full sm:max-w-md"
+        className="fixed inset-0 flex flex-col bg-gray-50 shadow-xl sm:inset-y-0 sm:left-auto sm:right-0 sm:w-full sm:max-w-md"
       >
-        <header className="flex items-start justify-between gap-3 border-b border-gray-200 px-4 py-4 sm:px-5">
-          <div className="min-w-0">
-            <h2 id="lead-preview-title" className="truncate text-lg font-semibold text-gray-900">
-              {lead.name}
-            </h2>
-            {lead.company && (
-              <p className="mt-1 truncate text-sm text-gray-500">{lead.company}</p>
-            )}
-          </div>
+        <header className="flex items-center justify-between gap-3 border-b border-gray-200 bg-white px-4 py-3 sm:px-5">
+          <h2 id="lead-preview-title" className="text-sm font-semibold text-gray-900">
+            Lead preview
+          </h2>
           <button
             type="button"
             onClick={onClose}
-            className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+            className="rounded-md border border-gray-300 px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50"
           >
             Close
           </button>
         </header>
 
-        <div className="flex-1 overflow-y-auto px-4 py-4 sm:px-5">
-          <div className="space-y-5">
-            <DrawerSection title="Status">
-              <span
-                className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${getStatusBadgeStyles(lead.status)}`}
-              >
-                {formatClientStage(lead.status)}
-              </span>
-            </DrawerSection>
+        {copyMessage && (
+          <p className="border-b border-green-100 bg-green-50 px-4 py-2 text-xs text-green-700 sm:px-5" role="status">
+            {copyMessage}
+          </p>
+        )}
 
-            <DrawerSection title="Follow-up">
-              <form onSubmit={handleSaveFollowUp} className="space-y-3">
+        <div key={lead.clientId} className={`flex-1 overflow-y-auto ${bodyPaddingClass}`}>
+          <div className={stackSpacingClass}>
+            <SectionCard title="Summary" collapsible className="shadow-none">
+              <div className={tightStackSpacingClass}>
+                <div>
+                  <p className="text-base font-semibold text-gray-900">{lead.name}</p>
+                  {lead.company && (
+                    <p className="mt-0.5 text-sm text-gray-500">{lead.company}</p>
+                  )}
+                </div>
+
+                <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+                  <div>
+                    <dt className="text-[11px] font-medium uppercase tracking-wide text-gray-400">
+                      Status
+                    </dt>
+                    <dd className="mt-0.5">
+                      <StatusPill status={lead.status} />
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-[11px] font-medium uppercase tracking-wide text-gray-400">
+                      Priority
+                    </dt>
+                    <dd className="mt-0.5">
+                      {lead.priority ? (
+                        <CompactPill tone={priorityTone(lead.priority)} size="xs">
+                          {lead.priority}
+                        </CompactPill>
+                      ) : (
+                        <EmptyMuted label="No priority">—</EmptyMuted>
+                      )}
+                    </dd>
+                  </div>
+                  <div className="col-span-2">
+                    <dt className="text-[11px] font-medium uppercase tracking-wide text-gray-400">
+                      Owner
+                    </dt>
+                    <dd className="mt-0.5 text-sm text-gray-800">
+                      {relationshipOwner ? (
+                        <>
+                          {relationshipOwner.name}
+                          {extraTeamCount > 0 && (
+                            <span className="text-gray-500">{` · +${extraTeamCount} team`}</span>
+                          )}
+                        </>
+                      ) : lead.assignedUsers.length > 0 ? (
+                        <>
+                          <EmptyMuted label="Unassigned">Unassigned</EmptyMuted>
+                          <span className="text-gray-500">{` · +${lead.assignedUsers.length} team`}</span>
+                        </>
+                      ) : (
+                        <EmptyMuted label="Unassigned">Unassigned</EmptyMuted>
+                      )}
+                    </dd>
+                  </div>
+                </dl>
+
+                <div className="flex flex-wrap gap-2 border-t border-gray-100 pt-3">
+                  <Link
+                    href={`/clients/${lead.clientId}`}
+                    className="inline-flex rounded-md bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700"
+                  >
+                    Open Client 360
+                  </Link>
+                  {onAddNote && (
+                    <button
+                      type="button"
+                      onClick={onAddNote}
+                      className="rounded-md border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
+                    >
+                      Add quick note
+                    </button>
+                  )}
+                </div>
+              </div>
+            </SectionCard>
+
+            <SectionCard title="Contact" collapsible defaultCollapsed className="shadow-none">
+              <div className={tightStackSpacingClass}>
+                <ContactField label="Email" value={lead.email} onCopy={handleCopy} />
+                <ContactField label="Phone" value={lead.phone} onCopy={handleCopy} />
+              </div>
+            </SectionCard>
+
+            <SectionCard title="Important Dates" collapsible className="shadow-none">
+              <ImportantDatesPanel
+                key={lead.clientId}
+                ownerId={lead.clientId}
+                ownerKind="lead"
+                canEdit={canManageDates}
+                showHeading={false}
+                onChanged={onRefresh}
+              />
+            </SectionCard>
+
+            <SectionCard title="Follow-up" collapsible className="shadow-none">
+              <form onSubmit={handleSaveFollowUp} className={tightStackSpacingClass}>
                 <div>
                   <label
                     htmlFor="lead-preview-priority"
-                    className="mb-1 block text-sm font-medium text-gray-700"
+                    className="mb-1 block text-xs font-medium text-gray-600"
                   >
                     Priority
                   </label>
@@ -310,7 +433,7 @@ function LeadPreviewDrawer({
                 <div>
                   <label
                     htmlFor="lead-preview-next-action"
-                    className="mb-1 block text-sm font-medium text-gray-700"
+                    className="mb-1 block text-xs font-medium text-gray-600"
                   >
                     Next action
                   </label>
@@ -328,7 +451,7 @@ function LeadPreviewDrawer({
                 <div>
                   <label
                     htmlFor="lead-preview-follow-up-at"
-                    className="mb-1 block text-sm font-medium text-gray-700"
+                    className="mb-1 block text-xs font-medium text-gray-600"
                   >
                     Follow-up date
                   </label>
@@ -342,11 +465,9 @@ function LeadPreviewDrawer({
                   />
                 </div>
 
-                {followUpError && (
-                  <p className="text-sm text-red-600">{followUpError}</p>
-                )}
+                {followUpError && <p className="text-xs text-red-600">{followUpError}</p>}
                 {followUpMessage && (
-                  <p className="text-sm text-green-700" role="status">
+                  <p className="text-xs text-green-700" role="status">
                     {followUpMessage}
                   </p>
                 )}
@@ -354,176 +475,141 @@ function LeadPreviewDrawer({
                 <button
                   type="submit"
                   disabled={isSavingFollowUp}
-                  className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+                  className="rounded-md bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   {isSavingFollowUp ? 'Saving...' : 'Save follow-up'}
                 </button>
               </form>
-            </DrawerSection>
+            </SectionCard>
 
-            <DrawerSection title="Sources">
-              <LeadSourceBadges sources={lead.sourceLabels} maxVisible={6} />
-            </DrawerSection>
-
-            <DrawerSection title="Contact">
-              <dl className="space-y-2 text-sm">
+            <SectionCard
+              title="Attention"
+              collapsible
+              defaultCollapsed={!attentionExpandedByDefault}
+              className="shadow-none"
+            >
+              <div className={tightStackSpacingClass}>
                 <div>
-                  <dt className="text-gray-500">Email</dt>
-                  <dd className="font-medium text-gray-900">
-                    {lead.email ?? <span className="text-gray-400">Missing</span>}
-                  </dd>
+                  <p className="text-[11px] font-medium uppercase tracking-wide text-gray-400">
+                    Score
+                  </p>
+                  <p className="mt-0.5 text-sm font-medium text-gray-900">
+                    {lead.attentionScore > 0 ? lead.attentionScore : '—'}
+                  </p>
                 </div>
+
                 <div>
-                  <dt className="text-gray-500">Phone</dt>
-                  <dd className="font-medium text-gray-900">
-                    {lead.phone ?? <span className="text-gray-400">Missing</span>}
-                  </dd>
+                  <p className="mb-1.5 text-[11px] font-medium uppercase tracking-wide text-gray-400">
+                    Reasons
+                  </p>
+                  <WarningList items={lead.attentionReasons} tone="orange" />
                 </div>
-              </dl>
-            </DrawerSection>
 
-            <DrawerSection title="Assigned Users">
-              {assignedSummary.length > 0 ? (
-                <ul className="space-y-1 text-sm text-gray-800">
-                  {assignedSummary.map((entry) => (
-                    <li key={entry}>{entry}</li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="text-sm text-gray-500">Unassigned</p>
-              )}
-            </DrawerSection>
+                <div>
+                  <p className="mb-1.5 text-[11px] font-medium uppercase tracking-wide text-gray-400">
+                    Data quality
+                  </p>
+                  <WarningList items={lead.dataQualityWarnings} tone="yellow" />
+                </div>
 
-            <DrawerSection title="Attention">
-              <p className="text-sm font-semibold text-gray-900">
-                Score: {lead.attentionScore > 0 ? lead.attentionScore : '—'}
-              </p>
-              <div className="mt-2">
-                <WarningBadges items={lead.attentionReasons} tone="attention" />
+                <div>
+                  <p className="mb-1.5 text-[11px] font-medium uppercase tracking-wide text-gray-400">
+                    Duplicates
+                  </p>
+                  <WarningList items={lead.duplicateWarnings} tone="red" />
+                </div>
               </div>
-            </DrawerSection>
+            </SectionCard>
 
-            <DrawerSection title="Data Quality">
-              <WarningBadges items={lead.dataQualityWarnings} tone="quality" />
-            </DrawerSection>
-
-            <DrawerSection title="Duplicates">
-              <WarningBadges items={lead.duplicateWarnings} tone="duplicate" />
-            </DrawerSection>
-
-            <DrawerSection title="Latest Source">
-              <dl className="space-y-1 text-sm">
+            <SectionCard
+              title="Sources and tags"
+              collapsible
+              defaultCollapsed
+              className="shadow-none"
+            >
+              <div className={stackSpacingClass}>
                 <div>
-                  <dt className="text-gray-500">Label</dt>
-                  <dd className="font-medium text-gray-900">
+                  <p className="mb-1.5 text-[11px] font-medium uppercase tracking-wide text-gray-400">
+                    Sources
+                  </p>
+                  <LeadSourceBadges sources={lead.sourceLabels} maxVisible={2} />
+                </div>
+
+                <div>
+                  <p className="mb-1.5 text-[11px] font-medium uppercase tracking-wide text-gray-400">
+                    Latest source
+                  </p>
+                  <p className="text-sm text-gray-800">
                     {lead.latestSourceLabel ?? '—'}
-                  </dd>
-                </div>
-                <div>
-                  <dt className="text-gray-500">Received</dt>
-                  <dd className="font-medium text-gray-900">
+                  </p>
+                  <p className="mt-0.5 text-xs text-gray-500">
                     {formatDateTime(lead.latestSourceReceivedAt)}
-                  </dd>
+                  </p>
                 </div>
-              </dl>
-            </DrawerSection>
 
-            <DrawerSection title="Source Records">
-              <p className="text-sm text-gray-700">
-                {lead.sourceRecordCount} record{lead.sourceRecordCount === 1 ? '' : 's'}
-              </p>
-              {lead.sources.length > 0 ? (
-                <ul className="mt-2 space-y-2">
-                  {lead.sources.slice(0, 5).map((record, index) => (
-                    <li
-                      key={`${record.source}-${record.receivedAt}-${index}`}
-                      className="rounded-lg border border-gray-100 bg-gray-50 p-3 text-sm"
-                    >
-                      <p className="font-medium text-gray-900">
-                        {formatSourceRecordLabel(record.source)}
-                      </p>
-                      <p className="mt-1 text-xs text-gray-500">
-                        {formatDateTime(record.receivedAt)}
-                      </p>
-                      {record.externalId && (
-                        <p className="mt-1 break-all text-xs text-gray-600">
-                          ID: {record.externalId}
-                        </p>
+                <div>
+                  <p className="mb-1.5 text-[11px] font-medium uppercase tracking-wide text-gray-400">
+                    Source records
+                  </p>
+                  <p className="text-sm text-gray-700">
+                    {lead.sourceRecordCount} record{lead.sourceRecordCount === 1 ? '' : 's'}
+                  </p>
+                  {lead.sources.length > 0 ? (
+                    <ul className="mt-2 space-y-1.5">
+                      {lead.sources.slice(0, 2).map((record, index) => (
+                        <li
+                          key={`${record.source}-${record.receivedAt}-${index}`}
+                          className="rounded-md border border-gray-100 bg-gray-50 px-2.5 py-1.5 text-xs text-gray-700"
+                        >
+                          <span className="font-medium text-gray-900">
+                            {formatSourceRecordLabel(record.source)}
+                          </span>
+                          <span className="text-gray-400"> · </span>
+                          <span className="text-gray-500">
+                            {formatDateTime(record.receivedAt)}
+                          </span>
+                        </li>
+                      ))}
+                      {lead.sources.length > 2 && (
+                        <li className="text-xs text-gray-500">
+                          +{lead.sources.length - 2} more record
+                          {lead.sources.length - 2 === 1 ? '' : 's'}
+                        </li>
                       )}
-                    </li>
-                  ))}
-                  {lead.sources.length > 5 && (
-                    <li className="text-xs text-gray-500">
-                      +{lead.sources.length - 5} more record
-                      {lead.sources.length - 5 === 1 ? '' : 's'}
-                    </li>
+                    </ul>
+                  ) : (
+                    <p className="mt-1 text-xs text-gray-500">No source records yet.</p>
                   )}
-                </ul>
-              ) : (
-                <p className="mt-2 text-sm text-gray-500">No source records yet.</p>
-              )}
-            </DrawerSection>
+                </div>
 
-            <DrawerSection title="Last Activity">
-              <p className="text-sm font-medium text-gray-900">
-                {formatDateTime(lead.lastActivityAt)}
-              </p>
-              {lead.lastActivitySummary && (
+                <div>
+                  <p className="mb-1.5 text-[11px] font-medium uppercase tracking-wide text-gray-400">
+                    Tags
+                  </p>
+                  {lead.tags.length > 0 ? (
+                    <LeadTagBadges tags={lead.tags} maxVisible={2} />
+                  ) : (
+                    <EmptyMuted label="No tags" />
+                  )}
+                </div>
+              </div>
+            </SectionCard>
+
+            <SectionCard
+              title="Recent activity"
+              collapsible
+              defaultCollapsed
+              className="shadow-none"
+            >
+              <p className="text-sm text-gray-800">{formatDateTime(lead.lastActivityAt)}</p>
+              {lead.lastActivitySummary ? (
                 <p className="mt-1 text-sm text-gray-600">{lead.lastActivitySummary}</p>
+              ) : (
+                <EmptyMuted label="No activity summary" />
               )}
-            </DrawerSection>
+            </SectionCard>
           </div>
         </div>
-
-        <footer className="border-t border-gray-200 px-4 py-4 sm:px-5">
-          {copyMessage && (
-            <p className="mb-3 text-sm text-green-700" role="status">
-              {copyMessage}
-            </p>
-          )}
-          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
-            <Link
-              href={`/clients/${lead.clientId}`}
-              className="inline-flex justify-center rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
-            >
-              Open Client 360
-            </Link>
-            {onAddNote && (
-              <button
-                type="button"
-                onClick={onAddNote}
-                className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-              >
-                Add note
-              </button>
-            )}
-            {lead.email && (
-              <button
-                type="button"
-                onClick={() => handleCopy(lead.email, 'Email')}
-                className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-              >
-                Copy email
-              </button>
-            )}
-            {lead.phone && (
-              <button
-                type="button"
-                onClick={() => handleCopy(lead.phone, 'Phone')}
-                className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-              >
-                Copy phone
-              </button>
-            )}
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 sm:ml-auto"
-            >
-              Close
-            </button>
-          </div>
-        </footer>
       </aside>
     </div>
   );

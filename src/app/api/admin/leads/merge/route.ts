@@ -4,6 +4,7 @@ import {
   mergeClients,
   type MergeFieldChoiceKey,
   type MergeFieldChoices,
+  type MergeFieldOverrides,
   type MergeFieldWinner,
 } from '@/lib/clientMerge';
 import { timeRouteHandler } from '@/lib/performance';
@@ -20,6 +21,34 @@ const VALID_FIELD_KEYS = new Set<MergeFieldChoiceKey>([
   'employee_count',
   'expectations',
   'contactInfo',
+  'priority',
+  'next_action',
+  'next_follow_up_at',
+]);
+
+const VALID_OVERRIDE_KEYS = new Set<keyof MergeFieldOverrides>([
+  'name',
+  'company',
+  'email',
+  'phone',
+  'lead_source',
+  'role_in_company',
+  'employee_count',
+  'expectations',
+  'contactInfo',
+  'priority',
+  'next_action',
+  'next_follow_up_at',
+]);
+
+const MERGE_VALIDATION_ERRORS = new Set([
+  'Cannot merge a client with itself.',
+  'Canonical client not found.',
+  'Duplicate client not found.',
+  'name is required.',
+  'employee_count must be an integer greater than or equal to 0.',
+  'priority must be LOW, MEDIUM, HIGH, or null.',
+  'next_follow_up_at must be a valid date or null.',
 ]);
 
 function parseClientId(
@@ -61,6 +90,60 @@ function parseFieldChoices(value: unknown): MergeFieldChoices | { error: string 
   return fieldChoices;
 }
 
+function parseFieldOverrides(
+  value: unknown
+): MergeFieldOverrides | { error: string } {
+  if (value === undefined || value === null) {
+    return {};
+  }
+
+  if (typeof value !== 'object' || Array.isArray(value)) {
+    return { error: 'fieldOverrides must be an object' };
+  }
+
+  const fieldOverrides: MergeFieldOverrides = {};
+
+  for (const [key, rawValue] of Object.entries(value)) {
+    if (!VALID_OVERRIDE_KEYS.has(key as keyof MergeFieldOverrides)) {
+      return { error: `Invalid fieldOverrides key: ${key}` };
+    }
+
+    if (key === 'employee_count') {
+      if (rawValue !== null && typeof rawValue !== 'number') {
+        return {
+          error: 'fieldOverrides.employee_count must be a number or null',
+        };
+      }
+
+      if (
+        rawValue !== null &&
+        (!Number.isInteger(rawValue) || rawValue < 0)
+      ) {
+        return {
+          error:
+            'fieldOverrides.employee_count must be an integer greater than or equal to 0',
+        };
+      }
+
+      fieldOverrides.employee_count = rawValue;
+      continue;
+    }
+
+    if (rawValue !== null && typeof rawValue !== 'string') {
+      return { error: `fieldOverrides.${key} must be a string or null` };
+    }
+
+    if (key === 'name' && typeof rawValue === 'string' && rawValue.trim() === '') {
+      return { error: 'fieldOverrides.name cannot be blank' };
+    }
+
+    fieldOverrides[key as Exclude<keyof MergeFieldOverrides, 'employee_count'>] =
+      rawValue;
+  }
+
+  return fieldOverrides;
+}
+
 function parseReason(value: unknown): string | undefined {
   if (value === undefined || value === null) {
     return undefined;
@@ -97,6 +180,11 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: parsedFieldChoices.error }, { status: 400 });
   }
 
+  const parsedFieldOverrides = parseFieldOverrides(body.fieldOverrides);
+  if ('error' in parsedFieldOverrides) {
+    return NextResponse.json({ error: parsedFieldOverrides.error }, { status: 400 });
+  }
+
   const reason = parseReason(body.reason);
 
   try {
@@ -108,6 +196,7 @@ export async function POST(request: Request) {
           duplicateClientId: parsedDuplicate.clientId,
           mergedByUserId: auth.user.id,
           fieldChoices: parsedFieldChoices,
+          fieldOverrides: parsedFieldOverrides,
           reason,
         }),
       (summary) => ({
@@ -123,12 +212,7 @@ export async function POST(request: Request) {
     const message =
       error instanceof Error ? error.message : 'Failed to merge clients';
 
-    const status =
-      message === 'Cannot merge a client with itself.' ||
-      message === 'Canonical client not found.' ||
-      message === 'Duplicate client not found.'
-        ? 400
-        : 500;
+    const status = MERGE_VALIDATION_ERRORS.has(message) ? 400 : 500;
 
     return NextResponse.json({ error: message }, { status });
   }
