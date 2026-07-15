@@ -7,15 +7,24 @@ declare global {
 }
 
 function createPrismaClient() {
-  return new PrismaClient({
+  const client = new PrismaClient({
     log: ['query'], // Log queries to the console for debugging
   });
+
+  // Warm the query engine so the first SSR request after recreate
+  // does not hit "Engine is not yet connected".
+  void client.$connect().catch(() => undefined);
+
+  return client;
 }
 
 /**
  * After `prisma generate` / schema model additions, Next.js HMR can keep a
- * stale `global.prisma` singleton missing new delegates (e.g. clientImportantDate).
- * Recreate when expected delegates are absent so Client 360 / calendar keep working.
+ * stale `global.prisma` singleton missing new delegates (e.g. clientContact).
+ * Recreate when expected delegates are absent so Client 360 keeps working.
+ *
+ * Do NOT call `$disconnect()` on the previous singleton during HMR — Turbopack
+ * may still hold that instance in another chunk and race with in-flight SSR.
  */
 function isPrismaClientCurrent(client: PrismaClient): boolean {
   return (
@@ -31,10 +40,6 @@ function getPrismaClient(): PrismaClient {
   const existing = global.prisma;
   if (existing && isPrismaClientCurrent(existing)) {
     return existing;
-  }
-
-  if (existing) {
-    void existing.$disconnect().catch(() => undefined);
   }
 
   return createPrismaClient();
