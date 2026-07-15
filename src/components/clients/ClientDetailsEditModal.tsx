@@ -9,6 +9,7 @@ import {
 import { useMemo, useState } from 'react';
 import type { ImportantDate } from '@/components/clients/ClientDetailsWidget';
 import { formatImportantDateApiError } from '@/components/clients/importantDateFormValidation';
+import MultiValueTextField from '@/components/ui/MultiValueTextField';
 import { LEAD_SOURCE_SUGGESTIONS } from '@/lib/leadSources';
 import { parseImportantDatesArray } from '@/lib/importantDateValidation';
 
@@ -20,6 +21,8 @@ type ClientDetailsEditModalProps = {
   initialCompany: string | null;
   initialEmail: string | null;
   initialPhone: string | null;
+  initialEmails?: string[];
+  initialPhones?: string[];
   initialLeadSource: string | null;
   initialRoleInCompany: string | null;
   initialEmployeeCount: number | null;
@@ -44,6 +47,17 @@ function normalizeImportantDates(dates: ImportantDate[]) {
   }));
 }
 
+
+function initialContactList(
+  multi: string[] | undefined,
+  primary: string | null
+): string[] {
+  if (Array.isArray(multi) && multi.length > 0) {
+    return multi;
+  }
+  return primary?.trim() ? [primary.trim()] : [''];
+}
+
 export default function ClientDetailsEditModal({
   clientId,
   isLead = false,
@@ -51,6 +65,8 @@ export default function ClientDetailsEditModal({
   initialCompany,
   initialEmail,
   initialPhone,
+  initialEmails,
+  initialPhones,
   initialLeadSource,
   initialRoleInCompany,
   initialEmployeeCount,
@@ -66,8 +82,8 @@ export default function ClientDetailsEditModal({
         isLead ? 'lead' : 'client',
         initialName,
         initialCompany,
-        initialEmail,
-        initialPhone,
+        JSON.stringify(initialEmails ?? initialEmail),
+        JSON.stringify(initialPhones ?? initialPhone),
         initialLeadSource,
         initialRoleInCompany,
         initialEmployeeCount,
@@ -85,6 +101,8 @@ export default function ClientDetailsEditModal({
       initialCompany={initialCompany}
       initialEmail={initialEmail}
       initialPhone={initialPhone}
+      initialEmails={initialEmails}
+      initialPhones={initialPhones}
       initialLeadSource={initialLeadSource}
       initialRoleInCompany={initialRoleInCompany}
       initialEmployeeCount={initialEmployeeCount}
@@ -104,6 +122,8 @@ function ClientDetailsEditModalForm({
   initialCompany,
   initialEmail,
   initialPhone,
+  initialEmails,
+  initialPhones,
   initialLeadSource,
   initialRoleInCompany,
   initialEmployeeCount,
@@ -115,8 +135,12 @@ function ClientDetailsEditModalForm({
 }: ClientDetailsEditModalProps) {
   const [name, setName] = useState(initialName);
   const [company, setCompany] = useState(initialCompany ?? '');
-  const [email, setEmail] = useState(initialEmail ?? '');
-  const [phone, setPhone] = useState(initialPhone ?? '');
+  const [emails, setEmails] = useState(() =>
+    initialContactList(initialEmails, initialEmail)
+  );
+  const [phones, setPhones] = useState(() =>
+    initialContactList(initialPhones, initialPhone)
+  );
   const [leadSource, setLeadSource] = useState(initialLeadSource ?? '');
   const [leadSourceQuery, setLeadSourceQuery] = useState(initialLeadSource ?? '');
   const [roleInCompany, setRoleInCompany] = useState(initialRoleInCompany ?? '');
@@ -207,8 +231,8 @@ function ClientDetailsEditModalForm({
         body: JSON.stringify({
           name: name.trim(),
           company: company.trim() || null,
-          email: email.trim() || null,
-          phone: phone.trim() || null,
+          emails: emails.map((value) => value.trim()).filter(Boolean),
+          phones: phones.map((value) => value.trim()).filter(Boolean),
           lead_source: leadSourceQuery.trim() || null,
           roleInCompany: roleInCompany.trim() || null,
           employeeCount: employeeCount.trim() ? Number(employeeCount) : null,
@@ -245,7 +269,8 @@ function ClientDetailsEditModalForm({
         </h3>
         <p className="mt-1 text-sm text-gray-500">
           Update the {entityLabel.toLowerCase()}&apos;s contact information, profile
-          details, and important dates (including optional time).
+          details, and important dates (including optional time). You can add
+          multiple emails and phone numbers.
         </p>
 
         <form onSubmit={handleSubmit} className="mt-5 space-y-4">
@@ -284,39 +309,28 @@ function ClientDetailsEditModalForm({
             />
           </div>
 
-          <div>
-            <label
-              htmlFor="client-email"
-              className="mb-1 block text-sm font-medium text-gray-700"
-            >
-              Email
-            </label>
-            <input
-              id="client-email"
-              type="email"
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
-              disabled={isSubmitting}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60"
-            />
-          </div>
+          <MultiValueTextField
+            id="client-email"
+            label="Email"
+            type="email"
+            values={emails}
+            onChange={setEmails}
+            disabled={isSubmitting}
+            addLabel="Add email"
+            placeholder="name@example.com"
+          />
 
-          <div>
-            <label
-              htmlFor="client-phone"
-              className="mb-1 block text-sm font-medium text-gray-700"
-            >
-              Phone
-            </label>
-            <input
-              id="client-phone"
-              type="tel"
-              value={phone}
-              onChange={(event) => setPhone(event.target.value)}
-              disabled={isSubmitting}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60"
-            />
-          </div>
+          <MultiValueTextField
+            id="client-phone"
+            label="Phone"
+            type="tel"
+            values={phones}
+            onChange={setPhones}
+            disabled={isSubmitting}
+            addLabel="Add phone"
+            placeholder="+852 1234 5678"
+          />
+
 
           <div>
             <label className="mb-1 block text-sm font-medium text-gray-700">

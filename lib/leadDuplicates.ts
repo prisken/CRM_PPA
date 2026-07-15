@@ -118,22 +118,35 @@ function buildSourceLabels(
 
 function groupDuplicateKeys(
   clients: ClientIndexRow[],
-  field: 'email' | 'phone'
+  field: 'email' | 'phone',
+  contactValues?: Map<string, string[]>
 ) {
   const groups = new Map<string, string[]>();
+
+  function add(key: string, clientId: string) {
+    const existing = groups.get(key) ?? [];
+    if (!existing.includes(clientId)) {
+      existing.push(clientId);
+    }
+    groups.set(key, existing);
+  }
 
   for (const client of clients) {
     const rawValue = field === 'email' ? client.email : client.phone;
     const normalized =
       field === 'email' ? normalizeEmail(rawValue) : normalizePhone(rawValue);
 
-    if (!normalized) {
-      continue;
+    if (normalized) {
+      add(normalized, client.id);
     }
+  }
 
-    const existing = groups.get(normalized) ?? [];
-    existing.push(client.id);
-    groups.set(normalized, existing);
+  if (contactValues) {
+    for (const [normalized, clientIds] of contactValues.entries()) {
+      for (const clientId of clientIds) {
+        add(normalized, clientId);
+      }
+    }
   }
 
   return [...groups.entries()]
@@ -205,8 +218,31 @@ export async function fetchLeadDuplicateGroups(
     },
   });
 
-  const emailGroups = groupDuplicateKeys(indexRows, 'email');
-  const phoneGroups = groupDuplicateKeys(indexRows, 'phone');
+  const contactRows = await prisma.clientContact.findMany({
+    where: {
+      client: where,
+    },
+    select: {
+      clientId: true,
+      kind: true,
+      normalizedValue: true,
+    },
+  });
+
+  const emailContacts = new Map<string, string[]>();
+  const phoneContacts = new Map<string, string[]>();
+
+  for (const row of contactRows) {
+    const map = row.kind === 'EMAIL' ? emailContacts : phoneContacts;
+    const list = map.get(row.normalizedValue) ?? [];
+    if (!list.includes(row.clientId)) {
+      list.push(row.clientId);
+    }
+    map.set(row.normalizedValue, list);
+  }
+
+  const emailGroups = groupDuplicateKeys(indexRows, 'email', emailContacts);
+  const phoneGroups = groupDuplicateKeys(indexRows, 'phone', phoneContacts);
 
   const groupedCandidates = [...emailGroups, ...phoneGroups].sort((left, right) => {
     if (right.clientIds.length !== left.clientIds.length) {

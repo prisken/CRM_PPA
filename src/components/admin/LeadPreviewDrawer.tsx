@@ -115,24 +115,43 @@ function WarningList({ items, tone }: { items: string[]; tone: CompactPillTone }
 function ContactField({
   label,
   value,
+  values,
   onCopy,
 }: {
   label: string;
-  value: string | null;
+  value?: string | null;
+  values?: string[] | null;
   onCopy: (value: string | null, label: string) => void;
 }) {
+  const list =
+    Array.isArray(values) && values.length > 0
+      ? values
+      : value?.trim()
+        ? [value.trim()]
+        : [];
+
   return (
     <div className="flex items-start justify-between gap-2">
       <div className="min-w-0">
         <p className="text-[11px] font-medium uppercase tracking-wide text-gray-400">{label}</p>
-        <p className="mt-0.5 truncate text-sm text-gray-800">
-          {value ?? <EmptyMuted label={`No ${label.toLowerCase()}`}>—</EmptyMuted>}
-        </p>
+        {list.length === 0 ? (
+          <p className="mt-0.5 text-sm text-gray-800">
+            <EmptyMuted label={`No ${label.toLowerCase()}`}>—</EmptyMuted>
+          </p>
+        ) : (
+          <div className="mt-0.5 space-y-1">
+            {list.map((entry) => (
+              <p key={entry} className="truncate text-sm text-gray-800">
+                {entry}
+              </p>
+            ))}
+          </div>
+        )}
       </div>
-      {value?.trim() && (
+      {list[0] && (
         <button
           type="button"
-          onClick={() => onCopy(value, label)}
+          onClick={() => onCopy(list[0], label)}
           className="shrink-0 rounded-md border border-gray-200 px-2 py-1 text-xs font-medium text-gray-600 hover:bg-gray-50"
         >
           Copy

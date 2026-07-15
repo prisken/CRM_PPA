@@ -21,6 +21,7 @@ function isPrismaClientCurrent(client: PrismaClient): boolean {
   return (
     typeof client.client?.findUnique === 'function' &&
     typeof client.clientImportantDate?.findMany === 'function' &&
+    typeof client.clientContact?.findMany === 'function' &&
     typeof client.clientStrategyPlan?.findMany === 'function' &&
     typeof client.dealParticipant?.findMany === 'function'
   );

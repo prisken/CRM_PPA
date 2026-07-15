@@ -1,6 +1,10 @@
 import { AssignmentRole, ClientStatus, UserRole } from '@prisma/client';
 import { NextResponse } from 'next/server';
 import { getAuthenticatedUserFromRequest } from '@/lib/authHelpers';
+import {
+  parseClientContactInput,
+  replaceClientContacts,
+} from '@/lib/clientContacts';
 import { prisma } from '@/lib/prisma';
 
 function parseEmployeeCount(value: unknown) {
@@ -40,8 +44,6 @@ export async function POST(request: Request) {
   const name = typeof body.name === 'string' ? body.name : '';
   const company = trimOrNull(body.company);
   const contactInfo = trimOrNull(body.contactInfo);
-  const email = trimOrNull(body.email);
-  const phone = trimOrNull(body.phone);
   const leadSource = trimOrNull(body.lead_source ?? body.leadSource);
   const roleInCompany = trimOrNull(body.role_in_company ?? body.roleInCompany);
   const expectations = trimOrNull(body.expectations);
@@ -54,6 +56,18 @@ export async function POST(request: Request) {
   if (!Object.values(ClientStatus).includes(status)) {
     return NextResponse.json({ error: 'Invalid status' }, { status: 400 });
   }
+
+  const contactsParsed = parseClientContactInput(body);
+  if (!contactsParsed.ok) {
+    return NextResponse.json({ error: contactsParsed.error }, { status: 400 });
+  }
+
+  const email = contactsParsed.data.emailsProvided
+    ? contactsParsed.data.email
+    : trimOrNull(body.email);
+  const phone = contactsParsed.data.phonesProvided
+    ? contactsParsed.data.phone
+    : trimOrNull(body.phone);
 
   const employeeCountResult = parseEmployeeCount(
     body.employee_count ?? body.employeeCount
@@ -80,9 +94,25 @@ export async function POST(request: Request) {
     status,
   };
 
+  const emailsForSync = contactsParsed.data.emailsProvided
+    ? contactsParsed.data.emails
+    : email
+      ? [email]
+      : [];
+  const phonesForSync = contactsParsed.data.phonesProvided
+    ? contactsParsed.data.phones
+    : phone
+      ? [phone]
+      : [];
+
   if (auth.user.role === UserRole.STANDARD_USER) {
     const result = await prisma.$transaction(async (tx) => {
       const client = await tx.client.create({ data: clientData });
+
+      await replaceClientContacts(tx, client.id, {
+        emails: emailsForSync,
+        phones: phonesForSync,
+      });
 
       const assignment = await tx.clientAssignment.create({
         data: {
@@ -92,7 +122,25 @@ export async function POST(request: Request) {
         },
       });
 
-      return { client, assignment };
+      const refreshed = await tx.client.findUniqueOrThrow({
+        where: { id: client.id },
+        select: {
+          id: true,
+          name: true,
+          company: true,
+          contactInfo: true,
+          email: true,
+          phone: true,
+          leadSource: true,
+          roleInCompany: true,
+          employeeCount: true,
+          expectations: true,
+          status: true,
+          createdAt: true,
+        },
+      });
+
+      return { client: refreshed, assignment };
     });
 
     return NextResponse.json(
@@ -103,6 +151,8 @@ export async function POST(request: Request) {
         contactInfo: result.client.contactInfo,
         email: result.client.email,
         phone: result.client.phone,
+        emails: emailsForSync,
+        phones: phonesForSync,
         lead_source: result.client.leadSource,
         role_in_company: result.client.roleInCompany,
         employee_count: result.client.employeeCount,
@@ -115,8 +165,31 @@ export async function POST(request: Request) {
     );
   }
 
-  const client = await prisma.client.create({
-    data: clientData,
+  const client = await prisma.$transaction(async (tx) => {
+    const created = await tx.client.create({
+      data: clientData,
+    });
+    await replaceClientContacts(tx, created.id, {
+      emails: emailsForSync,
+      phones: phonesForSync,
+    });
+    return tx.client.findUniqueOrThrow({
+      where: { id: created.id },
+      select: {
+        id: true,
+        name: true,
+        company: true,
+        contactInfo: true,
+        email: true,
+        phone: true,
+        leadSource: true,
+        roleInCompany: true,
+        employeeCount: true,
+        expectations: true,
+        status: true,
+        createdAt: true,
+      },
+    });
   });
 
   return NextResponse.json(
@@ -127,6 +200,8 @@ export async function POST(request: Request) {
       contactInfo: client.contactInfo,
       email: client.email,
       phone: client.phone,
+      emails: emailsForSync,
+      phones: phonesForSync,
       lead_source: client.leadSource,
       role_in_company: client.roleInCompany,
       employee_count: client.employeeCount,

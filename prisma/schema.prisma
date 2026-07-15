@@ -96,6 +96,11 @@ enum LeadSourceType {
   OTHER
 }
 
+enum ClientContactKind {
+  EMAIL
+  PHONE
+}
+
 enum StrategyPlanStatus {
   DRAFT
   ACTIVE
@@ -221,8 +226,34 @@ model Client {
   tags              ClientTag[]
   strategyPlans     ClientStrategyPlan[] @relation("ClientStrategyPlans")
   importantDateRecords ClientImportantDate[] @relation("ClientImportantDates")
+  contacts          ClientContact[]      @relation("ClientContacts")
 
   @@index([nextFollowUpAt])
+}
+
+/**
+ * Additional emails/phones for a client/lead.
+ * Client.email / Client.phone remain the primary mirrors (first / isPrimary) for
+ * legacy search, LCC, and simple displays during the transition.
+ */
+model ClientContact {
+  id              String            @id @default(cuid())
+  clientId        String            @map("client_id")
+  kind            ClientContactKind
+  value           String
+  normalizedValue String            @map("normalized_value")
+  label           String?
+  isPrimary       Boolean           @default(false) @map("is_primary")
+  sortOrder       Int               @default(0) @map("sort_order")
+  createdAt       DateTime          @default(now()) @map("created_at")
+  updatedAt       DateTime          @updatedAt @map("updated_at")
+
+  client Client @relation("ClientContacts", fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@unique([clientId, kind, normalizedValue])
+  @@index([clientId, kind, sortOrder])
+  @@index([kind, normalizedValue])
+  @@map("client_contacts")
 }
 
 /**

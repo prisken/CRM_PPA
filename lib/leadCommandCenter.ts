@@ -8,6 +8,7 @@ import {
   normalizeEmail,
   normalizePhone,
 } from '@/lib/leadNormalization';
+import { buildContactSearchOr } from '@/lib/clientContacts';
 import { prisma } from '@/lib/prisma';
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
@@ -350,9 +351,8 @@ function buildClientWhere(filters: LeadCommandCenterFilters): Prisma.ClientWhere
       OR: [
         { name: { contains: search, mode: 'insensitive' } },
         { company: { contains: search, mode: 'insensitive' } },
-        { email: { contains: search, mode: 'insensitive' } },
-        { phone: { contains: search, mode: 'insensitive' } },
         { leadSource: { contains: search, mode: 'insensitive' } },
+        ...buildContactSearchOr(search),
       ],
     });
   }
@@ -365,30 +365,54 @@ function buildClientWhere(filters: LeadCommandCenterFilters): Prisma.ClientWhere
 }
 
 async function loadDuplicateClientIds(): Promise<DuplicateClientIds> {
-  const clients = await prisma.client.findMany({
-    select: {
-      id: true,
-      email: true,
-      phone: true,
-    },
-  });
+  const [scalarClients, contacts] = await Promise.all([
+    prisma.client.findMany({
+      select: {
+        id: true,
+        email: true,
+        phone: true,
+      },
+    }),
+    prisma.clientContact.findMany({
+      select: {
+        clientId: true,
+        kind: true,
+        normalizedValue: true,
+      },
+    }),
+  ]);
 
   const emailGroups = new Map<string, string[]>();
   const phoneGroups = new Map<string, string[]>();
 
-  for (const client of clients) {
+  function addToGroup(
+    map: Map<string, string[]>,
+    key: string,
+    clientId: string
+  ) {
+    const group = map.get(key) ?? [];
+    if (!group.includes(clientId)) {
+      group.push(clientId);
+    }
+    map.set(key, group);
+  }
+
+  for (const client of scalarClients) {
     const normalizedEmail = normalizeEmail(client.email);
     if (normalizedEmail) {
-      const group = emailGroups.get(normalizedEmail) ?? [];
-      group.push(client.id);
-      emailGroups.set(normalizedEmail, group);
+      addToGroup(emailGroups, normalizedEmail, client.id);
     }
-
     const normalizedPhone = normalizePhone(client.phone);
     if (normalizedPhone) {
-      const group = phoneGroups.get(normalizedPhone) ?? [];
-      group.push(client.id);
-      phoneGroups.set(normalizedPhone, group);
+      addToGroup(phoneGroups, normalizedPhone, client.id);
+    }
+  }
+
+  for (const contact of contacts) {
+    if (contact.kind === 'EMAIL') {
+      addToGroup(emailGroups, contact.normalizedValue, contact.clientId);
+    } else if (contact.kind === 'PHONE') {
+      addToGroup(phoneGroups, contact.normalizedValue, contact.clientId);
     }
   }
 

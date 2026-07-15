@@ -26,6 +26,8 @@ type ClientDetailsWidgetProps = {
   company: string | null;
   email: string | null;
   phone: string | null;
+  emails?: string[];
+  phones?: string[];
   leadSource: string | null;
   roleInCompany: string | null;
   employeeCount: number | null;
@@ -47,6 +49,42 @@ function DetailField({ label, value }: { label: string; value: string }) {
   );
 }
 
+function MultiContactField({
+  label,
+  values,
+  fallback,
+}: {
+  label: string;
+  values?: string[];
+  fallback: string | null;
+}) {
+  const list =
+    Array.isArray(values) && values.length > 0
+      ? values
+      : fallback?.trim()
+        ? [fallback.trim()]
+        : [];
+
+  return (
+    <div>
+      <dt className="text-xs font-medium uppercase tracking-wide text-gray-500">
+        {label}
+      </dt>
+      <dd className="mt-1 space-y-1 text-sm font-medium text-gray-900">
+        {list.length === 0 ? (
+          <span>—</span>
+        ) : (
+          list.map((value) => (
+            <div key={value} className="break-all">
+              {value}
+            </div>
+          ))
+        )}
+      </dd>
+    </div>
+  );
+}
+
 export default memo(function ClientDetailsWidget({
   clientId,
   isLead = false,
@@ -54,6 +92,8 @@ export default memo(function ClientDetailsWidget({
   company,
   email,
   phone,
+  emails,
+  phones,
   leadSource,
   roleInCompany,
   employeeCount,
@@ -96,8 +136,8 @@ export default memo(function ClientDetailsWidget({
         <dl className="grid gap-3 sm:grid-cols-2">
           <DetailField label="Name" value={name} />
           <DetailField label="Company" value={company ?? '—'} />
-          <DetailField label="Email" value={email ?? '—'} />
-          <DetailField label="Phone" value={phone ?? '—'} />
+          <MultiContactField label="Email" values={emails} fallback={email} />
+          <MultiContactField label="Phone" values={phones} fallback={phone} />
           <div className="sm:col-span-2">
             <dt className="text-xs font-medium uppercase tracking-wide text-gray-500">
               Lead Source
@@ -158,6 +198,8 @@ export default memo(function ClientDetailsWidget({
           initialCompany={company}
           initialEmail={email}
           initialPhone={phone}
+          initialEmails={emails}
+          initialPhones={phones}
           initialLeadSource={leadSource}
           initialRoleInCompany={roleInCompany}
           initialEmployeeCount={employeeCount}

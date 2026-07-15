@@ -4,6 +4,7 @@ import {
   buildClient360CoreResponse,
   client360CoreInclude,
 } from '@/lib/client360';
+import { replaceClientContacts } from '@/lib/clientContacts';
 import { prisma } from '@/lib/prisma';
 import {
   authorizePipelineStatusChange,
@@ -115,24 +116,41 @@ export async function PATCH(
     }
   }
 
-  const client = await prisma.client.update({
-    where: { id },
-    data: {
-      ...(name !== undefined && { name: name.trim() }),
-      ...(company !== undefined && { company: company?.trim() || null }),
-      ...(contactInfo !== undefined && { contactInfo: contactInfo?.trim() || null }),
-      ...(email !== undefined && { email: email?.trim() || null }),
-      ...(phone !== undefined && { phone: phone?.trim() || null }),
-      ...(lead_source !== undefined && { leadSource: lead_source?.trim() || null }),
-      ...(deal_value !== undefined && {
-        dealValue: deal_value === null || deal_value === '' ? null : deal_value,
-      }),
-      ...(equity !== undefined && {
-        equity: equity === null || equity === '' ? null : equity,
-      }),
-      ...(strategyText !== undefined && { strategyText: strategyText?.trim() || null }),
-      ...(status !== undefined && { status }),
-    },
+  const client = await prisma.$transaction(async (tx) => {
+    const updated = await tx.client.update({
+      where: { id },
+      data: {
+        ...(name !== undefined && { name: name.trim() }),
+        ...(company !== undefined && { company: company?.trim() || null }),
+        ...(contactInfo !== undefined && {
+          contactInfo: contactInfo?.trim() || null,
+        }),
+        ...(lead_source !== undefined && {
+          leadSource: lead_source?.trim() || null,
+        }),
+        ...(deal_value !== undefined && {
+          dealValue: deal_value === null || deal_value === '' ? null : deal_value,
+        }),
+        ...(equity !== undefined && {
+          equity: equity === null || equity === '' ? null : equity,
+        }),
+        ...(strategyText !== undefined && {
+          strategyText: strategyText?.trim() || null,
+        }),
+        ...(status !== undefined && { status }),
+      },
+    });
+
+    if (email !== undefined || phone !== undefined) {
+      await replaceClientContacts(tx, id, {
+        emails:
+          email !== undefined ? (email?.trim() ? [email.trim()] : []) : undefined,
+        phones:
+          phone !== undefined ? (phone?.trim() ? [phone.trim()] : []) : undefined,
+      });
+    }
+
+    return updated;
   });
 
   if (status !== undefined && status !== existing.status) {
@@ -147,7 +165,7 @@ export async function PATCH(
   }
 
   const refreshedClient = await prisma.client.findUnique({
-    where: { id },
+    where: { id: client.id },
     include: client360CoreInclude,
   });
 

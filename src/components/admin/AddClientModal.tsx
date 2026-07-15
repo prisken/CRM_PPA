@@ -3,13 +3,14 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { CLIENT_STAGES } from '@/lib/clientStages';
+import MultiValueTextField from '@/components/ui/MultiValueTextField';
 import { authenticatedFetch } from '@/lib/authenticatedFetch';
 
 const initialFormData = {
   name: '',
   company: '',
-  email: '',
-  phone: '',
+  emails: [''],
+  phones: [''],
   lead_source: '',
   role_in_company: '',
   employee_count: '',
@@ -29,7 +30,7 @@ export default function AddClientModal({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  function updateField(field: keyof typeof initialFormData, value: string) {
+  function updateField(field: 'name' | 'company' | 'lead_source' | 'role_in_company' | 'employee_count' | 'expectations' | 'status', value: string) {
     setFormData((current) => ({ ...current, [field]: value }));
   }
 
@@ -45,8 +46,8 @@ export default function AddClientModal({
         body: JSON.stringify({
           name: formData.name.trim(),
           company: formData.company.trim() || null,
-          email: formData.email.trim() || null,
-          phone: formData.phone.trim() || null,
+          emails: formData.emails.map((v) => v.trim()).filter(Boolean),
+          phones: formData.phones.map((v) => v.trim()).filter(Boolean),
           lead_source: formData.lead_source.trim() || null,
           role_in_company: formData.role_in_company.trim() || null,
           employee_count: formData.employee_count.trim() || null,
@@ -118,39 +119,26 @@ export default function AddClientModal({
               />
             </div>
 
-            <div>
-              <label
-                htmlFor="client-email"
-                className="mb-1 block text-sm font-medium text-gray-700"
-              >
-                Email
-              </label>
-              <input
-                id="client-email"
-                type="email"
-                value={formData.email}
-                onChange={(e) => updateField('email', e.target.value)}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-                placeholder="you@example.com"
-              />
-            </div>
+            <MultiValueTextField
+              id="client-email"
+              label="Email"
+              type="email"
+              values={formData.emails}
+              onChange={(emails) => setFormData((c) => ({ ...c, emails }))}
+              addLabel="Add email"
+              placeholder="you@example.com"
+            />
 
-            <div>
-              <label
-                htmlFor="client-phone"
-                className="mb-1 block text-sm font-medium text-gray-700"
-              >
-                Phone
-              </label>
-              <input
-                id="client-phone"
-                type="tel"
-                value={formData.phone}
-                onChange={(e) => updateField('phone', e.target.value)}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-                placeholder="Phone number"
-              />
-            </div>
+            <MultiValueTextField
+              id="client-phone"
+              label="Phone"
+              type="tel"
+              values={formData.phones}
+              onChange={(phones) => setFormData((c) => ({ ...c, phones }))}
+              addLabel="Add phone"
+              placeholder="Phone number"
+            />
+
 
             <div>
               <label

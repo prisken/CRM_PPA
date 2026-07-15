@@ -2,6 +2,7 @@
 
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
+import MultiValueTextField from '@/components/ui/MultiValueTextField';
 import { authenticatedFetch } from '@/lib/authenticatedFetch';
 
 type AddLeadModalProps = {
@@ -12,8 +13,8 @@ type AddLeadModalProps = {
 const initialFormData = {
   name: '',
   company: '',
-  email: '',
-  phone: '',
+  emails: [''],
+  phones: [''],
   lead_source: '',
   role_in_company: '',
   employee_count: '',
@@ -27,7 +28,7 @@ export default function AddLeadModal({ onClose, onCreated }: AddLeadModalProps) 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  function updateField(field: keyof typeof initialFormData, value: string) {
+  function updateField(field: 'name' | 'company' | 'lead_source' | 'role_in_company' | 'employee_count' | 'expectations' | 'status', value: string) {
     setFormData((current) => ({ ...current, [field]: value }));
   }
 
@@ -43,8 +44,8 @@ export default function AddLeadModal({ onClose, onCreated }: AddLeadModalProps) 
         body: JSON.stringify({
           name: formData.name,
           company: formData.company,
-          email: formData.email,
-          phone: formData.phone,
+          emails: formData.emails.map((v) => v.trim()).filter(Boolean),
+          phones: formData.phones.map((v) => v.trim()).filter(Boolean),
           lead_source: formData.lead_source,
           role_in_company: formData.role_in_company,
           employee_count: formData.employee_count,
@@ -116,39 +117,26 @@ export default function AddLeadModal({ onClose, onCreated }: AddLeadModalProps) 
               />
             </div>
 
-            <div>
-              <label
-                htmlFor="lead-email"
-                className="mb-1 block text-sm font-medium text-gray-700"
-              >
-                Email
-              </label>
-              <input
-                id="lead-email"
-                type="email"
-                value={formData.email}
-                onChange={(event) => updateField('email', event.target.value)}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-                placeholder="you@example.com"
-              />
-            </div>
+            <MultiValueTextField
+              id="lead-email"
+              label="Email"
+              type="email"
+              values={formData.emails}
+              onChange={(emails) => setFormData((c) => ({ ...c, emails }))}
+              addLabel="Add email"
+              placeholder="you@example.com"
+            />
 
-            <div>
-              <label
-                htmlFor="lead-phone"
-                className="mb-1 block text-sm font-medium text-gray-700"
-              >
-                Phone
-              </label>
-              <input
-                id="lead-phone"
-                type="tel"
-                value={formData.phone}
-                onChange={(event) => updateField('phone', event.target.value)}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-                placeholder="Phone number"
-              />
-            </div>
+            <MultiValueTextField
+              id="lead-phone"
+              label="Phone"
+              type="tel"
+              values={formData.phones}
+              onChange={(phones) => setFormData((c) => ({ ...c, phones }))}
+              addLabel="Add phone"
+              placeholder="Phone number"
+            />
+
 
             <div>
               <label

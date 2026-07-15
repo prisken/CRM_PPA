@@ -22,6 +22,7 @@ This document describes the PostgreSQL database schema, API surface, and fronten
 | Branding (logo, favicon) | ✅ Login, signup, dashboards, Client 360 |
 | Client 360 workspace | ✅ Strategy, tasks, interactions, documents, multi-deal, team |
 | Client details expansion | ✅ Role in company, employee count, expectations, important dates (date + optional time) |
+| **Multi email / phone contacts** | ✅ `ClientContact` table; `emails`/`phones` arrays on create + details; Client 360 multi-entry UI; search/dupes/ingest/match any contact |
 | **Important Dates CRUD + time** | ✅ `ClientImportantDate` table; UTC wall-clock date/time; Client 360 panel + lead preview; activity log on create/update/delete |
 | **Important Dates Calendar** | ✅ `ImportantDatesCalendarWidget` on `/dashboard` and `/admin` Schedule sections; CLIENT/LEAD filters; SUPER_ADMIN sees all |
 | **Client Strategy Builder** | ✅ Strategy plans/steps/connections/expenses on Client 360; `npm run test:client-strategy` |
@@ -308,7 +309,7 @@ Standard users advance one stage at a time via **Move to Next Stage** + confirma
 ## 3. Database Overview
 
 - **Provider:** PostgreSQL via Supabase connection pooler (`DATABASE_URL`) + direct URL for migrations (`DIRECT_URL`).
-- **Migrations:** 19 applied (`prisma/migrations/`).
+- **Migrations:** 20 applied (`prisma/migrations/`).
 - **IDs:** CUID strings (`@default(cuid())`).
 - **Naming:** Prisma models use PascalCase; several tables map to snake_case via `@@map`.
 
@@ -338,6 +339,7 @@ Standard users advance one stage at a time via **Move to Next Stage** + confirma
 | `DealType` | `MARKETING`, `INVESTMENT`, `MEDICAL`, `CUSTOM` | `Deal.dealType`; commission templates in `lib/dealCommissionTemplates.ts` |
 | `DealParticipantRole` | `RELATIONSHIP`, `FOLLOW_UP`, `DOCTOR`, `COMPANY`, `EXTERNAL_PARTNER` | `DealParticipant.role` |
 | `StrategyStatus` | `DRAFT`, `READY_FOR_REVIEW`, `APPROVED`, `NEEDS_REVISION` | Legacy `Strategy.status` |
+| `ClientContactKind` | `EMAIL`, `PHONE` | `ClientContact.kind` |
 | `StrategyPlanStatus` | `DRAFT`, `ACTIVE`, `COMPLETED`, `ARCHIVED` | `ClientStrategyPlan.status` |
 | `StrategyStepType` | `EXISTING_DEAL`, `PLANNED_DEAL`, `MANUAL` | `ClientStrategyStep.stepType` |
 | `StrategyConnectionType` | `FUNDING_SOURCE`, `INTEREST_REDIRECT`, `INCOME_REDIRECT`, `CAPITAL_GROWTH`, `PROTECTION_SUPPORT`, `TAX_PLANNING`, `RISK_MANAGEMENT`, `MANUAL` | `ClientStrategyConnection.connectionType` |
@@ -415,7 +417,7 @@ Participant-backed generation is idempotent and updates unpaid rows when deal/pa
 | `name` | TEXT | Primary display name |
 | `company` | TEXT | Optional |
 | `contactInfo` | TEXT | Legacy / general contact |
-| `email`, `phone` | TEXT | Contact fields; **email is not unique** at DB level — dedupe is app-level via `ingestExternalLead` |
+| `email`, `phone` | TEXT | **Primary** contact mirrors (first/primary `ClientContact`). Prefer `client_contacts` for full lists; **not unique** — dedupe is app-level |
 | `lead_source` | TEXT | e.g. referral, website |
 | `deal_value` | DECIMAL(12,2) | Legacy client-level deal value (Client 360 uses aggregated deals) |
 | `equity` | DECIMAL(12,2) | Equity stake |
@@ -431,7 +433,30 @@ Participant-backed generation is idempotent and updates unpaid rows when deal/pa
 | `next_follow_up_at` | TIMESTAMP | Scheduled follow-up date; indexed (`@@index([nextFollowUpAt])`) |
 | `createdAt`, `lastModified` | TIMESTAMP | |
 
-**Relations:** assignments, interactions, deals, strategies, documents, tasks, activity logs, notifications, **source records**, **tags** (`ClientTag`), **important dates** (`ClientImportantDate`), **strategy plans** (`ClientStrategyPlan`).
+**Relations:** assignments, interactions, deals, strategies, documents, tasks, activity logs, notifications, **source records**, **tags** (`ClientTag`), **important dates** (`ClientImportantDate`), **strategy plans** (`ClientStrategyPlan`), **contacts** (`ClientContact` emails/phones).
+
+---
+
+### `client_contacts` (`ClientContact`)
+
+Multiple emails and phone numbers per client/lead. `Client.email` / `Client.phone` remain **primary mirrors** (first / `isPrimary`) for LCC columns, merge scalars, and older UI.
+
+| Column | Type | Notes |
+|--------|------|-------|
+| `id` | TEXT PK | |
+| `client_id` | TEXT FK → Client | CASCADE |
+| `kind` | ClientContactKind | `EMAIL` or `PHONE` |
+| `value` | TEXT | Display as entered |
+| `normalized_value` | TEXT | Email lowercased; phone digits (+ optional leading `+`) for match/dedupe |
+| `label` | TEXT | Optional (unused in v1 UI) |
+| `is_primary` | BOOLEAN | First of each kind is primary |
+| `sort_order` | INT | Display order within kind |
+
+**Unique:** `(client_id, kind, normalized_value)`. **Indexes:** `(client_id, kind, sort_order)`, `(kind, normalized_value)`.
+
+**APIs:** `emails` / `phones` string arrays on create (`POST /api/clients`) and details (`PUT .../details`); responses also return `email`/`phone` primaries. Max 10 per kind. Search, duplicates, and lead ingestion match **any** contact row (with scalar fallback).
+
+**UI:** `MultiValueTextField` on Client Details edit, Add Lead, Add Client; Client 360 / Lead preview list all values.
 
 ---
 
@@ -742,6 +767,7 @@ erDiagram
     Client ||--o{ ClientSourceRecord : "has"
     Client ||--o{ ClientTag : "tagged"
     Client ||--o{ ClientImportantDate : "has"
+    Client ||--o{ ClientContact : "has"
     Client ||--o{ ClientStrategyPlan : "has"
     Tag ||--o{ ClientTag : "applied to"
     Client ||--o{ Notification : "linked"
@@ -786,6 +812,7 @@ erDiagram
 | `20260702094324_add_deal_participant_returnables` | `isReturnableRequired`, `returnablePercent`, `returnableAmount` on `DealParticipant` |
 | `20260715181000_add_client_strategy_builder` | Client Strategy Builder tables (plans, steps, connections, expenses) |
 | `20260715184000_add_client_important_dates` | `client_important_dates` table + backfill from legacy JSON; dual-write retained |
+| `20260715211000_add_client_contacts` | `ClientContactKind` enum; `client_contacts` multi email/phone + backfill from `Client.email`/`phone` |
 
 **Deploy note:** `package.json` runs `prisma generate` on `postinstall` and `prisma generate && prisma migrate deploy && next build` on production build so Vercel applies migrations and has an up-to-date Prisma client. Local `npm run dev` also runs `prisma generate` before `next dev`.
 

@@ -5,6 +5,12 @@ import {
   logClientSystemEvent,
 } from '@/lib/authHelpers';
 import {
+  clientContactSelect,
+  parseClientContactInput,
+  replaceClientContacts,
+  resolveContactsFromRecords,
+} from '@/lib/clientContacts';
+import {
   logImportantDateEvent,
   importantDateLogFieldsFromRecord,
 } from '@/lib/importantDateActivity';
@@ -38,8 +44,6 @@ export async function PUT(
     const body = await request.json();
     const {
       name,
-      email,
-      phone,
       lead_source,
       company,
       contactInfo,
@@ -63,6 +67,11 @@ export async function PUT(
       }
     }
 
+    const contactsParsed = parseClientContactInput(body);
+    if (!contactsParsed.ok) {
+      return NextResponse.json({ error: contactsParsed.error }, { status: 400 });
+    }
+
     let sanitizedImportantDates: ImportantDateDto[] | undefined;
     let previousImportantDates: Array<{
       id: string;
@@ -72,7 +81,6 @@ export async function PUT(
     }> = [];
 
     if (importantDates !== undefined) {
-      // clientId from route covers Client and Lead rows. Rejects mismatched body clientId/leadId.
       const parsed = parseImportantDatesReplaceInput(clientId, body);
       if (!parsed.ok) {
         return NextResponse.json({ error: parsed.error }, { status: 400 });
@@ -103,12 +111,24 @@ export async function PUT(
         }
       }
 
+      if (
+        contactsParsed.data.emailsProvided ||
+        contactsParsed.data.phonesProvided
+      ) {
+        await replaceClientContacts(tx, clientId, {
+          emails: contactsParsed.data.emailsProvided
+            ? contactsParsed.data.emails
+            : undefined,
+          phones: contactsParsed.data.phonesProvided
+            ? contactsParsed.data.phones
+            : undefined,
+        });
+      }
+
       return tx.client.update({
         where: { id: clientId },
         data: {
           ...(name !== undefined && { name: name.trim() }),
-          ...(email !== undefined && { email: email?.trim() || null }),
-          ...(phone !== undefined && { phone: phone?.trim() || null }),
           ...(lead_source !== undefined && {
             leadSource: lead_source?.trim() || null,
           }),
@@ -127,7 +147,6 @@ export async function PUT(
             expectations: expectations?.trim() || null,
           }),
           ...(sanitizedImportantDates !== undefined && {
-            // Keep legacy JSON in sync for rollback / older readers.
             importantDates: toLegacyImportantDatesJson(sanitizedImportantDates),
           }),
         },
@@ -148,6 +167,10 @@ export async function PUT(
           importantDateRecords: {
             orderBy: { scheduledAt: 'asc' },
             select: importantDateRecordSelect,
+          },
+          contacts: {
+            orderBy: [{ isPrimary: 'desc' }, { sortOrder: 'asc' }],
+            select: clientContactSelect,
           },
         },
       });
@@ -191,11 +214,19 @@ export async function PUT(
         ? client.importantDateRecords.map(formatImportantDateRecord)
         : sanitizedImportantDates ?? [];
 
+    const contacts = resolveContactsFromRecords(
+      client.contacts,
+      client.email,
+      client.phone
+    );
+
     return NextResponse.json({
       client_id: client.id,
       name: client.name,
-      email: client.email,
-      phone: client.phone,
+      email: contacts.email,
+      phone: contacts.phone,
+      emails: contacts.emails,
+      phones: contacts.phones,
       lead_source: client.leadSource,
       company: client.company,
       contactInfo: client.contactInfo,

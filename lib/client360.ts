@@ -16,6 +16,11 @@ import {
   importantDateRecordSelect,
   type ImportantDateRecordLike,
 } from '@/lib/importantDates';
+import {
+  clientContactSelect,
+  resolveContactsFromRecords,
+  type ClientContactRecordLike,
+} from '@/lib/clientContacts';
 import { prisma } from '@/lib/prisma';
 import { timeAsync } from '@/lib/performance';
 
@@ -69,6 +74,18 @@ function resolveClientImportantDates(client: {
     records: client.importantDateRecords,
     legacyJson: client.importantDates,
   });
+}
+
+function resolveClientContacts(client: {
+  email: string | null;
+  phone: string | null;
+  contacts?: ClientContactRecordLike[] | null;
+}) {
+  return resolveContactsFromRecords(
+    client.contacts,
+    client.email,
+    client.phone
+  );
 }
 
 function buildActivityLog(client: {
@@ -137,13 +154,17 @@ export function buildClient360CoreResponse(
       ? client.strategies
       : [];
 
+  const contacts = resolveClientContacts(client);
+
   return {
     client_id: client.id,
     name: client.name,
     company: client.company,
     contactInfo: client.contactInfo,
-    email: client.email,
-    phone: client.phone,
+    email: contacts.email,
+    phone: contacts.phone,
+    emails: contacts.emails,
+    phones: contacts.phones,
     lead_source: client.leadSource,
     roleInCompany: client.roleInCompany,
     employeeCount: client.employeeCount,
@@ -264,14 +285,17 @@ export function buildClient360Response(client: ClientWithRelations) {
 
   const activityLog = buildActivityLog(client);
   const deals = client.deals.map(formatDealResponse);
+  const contacts = resolveClientContacts(client);
 
   return {
     client_id: client.id,
     name: client.name,
     company: client.company,
     contactInfo: client.contactInfo,
-    email: client.email,
-    phone: client.phone,
+    email: contacts.email,
+    phone: contacts.phone,
+    emails: contacts.emails,
+    phones: contacts.phones,
     lead_source: client.leadSource,
     roleInCompany: client.roleInCompany,
     employeeCount: client.employeeCount,
@@ -320,6 +344,10 @@ export const client360CoreInclude = {
     orderBy: { scheduledAt: 'asc' },
     select: importantDateRecordSelect,
   },
+  contacts: {
+    orderBy: [{ isPrimary: 'desc' }, { sortOrder: 'asc' }],
+    select: clientContactSelect,
+  },
   documents: {
     orderBy: { uploadedAt: 'desc' },
     select: {
@@ -345,6 +373,7 @@ export const client360CoreInclude = {
 export const client360PageCoreInclude = {
   clientAssignments: client360CoreInclude.clientAssignments,
   importantDateRecords: client360CoreInclude.importantDateRecords,
+  contacts: client360CoreInclude.contacts,
 } satisfies Prisma.ClientInclude;
 
 export const client360StrategyTasksInclude = {
@@ -414,6 +443,10 @@ export const client360Include = {
   importantDateRecords: {
     orderBy: { scheduledAt: 'asc' },
     select: importantDateRecordSelect,
+  },
+  contacts: {
+    orderBy: [{ isPrimary: 'desc' }, { sortOrder: 'asc' }],
+    select: clientContactSelect,
   },
   documents: {
     orderBy: { uploadedAt: 'desc' },

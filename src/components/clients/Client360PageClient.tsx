@@ -391,6 +391,8 @@ export default function Client360PageClient({
             company={client.company}
             email={client.email}
             phone={client.phone}
+            emails={client.emails}
+            phones={client.phones}
             leadSource={client.lead_source}
             roleInCompany={client.roleInCompany}
             employeeCount={client.employeeCount}

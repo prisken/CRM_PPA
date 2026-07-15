@@ -7,6 +7,7 @@ import {
   Prisma,
 } from '@prisma/client';
 import { recalculateReturnablesForUserOnClient } from '@/lib/commissionReturnables';
+import { mergeContactsOntoCanonical } from '@/lib/clientContacts';
 import { ROLE_OCCUPANCY_LIMITS } from '@/lib/constants';
 import { prisma } from '@/lib/prisma';
 
@@ -748,6 +749,19 @@ async function executeClientMergeInTransaction(
       data: updateData,
     });
   }
+
+  const mergedCanonical = await tx.client.findUniqueOrThrow({
+    where: { id: canonicalClientId },
+    select: { email: true, phone: true },
+  });
+
+  await mergeContactsOntoCanonical(
+    tx,
+    canonicalClientId,
+    duplicateClientId,
+    mergedCanonical.email,
+    mergedCanonical.phone
+  );
 
   const [
     interactionsMoved,

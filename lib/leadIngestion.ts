@@ -1,5 +1,6 @@
 import {
   ActivityLogType,
+  ClientContactKind,
   ClientStatus,
   LeadSourceType,
   Prisma,
@@ -12,6 +13,10 @@ import {
   normalizeName,
   normalizePhone,
 } from '@/lib/leadNormalization';
+import {
+  ensureClientContact,
+  syncPrimaryContactsFromScalars,
+} from '@/lib/clientContacts';
 import { prisma } from '@/lib/prisma';
 
 export type IngestExternalLeadInput = {
@@ -292,6 +297,24 @@ async function findClientBySourceExternalId(
 }
 
 async function findClientByEmail(normalizedEmail: string) {
+  const byContact = await prisma.clientContact.findFirst({
+    where: {
+      kind: 'EMAIL',
+      normalizedValue: normalizedEmail,
+    },
+    select: {
+      client: { select: CLIENT_MERGE_SELECT },
+    },
+  });
+
+  if (byContact?.client) {
+    return {
+      client: byContact.client,
+      matchedBy: 'email' as const,
+      skipSourceRecordCreate: false,
+    };
+  }
+
   const client = await prisma.client.findFirst({
     where: {
       email: {
@@ -317,7 +340,30 @@ async function findClientByPhone(
   normalizedPhone: string,
   originalPhone: string | null
 ) {
-  const phoneValues = [...new Set([normalizedPhone, originalPhone].filter(Boolean))];
+  const phoneValues = [
+    ...new Set([normalizedPhone, originalPhone].filter(Boolean)),
+  ] as string[];
+
+  const byContact = await prisma.clientContact.findFirst({
+    where: {
+      kind: 'PHONE',
+      OR: [
+        { normalizedValue: normalizedPhone },
+        ...(originalPhone ? [{ value: originalPhone }] : []),
+      ],
+    },
+    select: {
+      client: { select: CLIENT_MERGE_SELECT },
+    },
+  });
+
+  if (byContact?.client) {
+    return {
+      client: byContact.client,
+      matchedBy: 'phone' as const,
+      skipSourceRecordCreate: false,
+    };
+  }
 
   const client = await prisma.client.findFirst({
     where: {
@@ -473,6 +519,24 @@ export async function ingestExternalLead(
         });
       }
 
+      // Always ensure ingested email/phone are stored as contacts (add if missing).
+      if (normalized.email) {
+        await ensureClientContact(
+          tx,
+          match.client.id,
+          ClientContactKind.EMAIL,
+          normalized.email
+        );
+      }
+      if (originalPhone || normalized.phone) {
+        await ensureClientContact(
+          tx,
+          match.client.id,
+          ClientContactKind.PHONE,
+          originalPhone ?? normalized.phone
+        );
+      }
+
       if (!match.skipSourceRecordCreate) {
         await createSourceRecordIfNeeded(tx, {
           clientId: match.client.id,
@@ -510,6 +574,13 @@ export async function ingestExternalLead(
       data: buildCreateData(normalized, input.defaultLeadSource),
       select: { id: true },
     });
+
+    await syncPrimaryContactsFromScalars(
+      tx,
+      client.id,
+      normalized.email,
+      originalPhone ?? normalized.phone
+    );
 
     await createSourceRecordIfNeeded(tx, {
       clientId: client.id,
