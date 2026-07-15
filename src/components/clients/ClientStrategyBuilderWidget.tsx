@@ -3,7 +3,6 @@
 import dynamic from 'next/dynamic';
 import { memo, useEffect, useState } from 'react';
 import CompactPill from '@/components/ui/CompactPill';
-import SectionCard from '@/components/ui/SectionCard';
 import { useDisplayDensity } from '@/components/ui/DisplayDensityProvider';
 import {
   getStackSpacingClass,
@@ -38,6 +37,8 @@ type StrategyPlanSummary = StrategyPlanEditValues & {
 type ClientStrategyBuilderWidgetProps = {
   clientId: string;
   canManage?: boolean;
+  /** When bumped by parent (Client 360 refresh), reload plan list / open detail. */
+  refreshKey?: number;
 };
 
 const STATUS_LABELS: Record<string, string> = {
@@ -87,15 +88,23 @@ function formatPlanCounts(counts: StrategyPlanSummary['counts']) {
 }
 
 function StrategyEmptyState({
+  title,
   children,
   action,
 }: {
+  title: string;
   children: React.ReactNode;
   action?: React.ReactNode;
 }) {
   return (
-    <div className="rounded-lg border border-dashed border-gray-200 bg-gray-50 px-3 py-5 text-center">
-      <p className="text-sm text-gray-500">{children}</p>
+    <div
+      className="rounded-lg border border-dashed border-gray-300 bg-gray-50 px-3 py-4 text-center sm:py-5"
+      role="status"
+    >
+      <p className="text-sm font-semibold text-gray-800">{title}</p>
+      <p className="mx-auto mt-1 max-w-lg text-xs leading-snug text-gray-600 sm:text-sm">
+        {children}
+      </p>
       {action ? <div className="mt-3 flex justify-center">{action}</div> : null}
     </div>
   );
@@ -194,10 +203,11 @@ function StrategyPlanDetailSkeleton({
 export default memo(function ClientStrategyBuilderWidget({
   clientId,
   canManage = false,
+  refreshKey = 0,
 }: ClientStrategyBuilderWidgetProps) {
   const { density } = useDisplayDensity();
   const listSpacingClass = getTightStackSpacingClass(density);
-  const asideSpacingClass = getStackSpacingClass(density);
+  const workspaceSpacingClass = getStackSpacingClass(density);
   const [plans, setPlans] = useState<StrategyPlanSummary[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -263,7 +273,7 @@ export default memo(function ClientStrategyBuilderWidget({
     return () => {
       cancelled = true;
     };
-  }, [clientId, plansReloadKey]);
+  }, [clientId, plansReloadKey, refreshKey]);
 
   useEffect(() => {
     if (!selectedPlanId) {
@@ -320,7 +330,7 @@ export default memo(function ClientStrategyBuilderWidget({
     return () => {
       cancelled = true;
     };
-  }, [clientId, selectedPlanId, detailReloadKey]);
+  }, [clientId, selectedPlanId, detailReloadKey, refreshKey]);
 
   function reloadPlans() {
     setPlansReloadKey((current) => current + 1);
@@ -382,16 +392,32 @@ export default memo(function ClientStrategyBuilderWidget({
     plans.length > 0;
 
   return (
-    <>
+    <div className="w-full min-w-0">
       {showingDetail ? (
-        <div className={asideSpacingClass}>
-          {isDetailLoading ? (
-            <StrategyPlanDetailSkeleton cardStackClass={asideSpacingClass} />
+        <div className={workspaceSpacingClass}>
+          {selectedPlan ? (
+            <StrategyPlanDetailView
+              clientId={clientId}
+              plan={selectedPlan}
+              canManage={canManage}
+              onBack={handleBackToList}
+              onEdit={
+                canManage ? () => openEditModal(selectedPlan) : undefined
+              }
+              onRefresh={reloadSelectedPlanDetail}
+            />
+          ) : isDetailLoading ? (
+            <StrategyPlanDetailSkeleton cardStackClass={workspaceSpacingClass} />
           ) : detailError ? (
-            <SectionCard
-              title="Client Strategy Builder"
-              description="Could not open this strategy plan."
-            >
+            <div className="w-full min-w-0">
+              <div className="mb-3 border-b border-gray-100 pb-3">
+                <h3 className="text-sm font-semibold text-gray-900">
+                  Strategy plans
+                </h3>
+                <p className="mt-0.5 text-xs text-gray-500">
+                  Could not open this strategy plan.
+                </p>
+              </div>
               <StrategyErrorState
                 message={detailError}
                 onRetry={reloadSelectedPlanDetail}
@@ -399,33 +425,31 @@ export default memo(function ClientStrategyBuilderWidget({
                   <button
                     type="button"
                     onClick={handleBackToList}
-                    className="text-xs font-medium text-gray-600 hover:text-gray-900"
+                    className="text-xs font-medium text-gray-600 hover:text-gray-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-1"
                   >
                     ← Back to plans
                   </button>
                 }
               />
-            </SectionCard>
-          ) : selectedPlan ? (
-            <StrategyPlanDetailView
-              clientId={clientId}
-              plan={selectedPlan}
-              canManage={canManage}
-              onBack={handleBackToList}
-              onEdit={() => openEditModal(selectedPlan)}
-              onRefresh={reloadSelectedPlanDetail}
-            />
+            </div>
           ) : (
-            <SectionCard
-              title="Client Strategy Builder"
-              description="This strategy plan is unavailable."
-            >
+            <div className="w-full min-w-0">
+              <div className="mb-3 border-b border-gray-100 pb-3">
+                <h3 className="text-sm font-semibold text-gray-900">
+                  Strategy plans
+                </h3>
+                <p className="mt-0.5 text-xs text-gray-500">
+                  This strategy plan is unavailable.
+                </p>
+              </div>
               <StrategyEmptyState
+                title="Strategy plan unavailable"
                 action={
                   <button
                     type="button"
                     onClick={handleBackToList}
-                    className="text-xs font-medium text-blue-600 hover:text-blue-700"
+                    aria-label="Back to strategy plans list"
+                    className="text-xs font-medium text-blue-700 underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-1"
                   >
                     ← Back to plans
                   </button>
@@ -433,26 +457,33 @@ export default memo(function ClientStrategyBuilderWidget({
               >
                 Strategy plan not found. It may have been removed or archived.
               </StrategyEmptyState>
-            </SectionCard>
+            </div>
           )}
         </div>
       ) : (
-        <SectionCard
-          title="Client Strategy Builder"
-          description="Map the client’s goals, strategy steps, deal connections, and expense coverage."
-          action={
-            canManage && !isLoading && !error ? (
+        <div className="w-full min-w-0">
+          <div className="mb-3 flex flex-wrap items-start justify-between gap-2 border-b border-gray-100 pb-3">
+            <div className="min-w-0">
+              <h3 className="text-sm font-semibold text-gray-900">
+                Strategy plans
+              </h3>
+              <p className="mt-0.5 text-xs text-gray-500">
+                Map the client’s goals, strategy steps, deal connections, and
+                expense coverage.
+              </p>
+            </div>
+            {canManage && !isLoading && !error ? (
               <button
                 type="button"
                 onClick={openCreateModal}
-                className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700"
+                aria-label="Create new strategy plan"
+                className="shrink-0 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-1"
               >
                 + New Strategy
               </button>
-            ) : undefined
-          }
-          className="shadow-sm"
-        >
+            ) : null}
+          </div>
+
           {isLoading ? (
             <StrategyPlanListSkeleton listSpacingClass={listSpacingClass} />
           ) : error ? (
@@ -462,21 +493,23 @@ export default memo(function ClientStrategyBuilderWidget({
             />
           ) : displayPlans.length === 0 ? (
             <StrategyEmptyState
+              title="No strategy plans yet"
               action={
                 canManage ? (
                   <button
                     type="button"
                     onClick={openCreateModal}
-                    className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700"
+                    aria-label="Create strategy plan"
+                    className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-1"
                   >
-                    Create your first strategy
+                    Create strategy plan
                   </button>
                 ) : undefined
               }
             >
               {canManage
-                ? 'No strategy plan yet. Create one to map this client’s income sources and expense coverage.'
-                : 'No strategy plan yet for this client.'}
+                ? 'A strategy plan maps this client’s goals into steps on a canvas, links between those steps (funding, support, dependence), and expense coverage. Create one to start planning.'
+                : 'A strategy plan maps goals into steps, links between those steps, and expense coverage. No plan has been created for this client yet — ask someone with edit access if you need one.'}
             </StrategyEmptyState>
           ) : (
             <div className={listSpacingClass}>
@@ -497,7 +530,7 @@ export default memo(function ClientStrategyBuilderWidget({
                   return (
                     <li
                       key={plan.id}
-                      className="rounded-lg border border-gray-100 bg-gray-50 px-3 py-2.5"
+                      className="rounded-lg border border-gray-100 bg-gray-50/80 px-3 py-2.5"
                     >
                       <div className="flex items-start justify-between gap-2">
                         <div className="min-w-0 flex-1">
@@ -505,7 +538,7 @@ export default memo(function ClientStrategyBuilderWidget({
                             <button
                               type="button"
                               onClick={() => openPlanDetail(plan.id)}
-                              className="truncate text-left text-sm font-medium text-gray-900 hover:text-blue-700"
+                              className="truncate text-left text-sm font-medium text-gray-900 hover:text-blue-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-1"
                             >
                               {plan.title}
                             </button>
@@ -533,7 +566,7 @@ export default memo(function ClientStrategyBuilderWidget({
                             <button
                               type="button"
                               onClick={() => openPlanDetail(plan.id)}
-                              className="text-xs font-medium text-blue-600 hover:text-blue-700"
+                              className="text-xs font-medium text-blue-700 underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-1"
                             >
                               View
                             </button>
@@ -541,7 +574,7 @@ export default memo(function ClientStrategyBuilderWidget({
                               <button
                                 type="button"
                                 onClick={() => openEditModal(plan)}
-                                className="text-xs font-medium text-blue-600 hover:text-blue-700"
+                                className="text-xs font-medium text-blue-700 underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-1"
                               >
                                 Edit
                               </button>
@@ -552,7 +585,7 @@ export default memo(function ClientStrategyBuilderWidget({
                                 onClick={() => {
                                   setPendingDeletePlan(plan);
                                 }}
-                                className="text-xs font-medium text-red-600 hover:text-red-700"
+                                className="text-xs font-medium text-red-700 underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-1"
                               >
                                 Remove
                               </button>
@@ -566,7 +599,7 @@ export default memo(function ClientStrategyBuilderWidget({
               </ul>
             </div>
           )}
-        </SectionCard>
+        </div>
       )}
 
       {canManage && isModalOpen ? (
@@ -601,6 +634,6 @@ export default memo(function ClientStrategyBuilderWidget({
           }}
         />
       ) : null}
-    </>
+    </div>
   );
 });

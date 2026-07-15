@@ -328,7 +328,7 @@ function StrategyStepEditModalForm({
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto bg-black/40 p-4">
       <div className="flex min-h-full items-center justify-center">
-        <div className="w-full max-w-lg rounded-xl bg-white p-4 shadow-xl sm:p-6">
+        <div className="w-full max-w-lg max-h-[min(90dvh,40rem)] overflow-y-auto rounded-xl bg-white p-4 shadow-xl sm:p-6">
           <h3 className="text-lg font-semibold text-gray-900">
             {isEditing ? 'Edit Strategy Step' : 'Add Strategy Step'}
           </h3>

@@ -1,7 +1,7 @@
 'use client';
 
 import dynamic from 'next/dynamic';
-import { memo, useMemo, useState } from 'react';
+import { memo, useMemo, useState, useSyncExternalStore } from 'react';
 import CompactPill from '@/components/ui/CompactPill';
 import ConfirmActionModal from '@/components/ui/ConfirmActionModal';
 import SectionCard from '@/components/ui/SectionCard';
@@ -14,6 +14,18 @@ import { authenticatedFetch } from '@/lib/authenticatedFetch';
 import type { StrategyConnectionEditValues } from '@/components/clients/StrategyConnectionEditModal';
 import type { StrategyExpenseEditValues } from '@/components/clients/StrategyExpenseEditModal';
 import type { StrategyStepEditValues } from '@/components/clients/StrategyStepEditModal';
+import {
+  getStrategyPlannerViewServerSnapshot,
+  getStrategyPlannerViewSnapshot,
+  subscribeStrategyPlannerView,
+  writeStoredStrategyPlannerView,
+  type StrategyPlannerView,
+} from '@/components/clients/strategyPlannerViewPreference';
+
+const StrategyPlannerBoard = dynamic(
+  () => import('@/components/clients/StrategyPlannerBoard'),
+  { ssr: false }
+);
 
 const StrategyStepEditModal = dynamic(
   () => import('@/components/clients/StrategyStepEditModal'),
@@ -48,6 +60,7 @@ export type StrategyPlanDetailStep = {
   expectedIncomeFrequency: string | null;
   timelineLabel: string | null;
   sortOrder: number;
+  createdAt?: string;
   linkedDeal: {
     id: string;
     name: string;
@@ -63,6 +76,7 @@ export type StrategyPlanDetailConnection = {
   purpose: string | null;
   expectedOutcome: string | null;
   timing: string | null;
+  createdAt?: string;
 };
 
 export type StrategyPlanDetailExpense = {
@@ -79,6 +93,7 @@ export type StrategyPlanDetailExpense = {
   notes?: string | null;
   coveredByStep: { id: string; title: string } | null;
   sortOrder: number;
+  createdAt?: string;
 };
 
 export type StrategyPlanDetail = {
@@ -312,6 +327,10 @@ function StrategyPlanDetailView({
   const [pendingDeleteStep, setPendingDeleteStep] =
     useState<StrategyPlanDetailStep | null>(null);
   const [isConnectionModalOpen, setIsConnectionModalOpen] = useState(false);
+  const [createConnectionDefaults, setCreateConnectionDefaults] = useState<{
+    fromStepId: string;
+    toStepId: string;
+  } | null>(null);
   const [editingConnection, setEditingConnection] =
     useState<StrategyConnectionEditValues | null>(null);
   const [connectionActionError, setConnectionActionError] = useState<
@@ -323,6 +342,8 @@ function StrategyPlanDetailView({
   const [pendingDeleteConnection, setPendingDeleteConnection] =
     useState<StrategyPlanDetailConnection | null>(null);
   const [isExpenseModalOpen, setIsExpenseModalOpen] = useState(false);
+  const [createExpenseCoveredByStepId, setCreateExpenseCoveredByStepId] =
+    useState<string | null>(null);
   const [editingExpense, setEditingExpense] =
     useState<StrategyExpenseEditValues | null>(null);
   const [expenseActionError, setExpenseActionError] = useState<string | null>(
@@ -337,6 +358,16 @@ function StrategyPlanDetailView({
   const [deleteConfirmError, setDeleteConfirmError] = useState<string | null>(
     null
   );
+  const [reorderingStepId, setReorderingStepId] = useState<string | null>(null);
+  const planDetailView = useSyncExternalStore(
+    subscribeStrategyPlannerView,
+    getStrategyPlannerViewSnapshot,
+    getStrategyPlannerViewServerSnapshot
+  );
+
+  function handlePlanDetailViewChange(view: StrategyPlannerView) {
+    writeStoredStrategyPlannerView(view);
+  }
 
   const stepTitleById = useMemo(() => {
     const map = new Map<string, string>();
@@ -347,12 +378,34 @@ function StrategyPlanDetailView({
   }, [plan.steps]);
 
   const sortedSteps = useMemo(
-    () => [...plan.steps].sort((a, b) => a.sortOrder - b.sortOrder),
+    () =>
+      [...plan.steps].sort((a, b) => {
+        if (a.sortOrder !== b.sortOrder) {
+          return a.sortOrder - b.sortOrder;
+        }
+        const aCreated = a.createdAt ?? '';
+        const bCreated = b.createdAt ?? '';
+        if (aCreated && bCreated && aCreated !== bCreated) {
+          return aCreated < bCreated ? -1 : 1;
+        }
+        return 0;
+      }),
     [plan.steps]
   );
 
   const sortedExpenses = useMemo(
-    () => [...plan.expenses].sort((a, b) => a.sortOrder - b.sortOrder),
+    () =>
+      [...plan.expenses].sort((a, b) => {
+        if (a.sortOrder !== b.sortOrder) {
+          return a.sortOrder - b.sortOrder;
+        }
+        const aCreated = a.createdAt ?? '';
+        const bCreated = b.createdAt ?? '';
+        if (aCreated && bCreated && aCreated !== bCreated) {
+          return aCreated < bCreated ? -1 : 1;
+        }
+        return 0;
+      }),
     [plan.expenses]
   );
 
@@ -379,14 +432,27 @@ function StrategyPlanDetailView({
     setEditingStep(null);
   }
 
-  function openCreateConnection() {
+  function openCreateConnection(
+    fromStepId?: string | null,
+    toStepId?: string | null
+  ) {
     setConnectionActionError(null);
     setEditingConnection(null);
+    const from =
+      typeof fromStepId === 'string' && fromStepId.trim()
+        ? fromStepId.trim()
+        : null;
+    const to =
+      typeof toStepId === 'string' && toStepId.trim() ? toStepId.trim() : null;
+    setCreateConnectionDefaults(
+      from && to ? { fromStepId: from, toStepId: to } : null
+    );
     setIsConnectionModalOpen(true);
   }
 
   function openEditConnection(connection: StrategyPlanDetailConnection) {
     setConnectionActionError(null);
+    setCreateConnectionDefaults(null);
     setEditingConnection({
       id: connection.id,
       fromStepId: connection.fromStepId,
@@ -402,16 +468,23 @@ function StrategyPlanDetailView({
   function closeConnectionModal() {
     setIsConnectionModalOpen(false);
     setEditingConnection(null);
+    setCreateConnectionDefaults(null);
   }
 
-  function openCreateExpense() {
+  function openCreateExpense(coveredByStepId?: string | null) {
     setExpenseActionError(null);
     setEditingExpense(null);
+    setCreateExpenseCoveredByStepId(
+      typeof coveredByStepId === 'string' && coveredByStepId.trim()
+        ? coveredByStepId.trim()
+        : null
+    );
     setIsExpenseModalOpen(true);
   }
 
   function openEditExpense(expense: StrategyPlanDetailExpense) {
     setExpenseActionError(null);
+    setCreateExpenseCoveredByStepId(null);
     setEditingExpense({
       id: expense.id,
       title: expense.title,
@@ -433,6 +506,64 @@ function StrategyPlanDetailView({
   function closeExpenseModal() {
     setIsExpenseModalOpen(false);
     setEditingExpense(null);
+    setCreateExpenseCoveredByStepId(null);
+  }
+
+  async function reorderStep(
+    stepId: string,
+    direction: 'earlier' | 'later'
+  ) {
+    if (!canManage || reorderingStepId) {
+      return;
+    }
+
+    const orderedIds = sortedSteps.map((step) => step.id);
+    const index = orderedIds.indexOf(stepId);
+    if (index < 0) {
+      return;
+    }
+
+    const targetIndex = direction === 'earlier' ? index - 1 : index + 1;
+    if (targetIndex < 0 || targetIndex >= orderedIds.length) {
+      return;
+    }
+
+    const nextOrderedIds = [...orderedIds];
+    const swapId = nextOrderedIds[targetIndex]!;
+    nextOrderedIds[targetIndex] = nextOrderedIds[index]!;
+    nextOrderedIds[index] = swapId;
+
+    setReorderingStepId(stepId);
+    setStepActionError(null);
+
+    try {
+      const response = await authenticatedFetch(
+        `/api/clients/${clientId}/strategy-plans/${plan.id}/steps/reorder`,
+        {
+          method: 'PUT',
+          body: JSON.stringify({ orderedIds: nextOrderedIds }),
+        }
+      );
+
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({}));
+        throw new Error(
+          typeof body.error === 'string'
+            ? body.error
+            : 'Failed to reorder strategy steps'
+        );
+      }
+
+      onRefresh?.();
+    } catch (err) {
+      const message =
+        err instanceof Error
+          ? err.message
+          : 'Failed to reorder strategy steps';
+      setStepActionError(message);
+    } finally {
+      setReorderingStepId(null);
+    }
   }
 
   async function confirmDeleteStep() {
@@ -573,7 +704,7 @@ function StrategyPlanDetailView({
     : 0;
 
   return (
-    <div className={cardStackClass}>
+    <div className={`w-full min-w-0 ${cardStackClass}`}>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <button
           type="button"
@@ -608,80 +739,226 @@ function StrategyPlanDetailView({
       </div>
 
       <p className="text-xs text-gray-500">
-        Client Goal → Strategy Steps → Connections → Expense Coverage → Outcome
+        {planDetailView === 'board'
+          ? 'Board maps this plan as a workspace canvas. Switch to List view for vertical CRUD lists.'
+          : 'Client goal → strategy steps / connections / expenses → outcome.'}
       </p>
 
-      <SectionCard
-        title="1. Plan Summary"
-        description="Capture the client goal and the outcome this strategy should achieve."
-        action={
-          canManage && onEdit ? (
-            <button
-              type="button"
-              onClick={onEdit}
-              className="rounded-lg border border-gray-300 px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50"
+      {planDetailView === 'list' ? (
+        <SectionCard
+          title="1. Plan Summary"
+          description="Capture the client goal and the outcome this strategy should achieve."
+          action={
+            canManage && onEdit ? (
+              <button
+                type="button"
+                onClick={onEdit}
+                className="rounded-lg border border-gray-300 px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-1"
+              >
+                Edit
+              </button>
+            ) : undefined
+          }
+        >
+          <SectionHelper>
+            Use this section as the north star for steps, funding links, and
+            expense coverage below.
+          </SectionHelper>
+          <div className="flex flex-wrap items-start justify-between gap-2">
+            <h3 className="text-base font-semibold text-gray-900">{plan.title}</h3>
+            <CompactPill
+              tone={STATUS_TONES[plan.status] ?? 'gray'}
+              className="shrink-0"
             >
-              Edit
-            </button>
-          ) : undefined
-        }
-      >
-        <SectionHelper>
-          Use this section as the north star for steps, funding links, and
-          expense coverage below.
-        </SectionHelper>
-        <div className="flex flex-wrap items-start justify-between gap-2">
-          <h3 className="text-base font-semibold text-gray-900">{plan.title}</h3>
-          <CompactPill
-            tone={STATUS_TONES[plan.status] ?? 'gray'}
-            className="shrink-0"
-          >
-            {formatStatusLabel(plan.status)}
-          </CompactPill>
-        </div>
-        <div className={`mt-3 ${listSpacingClass}`}>
-          <MetaLine label="Client goal" value={plan.clientGoal} />
-          <MetaLine label="Expected outcome" value={plan.expectedOutcome} />
-          <MetaLine label="Description" value={plan.description} />
-          {!plan.clientGoal?.trim() &&
-          !plan.expectedOutcome?.trim() &&
-          !plan.description?.trim() ? (
-            <EmptyState
-              action={
-                canManage && onEdit ? (
-                  <button
-                    type="button"
-                    onClick={onEdit}
-                    className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
-                  >
-                    Add goal & outcome
-                  </button>
-                ) : undefined
-              }
-            >
-              No client goal or description yet
-              {canManage
-                ? '. Add what success looks like so the rest of the plan stays focused.'
-                : '.'}
-            </EmptyState>
-          ) : null}
-        </div>
-      </SectionCard>
+              {formatStatusLabel(plan.status)}
+            </CompactPill>
+          </div>
+          <div className={`mt-3 ${listSpacingClass}`}>
+            <MetaLine label="Client goal" value={plan.clientGoal} />
+            <MetaLine label="Expected outcome" value={plan.expectedOutcome} />
+            <MetaLine label="Description" value={plan.description} />
+            {!plan.clientGoal?.trim() &&
+            !plan.expectedOutcome?.trim() &&
+            !plan.description?.trim() ? (
+              <EmptyState
+                action={
+                  canManage && onEdit ? (
+                    <button
+                      type="button"
+                      onClick={onEdit}
+                      className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-1"
+                    >
+                      Add goal & outcome
+                    </button>
+                  ) : undefined
+                }
+              >
+                No client goal or description yet
+                {canManage
+                  ? '. Add what success looks like so the rest of the plan stays focused.'
+                  : '.'}
+              </EmptyState>
+            ) : null}
+          </div>
+        </SectionCard>
+      ) : null}
 
-      <SectionCard
-        title="2. Strategy Steps"
-        description="List the deals and actions that create expected income."
-        action={
-          canManage ? (
+      {(stepActionError || connectionActionError || expenseActionError) && (
+        <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+          {stepActionError ? <p>{stepActionError}</p> : null}
+          {connectionActionError ? <p>{connectionActionError}</p> : null}
+          {expenseActionError ? <p>{expenseActionError}</p> : null}
+        </div>
+      )}
+
+      {!canManage ? (
+        <p
+          className="rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-xs text-gray-600"
+          role="status"
+        >
+          View only — you can open plans and review the board, but you cannot
+          create or edit strategy content.
+        </p>
+      ) : null}
+
+      <div className="flex w-full min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+        <div
+          role="group"
+          aria-label="Strategy plan view"
+          className="inline-flex w-full max-w-full rounded-lg border border-gray-200 bg-gray-50 p-0.5 sm:w-auto"
+        >
+          <button
+            type="button"
+            onClick={() => handlePlanDetailViewChange('board')}
+            aria-pressed={planDetailView === 'board'}
+            className={`min-w-0 flex-1 rounded-md px-3 py-1.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-1 sm:flex-none ${
+              planDetailView === 'board'
+                ? 'bg-white text-gray-900 shadow-sm'
+                : 'text-gray-600 hover:text-gray-900'
+            }`}
+          >
+            Board view
+          </button>
+          <button
+            type="button"
+            onClick={() => handlePlanDetailViewChange('list')}
+            aria-pressed={planDetailView === 'list'}
+            className={`min-w-0 flex-1 rounded-md px-3 py-1.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-1 sm:flex-none ${
+              planDetailView === 'list'
+                ? 'bg-white text-gray-900 shadow-sm'
+                : 'text-gray-600 hover:text-gray-900'
+            }`}
+          >
+            List view
+          </button>
+        </div>
+
+        {canManage ? (
+          <div className="flex w-full min-w-0 flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
             <button
               type="button"
               onClick={openCreateStep}
-              className="rounded-lg bg-blue-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-blue-700"
+              aria-label="Add strategy step"
+              className="rounded-lg bg-blue-600 px-2.5 py-1.5 text-xs font-medium text-white hover:bg-blue-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-1"
             >
               + Add step
             </button>
-          ) : undefined
-        }
+            <button
+              type="button"
+              onClick={() => openCreateConnection()}
+              disabled={sortedSteps.length < 2}
+              aria-label="Add strategy connection"
+              aria-describedby={
+                sortedSteps.length < 2
+                  ? 'strategy-detail-connection-hint'
+                  : undefined
+              }
+              title={
+                sortedSteps.length < 2
+                  ? 'Add at least two strategy steps first'
+                  : undefined
+              }
+              className="rounded-lg border border-gray-300 bg-white px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-1 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              + Add connection
+            </button>
+            <button
+              type="button"
+              onClick={() => openCreateExpense()}
+              aria-label="Add strategy expense"
+              className="rounded-lg border border-gray-300 bg-white px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-1"
+            >
+              + Add expense
+            </button>
+            {sortedSteps.length < 2 ? (
+              <p
+                id="strategy-detail-connection-hint"
+                className="basis-full text-[11px] text-gray-500"
+              >
+                Connections need at least two steps.
+              </p>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
+
+      {planDetailView === 'board' ? (
+        <StrategyPlannerBoard
+          plan={plan}
+          canManage={canManage}
+          deletingStepId={deletingStepId}
+          deletingConnectionId={deletingConnectionId}
+          deletingExpenseId={deletingExpenseId}
+          reorderingStepId={reorderingStepId}
+          headerActions={null}
+          onAddStep={canManage ? openCreateStep : undefined}
+          onAddConnection={canManage ? () => openCreateConnection() : undefined}
+          onAddConnectionBetweenSteps={
+            canManage
+              ? (fromStepId, toStepId) =>
+                  openCreateConnection(fromStepId, toStepId)
+              : undefined
+          }
+          onAddExpense={canManage ? () => openCreateExpense() : undefined}
+          onAddExpenseForStep={
+            canManage
+              ? (stepId) => openCreateExpense(stepId)
+              : undefined
+          }
+          onReorderStep={canManage ? reorderStep : undefined}
+          onEditStep={canManage ? openEditStep : undefined}
+          onDeleteStep={
+            canManage
+              ? (step) => {
+                  setDeleteConfirmError(null);
+                  setPendingDeleteStep(step);
+                }
+              : undefined
+          }
+          onEditConnection={canManage ? openEditConnection : undefined}
+          onDeleteConnection={
+            canManage
+              ? (connection) => {
+                  setDeleteConfirmError(null);
+                  setPendingDeleteConnection(connection);
+                }
+              : undefined
+          }
+          onEditExpense={canManage ? openEditExpense : undefined}
+          onDeleteExpense={
+            canManage
+              ? (expense) => {
+                  setDeleteConfirmError(null);
+                  setPendingDeleteExpense(expense);
+                }
+              : undefined
+          }
+        />
+      ) : (
+        <div id="strategy-list-view" className={cardStackClass}>
+      <SectionCard
+        title="Strategy Steps"
+        description="List the deals and actions that create expected income."
       >
         <SectionHelper>
           Prefer linking existing deals when available. Add MONTHLY income on
@@ -792,25 +1069,8 @@ function StrategyPlanDetailView({
       </SectionCard>
 
       <SectionCard
-        title="3. Deal Connections"
+        title="Deal Connections"
         description="Show how steps fund, support, or protect one another."
-        action={
-          canManage ? (
-            <button
-              type="button"
-              onClick={openCreateConnection}
-              disabled={sortedSteps.length < 2}
-              className="rounded-lg bg-blue-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
-              title={
-                sortedSteps.length < 2
-                  ? 'Add at least two strategy steps first'
-                  : undefined
-              }
-            >
-              + Add connection
-            </button>
-          ) : undefined
-        }
       >
         <SectionHelper>
           {sortedSteps.length < 2
@@ -826,7 +1086,7 @@ function StrategyPlanDetailView({
               canManage && sortedSteps.length >= 2 ? (
                 <button
                   type="button"
-                  onClick={openCreateConnection}
+                  onClick={() => openCreateConnection()}
                   className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700"
                 >
                   Add first connection
@@ -909,19 +1169,8 @@ function StrategyPlanDetailView({
       </SectionCard>
 
       <SectionCard
-        title="4. Expense Coverage"
+        title="Expense Coverage"
         description="List the costs this strategy should cover and which step funds them."
-        action={
-          canManage ? (
-            <button
-              type="button"
-              onClick={openCreateExpense}
-              className="rounded-lg bg-blue-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-blue-700"
-            >
-              + Add expense
-            </button>
-          ) : undefined
-        }
       >
         <SectionHelper>
           Mark MONTHLY expenses and link coverage to a step whenever possible.
@@ -936,7 +1185,7 @@ function StrategyPlanDetailView({
               canManage ? (
                 <button
                   type="button"
-                  onClick={openCreateExpense}
+                  onClick={() => openCreateExpense()}
                   className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700"
                 >
                   Add first expense
@@ -1022,20 +1271,23 @@ function StrategyPlanDetailView({
           </ul>
         )}
       </SectionCard>
+        </div>
+      )}
 
-      <SectionCard
-        title="5. Outcome Summary"
-        description="A simple monthly view of whether planned income may cover expenses."
-      >
-        <SectionHelper>
-          Only MONTHLY income and MONTHLY expenses are included. This is a
-          planning aid, not a financial projection.
-        </SectionHelper>
-        <div className={`rounded-lg border px-3 py-3 ${coverageStyles.panel}`}>
+      {planDetailView === 'board' ? (
+        <div
+          className={`rounded-lg border px-3 py-3 ${coverageStyles.panel}`}
+          aria-label="Outcome summary"
+        >
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <p className="text-xs font-medium text-gray-600">
-              Monthly coverage (MONTHLY items only)
-            </p>
+            <div>
+              <p className="text-xs font-semibold text-gray-800">
+                Outcome summary
+              </p>
+              <p className="text-[11px] text-gray-600">
+                Monthly coverage (MONTHLY items only)
+              </p>
+            </div>
             <span
               className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold ${coverageStyles.badge}`}
             >
@@ -1070,13 +1322,63 @@ function StrategyPlanDetailView({
               </p>
             </div>
           </div>
-
-          <p className="mt-3 text-xs text-gray-500">
-            This is a simple planning summary based on manual inputs, not a
-            financial projection.
-          </p>
         </div>
-      </SectionCard>
+      ) : (
+        <SectionCard
+          title="Outcome Summary"
+          description="A simple monthly view of whether planned income may cover expenses."
+        >
+          <SectionHelper>
+            Only MONTHLY income and MONTHLY expenses are included. This is a
+            planning aid, not a financial projection.
+          </SectionHelper>
+          <div className={`rounded-lg border px-3 py-3 ${coverageStyles.panel}`}>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-xs font-medium text-gray-600">
+                Monthly coverage (MONTHLY items only)
+              </p>
+              <span
+                className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold ${coverageStyles.badge}`}
+              >
+                {COVERAGE_STATUS_LABELS[outcomeSummary.coverageStatus]}
+              </span>
+            </div>
+
+            <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <div>
+                <p className="text-xs text-gray-500">Expected Monthly Income</p>
+                <p className="mt-0.5 text-sm font-semibold text-gray-900">
+                  {formatMoney(outcomeSummary.expectedMonthlyIncome) ?? '$0.00'}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs text-gray-500">Planned Monthly Expenses</p>
+                <p className="mt-0.5 text-sm font-semibold text-gray-900">
+                  {formatMoney(outcomeSummary.plannedMonthlyExpenses) ?? '$0.00'}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs text-gray-500">{coverageStyles.gapLabel}</p>
+                <p
+                  className={`mt-0.5 text-sm font-semibold ${coverageStyles.gapTone}`}
+                >
+                  {formatMoney(Math.abs(outcomeSummary.monthlyGap)) ?? '$0.00'}
+                  {outcomeSummary.monthlyGap < 0
+                    ? ' short'
+                    : outcomeSummary.monthlyGap > 0
+                      ? ' surplus'
+                      : ''}
+                </p>
+              </div>
+            </div>
+
+            <p className="mt-3 text-xs text-gray-500">
+              This is a simple planning summary based on manual inputs, not a
+              financial projection.
+            </p>
+          </div>
+        </SectionCard>
+      )}
 
       {canManage && isStepModalOpen ? (
         <StrategyStepEditModal
@@ -1100,6 +1402,12 @@ function StrategyPlanDetailView({
             title: step.title,
           }))}
           connection={editingConnection}
+          defaultFromStepId={
+            editingConnection ? null : (createConnectionDefaults?.fromStepId ?? null)
+          }
+          defaultToStepId={
+            editingConnection ? null : (createConnectionDefaults?.toStepId ?? null)
+          }
           isOpen={isConnectionModalOpen}
           onClose={closeConnectionModal}
           onSaved={() => {
@@ -1117,6 +1425,9 @@ function StrategyPlanDetailView({
             title: step.title,
           }))}
           expense={editingExpense}
+          defaultCoveredByStepId={
+            editingExpense ? null : createExpenseCoveredByStepId
+          }
           isOpen={isExpenseModalOpen}
           onClose={closeExpenseModal}
           onSaved={() => {

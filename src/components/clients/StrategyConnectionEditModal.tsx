@@ -38,6 +38,10 @@ type StrategyConnectionEditModalProps = {
   planId: string;
   steps: StrategyConnectionStepOption[];
   connection?: StrategyConnectionEditValues | null;
+  /** Prefill From step when creating (ignored when editing). */
+  defaultFromStepId?: string | null;
+  /** Prefill To step when creating (ignored when editing). */
+  defaultToStepId?: string | null;
   isOpen: boolean;
   onClose: () => void;
   onSaved: () => void;
@@ -48,11 +52,18 @@ export default function StrategyConnectionEditModal({
   planId,
   steps,
   connection = null,
+  defaultFromStepId = null,
+  defaultToStepId = null,
   isOpen,
   onClose,
   onSaved,
 }: StrategyConnectionEditModalProps) {
-  const formKey = isOpen ? (connection?.id ?? 'new') : 'closed';
+  const formKey = isOpen
+    ? (connection?.id ??
+      (defaultFromStepId || defaultToStepId
+        ? `new-${defaultFromStepId ?? ''}-${defaultToStepId ?? ''}`
+        : 'new'))
+    : 'closed';
 
   return (
     <StrategyConnectionEditModalForm
@@ -61,6 +72,8 @@ export default function StrategyConnectionEditModal({
       planId={planId}
       steps={steps}
       connection={connection}
+      defaultFromStepId={defaultFromStepId}
+      defaultToStepId={defaultToStepId}
       isOpen={isOpen}
       onClose={onClose}
       onSaved={onSaved}
@@ -73,13 +86,19 @@ function StrategyConnectionEditModalForm({
   planId,
   steps,
   connection,
+  defaultFromStepId = null,
+  defaultToStepId = null,
   isOpen,
   onClose,
   onSaved,
 }: StrategyConnectionEditModalProps) {
   const isEditing = connection !== null;
-  const [fromStepId, setFromStepId] = useState(connection?.fromStepId ?? '');
-  const [toStepId, setToStepId] = useState(connection?.toStepId ?? '');
+  const [fromStepId, setFromStepId] = useState(
+    connection?.fromStepId ?? defaultFromStepId ?? ''
+  );
+  const [toStepId, setToStepId] = useState(
+    connection?.toStepId ?? defaultToStepId ?? ''
+  );
   const [connectionType, setConnectionType] = useState(
     connection?.connectionType ?? StrategyConnectionType.MANUAL
   );
@@ -162,7 +181,7 @@ function StrategyConnectionEditModalForm({
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto bg-black/40 p-4">
       <div className="flex min-h-full items-center justify-center">
-        <div className="w-full max-w-lg rounded-xl bg-white p-4 shadow-xl sm:p-6">
+        <div className="w-full max-w-lg max-h-[min(90dvh,40rem)] overflow-y-auto rounded-xl bg-white p-4 shadow-xl sm:p-6">
           <h3 className="text-lg font-semibold text-gray-900">
             {isEditing ? 'Edit Connection' : 'Add Connection'}
           </h3>
