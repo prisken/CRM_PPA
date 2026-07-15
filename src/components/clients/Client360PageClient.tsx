@@ -9,7 +9,6 @@ import { classifyImportantDateRecordType } from '@/lib/importantDateRecordType';
 import AssignedTeamWidget from '@/components/clients/AssignedTeamWidget';
 import CompanyHierarchyWidget from '@/components/clients/CompanyHierarchyWidget';
 import ClientSourceRecordsWidget from '@/components/clients/ClientSourceRecordsWidget';
-import ClientStrategyBuilderWidget from '@/components/clients/ClientStrategyBuilderWidget';
 import LeadSourceBadges from '@/components/clients/LeadSourceBadges';
 import DealInfoWidget, { type ClientDeal } from '@/components/clients/DealInfoWidget';
 import WorkspacePanel from '@/components/clients/WorkspacePanel';
@@ -371,8 +370,8 @@ export default function Client360PageClient({
         </div>
       </header>
 
-      <div className="mx-auto flex max-w-7xl flex-col gap-6 px-4 py-6 sm:px-6 md:flex-row md:items-start lg:px-8">
-        <div className="min-w-0 md:flex-[2]">
+      <div className="mx-auto flex max-w-7xl flex-col gap-6 overflow-x-hidden px-4 py-6 sm:px-6 md:flex-row md:items-start lg:px-8">
+        <div className="order-1 min-w-0 w-full md:flex-1 md:basis-0">
           <WorkspacePanel
             clientId={clientId}
             currentUser={workspaceCurrentUser}
@@ -380,10 +379,13 @@ export default function Client360PageClient({
             canPostNote={hasClientAccess}
             refreshKey={refreshKey}
             onMutationSuccess={triggerDataRefresh}
+            strategyAccess={strategyAccess}
           />
         </div>
 
-        <aside className={`min-w-0 w-full md:flex-1 ${asideSpacingClass}`}>
+        <aside
+          className={`order-2 min-w-0 w-full shrink-0 md:w-[20rem] lg:w-[22rem] ${asideSpacingClass}`}
+        >
           <ClientDetailsWidget
             clientId={clientId}
             isLead={classifyImportantDateRecordType(client.status) === 'Lead'}
@@ -412,12 +414,6 @@ export default function Client360PageClient({
               assignedUsers={client.assignedUsers}
               currentUser={teamCurrentUser}
               onMutationSuccess={triggerDataRefresh}
-            />
-          )}
-          {strategyAccess.canView && (
-            <ClientStrategyBuilderWidget
-              clientId={clientId}
-              canManage={strategyAccess.canManage}
             />
           )}
           <AssignedTeamWidget

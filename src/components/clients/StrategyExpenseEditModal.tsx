@@ -61,6 +61,8 @@ type StrategyExpenseEditModalProps = {
   planId: string;
   steps: StrategyExpenseStepOption[];
   expense?: StrategyExpenseEditValues | null;
+  /** Prefill Covered by step when creating (ignored when editing). */
+  defaultCoveredByStepId?: string | null;
   isOpen: boolean;
   onClose: () => void;
   onSaved: () => void;
@@ -85,11 +87,17 @@ export default function StrategyExpenseEditModal({
   planId,
   steps,
   expense = null,
+  defaultCoveredByStepId = null,
   isOpen,
   onClose,
   onSaved,
 }: StrategyExpenseEditModalProps) {
-  const formKey = isOpen ? (expense?.id ?? 'new') : 'closed';
+  const formKey = isOpen
+    ? (expense?.id ??
+      (defaultCoveredByStepId
+        ? `new-covered-by-${defaultCoveredByStepId}`
+        : 'new'))
+    : 'closed';
 
   return (
     <StrategyExpenseEditModalForm
@@ -98,6 +106,7 @@ export default function StrategyExpenseEditModal({
       planId={planId}
       steps={steps}
       expense={expense}
+      defaultCoveredByStepId={defaultCoveredByStepId}
       isOpen={isOpen}
       onClose={onClose}
       onSaved={onSaved}
@@ -110,6 +119,7 @@ function StrategyExpenseEditModalForm({
   planId,
   steps,
   expense,
+  defaultCoveredByStepId = null,
   isOpen,
   onClose,
   onSaved,
@@ -138,7 +148,7 @@ function StrategyExpenseEditModalForm({
   );
   const [purpose, setPurpose] = useState(expense?.purpose ?? '');
   const [coveredByStepId, setCoveredByStepId] = useState(
-    expense?.coveredByStepId ?? ''
+    expense?.coveredByStepId ?? defaultCoveredByStepId ?? ''
   );
   const [notes, setNotes] = useState(expense?.notes ?? '');
   const [sortOrder, setSortOrder] = useState(
@@ -228,7 +238,7 @@ function StrategyExpenseEditModalForm({
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto bg-black/40 p-4">
       <div className="flex min-h-full items-center justify-center">
-        <div className="w-full max-w-lg rounded-xl bg-white p-4 shadow-xl sm:p-6">
+        <div className="w-full max-w-lg max-h-[min(90dvh,40rem)] overflow-y-auto rounded-xl bg-white p-4 shadow-xl sm:p-6">
           <h3 className="text-lg font-semibold text-gray-900">
             {isEditing ? 'Edit Expense' : 'Add Expense'}
           </h3>

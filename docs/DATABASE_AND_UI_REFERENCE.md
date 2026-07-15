@@ -25,7 +25,7 @@ This document describes the PostgreSQL database schema, API surface, and fronten
 | **Multi email / phone contacts** | ✅ `ClientContact` table; `emails`/`phones` arrays on create + details; Client 360 multi-entry UI; search/dupes/ingest/match any contact |
 | **Important Dates CRUD + time** | ✅ `ClientImportantDate` table; UTC wall-clock date/time; Client 360 panel + lead preview; activity log on create/update/delete |
 | **Important Dates Calendar** | ✅ `ImportantDatesCalendarWidget` on `/dashboard` and `/admin` Schedule sections; CLIENT/LEAD filters; SUPER_ADMIN sees all |
-| **Client Strategy Builder** | ✅ Strategy plans/steps/connections/expenses on Client 360; `npm run test:client-strategy` |
+| **Client Strategy Builder** | ✅ Plans/steps/connections/expenses; Client 360 workspace tab **Strategy Planner**; `npm run test:client-strategy` |
 | Company hierarchy | ✅ Colleagues by company, add employee as lead |
 | Role-based pipeline advances | ✅ Standard users; super admin full control |
 | Standard user lead creation | ✅ Add Lead on dashboard with auto-assignment |
@@ -481,7 +481,7 @@ Canonical important dates for clients/leads (shared `Client` model). See [Import
 
 ### Client Strategy Builder
 
-Structured strategy plans on Client 360 (`ClientStrategyBuilderWidget`). Permissions: view = core read; manage/delete = SUPER_ADMIN, legacy client `DOCTOR`, or deal-level `DOCTOR` participant. Tests: `npm run test:client-strategy`.
+Structured strategy plans on Client 360 workspace tab **Strategy Planner** (`ClientStrategyBuilderWidget`). Permissions: view = core read; manage/delete = SUPER_ADMIN, legacy client `DOCTOR`, or deal-level `DOCTOR` participant. Tests: `npm run test:client-strategy`.
 
 #### `ClientStrategyPlan`
 
@@ -1869,6 +1869,7 @@ Lazy-loads tab content via `GET /api/clients/[id]/workspace?tab=...` when a tab 
 | Tab | Query param | Component | Features |
 |-----|-------------|-----------|----------|
 | Strategy & Tasks | `strategy-tasks` | `StrategyAndTasks` | Edit strategy text, create/edit/complete/delete tasks (super admin or `DOCTOR`) |
+| Strategy Planner | `strategy-planner` | `ClientStrategyBuilderWidget` | Structured plans/steps/connections/expenses. Shown only when `strategyAccess.canView`. Deep link `#strategy-planner`. Fetches its own APIs (not workspace tab payload) |
 | Activity & Notes | `activity-notes` | `ActivityLog` | View merged activity, add/edit/delete interactions, filter by type |
 
 **Tab navigation:** Horizontal tabs on `md+` (`hidden md:flex`); Headless UI dropdown on mobile (`block md:hidden`).
@@ -1880,11 +1881,12 @@ Deep link: `#activity-notes` opens Activity tab and scrolls into view.
 | Widget | Component | Who can edit |
 |--------|-----------|--------------|
 | Client Details | `ClientDetailsWidget` + `ClientDetailsEditModal` + `ImportantDatesPanel` | Super admin **or** `RELATIONSHIP` assignee (details + important dates CRUD) |
-| Strategy Builder | `ClientStrategyBuilderWidget` (+ plan/step/connection/expense modals) | View: core read. Manage: SUPER_ADMIN, legacy client `DOCTOR`, or deal `DOCTOR` participant |
 | Deal Info | `DealInfoWidget` + `DealEditModal` | Users with deal view access — participant table per deal, deal type label, committed/potential values, secured commission from participant rows. Amber **legacy fallback** warning when `usesLegacyCommissionFallback`. **Edit** when `canCreateDeal` / `canManageDeal(dealId)` |
 | Assigned Team | `AssignedTeamWidget` | Super admin assigns **Relationship** and **Follow-up** only. Legacy client-level doctors in collapsed section. No new doctor assignments at client level |
 | Company Hierarchy | `CompanyHierarchyWidget` | Receives `hierarchy` prop from server; add employee leads via `POST /api/clients/[id]/employees` |
 | Lead Source Records | `ClientSourceRecordsWidget` | Fetches `GET /api/clients/[id]/source-records` on mount; collapsible raw payload per ingest |
+
+**Strategy Planner** lives in the left workspace tab `strategy-planner` (not the right column). See workspace tabs above.
 
 ---
 
