@@ -6,7 +6,7 @@
 **Last updated:** July 15, 2026 (Important Dates + calendar widget, Client Strategy Builder, deal participants, Lead Command Center)  
 **Repository:** [CRM_PPA](https://github.com/prisken/CRM_PPA)  
 **Deployment branch:** `deploy`  
-**Last deployed commit:** `47094c9`  
+**Last deployed commit:** `40c5518`  
 **Production URL:** `https://crm-ppa-nine.vercel.app`  
 **Local dev server:** `http://localhost:3000` (run `npm run dev` — runs `prisma generate` first; add `PERF_LOGGING_ENABLED=true` for route timing logs)  
 **User manuals (PDF):** `docs/USER_MANUAL_STANDARD_USER.pdf`, `docs/USER_MANUAL_SUPER_ADMIN.pdf` (regenerate: `npm run manuals:pdf`)
