@@ -318,7 +318,7 @@ Standard users advance one stage at a time via **Move to Next Stage** + confirma
 1. **Users & access** — `User`, `ClientAssignment`
 2. **Clients & pipeline** — `Client`, `Deal`, `DealParticipant`, `Tag`, `ClientTag`
 3. **Lead ingestion & merge** — `ClientSourceRecord`, `LeadMergeAudit` (written by manual merge)
-4. **Client 360 workspace** — `Task`, `ClientDocument`, `Strategy`, `Interaction`, `ClientActivityLog`, `ClientImportantDate`
+4. **Client 360 workspace** — `Task`, `ClientDocument`, `Strategy`, `Interaction`, `ClientActivityLog`, `ClientImportantDate`, `ClientContact`
 5. **Strategy Builder** — `ClientStrategyPlan`, `ClientStrategyStep`, `ClientStrategyConnection`, `ClientStrategyExpense`
 6. **Activity & notifications** — `ActivityReadStatus`, `Notification`
 7. **Commission & liabilities** — `CommissionReturnable`, `DealParticipant` (per-deal splits + doctor returnable config)
