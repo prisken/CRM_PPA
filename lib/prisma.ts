@@ -45,8 +45,15 @@ function getPrismaClient(): PrismaClient {
   return createPrismaClient();
 }
 
-export const prisma = getPrismaClient();
+/**
+ * Server-only Prisma singleton. Guard against accidental client bundles so
+ * importing this file in the browser does not construct PrismaClient.
+ */
+export const prisma =
+  typeof window === 'undefined'
+    ? getPrismaClient()
+    : (null as unknown as PrismaClient);
 
-if (process.env.NODE_ENV !== 'production') {
+if (typeof window === 'undefined' && process.env.NODE_ENV !== 'production') {
   global.prisma = prisma;
 }

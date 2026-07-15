@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import ClientDetailsWidget from '@/components/clients/ClientDetailsWidget';
-import { classifyImportantDateRecordType } from '@/lib/importantDates';
+import { classifyImportantDateRecordType } from '@/lib/importantDateRecordType';
 import AssignedTeamWidget from '@/components/clients/AssignedTeamWidget';
 import CompanyHierarchyWidget from '@/components/clients/CompanyHierarchyWidget';
 import ClientSourceRecordsWidget from '@/components/clients/ClientSourceRecordsWidget';

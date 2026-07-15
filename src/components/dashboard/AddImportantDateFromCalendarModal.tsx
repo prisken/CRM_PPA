@@ -8,10 +8,18 @@ import {
   validateImportantDateFields,
   type ImportantDateFieldErrors,
 } from '@/components/clients/importantDateFormValidation';
-import { classifyImportantDateRecordType } from '@/lib/importantDates';
+import { classifyImportantDateRecordType } from '@/lib/importantDateRecordType';
 import { authenticatedFetch } from '@/lib/authenticatedFetch';
-import type { ClientSearchResult } from '@/lib/leadCommandCenter';
 import { parseImportantDateInput } from '@/lib/importantDateValidation';
+
+type ClientSearchResult = {
+  clientId: string;
+  name: string;
+  company: string | null;
+  email: string | null;
+  phone: string | null;
+  status: string;
+};
 
 type RecordTypeChoice = 'CLIENT' | 'LEAD';
 

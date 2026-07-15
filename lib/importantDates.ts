@@ -4,6 +4,7 @@ import {
   parseImportantDatesArray,
   type ImportantDateInput,
 } from '@/lib/importantDateValidation';
+import { classifyImportantDateRecordType } from '@/lib/importantDateRecordType';
 import { prisma } from '@/lib/prisma';
 
 /**
@@ -246,11 +247,7 @@ export function dtoToCreateManyInput(
 }
 
 /** Lead vs Client label for calendar: ACTIVE_CLIENT → Client; other non-archived → Lead. */
-export function classifyImportantDateRecordType(
-  status: ClientStatus | string
-): 'Lead' | 'Client' {
-  return status === 'ACTIVE_CLIENT' ? 'Client' : 'Lead';
-}
+export { classifyImportantDateRecordType } from '@/lib/importantDateRecordType';
 
 export const importantDateRecordSelect = {
   id: true,
