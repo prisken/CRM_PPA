@@ -4,7 +4,8 @@ export type StrategyActivityEntity =
   | 'strategy_plan'
   | 'strategy_step'
   | 'strategy_connection'
-  | 'strategy_expense';
+  | 'strategy_expense'
+  | 'strategy_projection_milestone';
 
 export type StrategyActivityAction =
   | 'created'
@@ -17,6 +18,7 @@ const ENTITY_LABELS: Record<StrategyActivityEntity, string> = {
   strategy_step: 'Strategy step',
   strategy_connection: 'Strategy connection',
   strategy_expense: 'Strategy expense',
+  strategy_projection_milestone: 'Strategy projection milestone',
 };
 
 type LogClientStrategyEventInput = {

@@ -5,8 +5,13 @@ import {
   StrategyExpenseFrequency,
   StrategyExpensePriority,
 } from '@prisma/client';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { authenticatedFetch } from '@/lib/authenticatedFetch';
+import {
+  getStrategyExpenseAnnualAmount,
+  getStrategyExpenseTotal,
+  type StrategyTimelineExpenseInput,
+} from '@/lib/clientStrategyTimelineCalculations';
 
 const EXPENSE_CATEGORIES = [
   { value: StrategyExpenseCategory.HOUSING, label: 'Housing' },
@@ -49,6 +54,8 @@ export type StrategyExpenseEditValues = {
   frequency: string;
   startTimelineLabel: string | null;
   endTimelineLabel: string | null;
+  startYear: number | null;
+  endYear: number | null;
   priority: string;
   purpose: string | null;
   coveredByStepId: string | null;
@@ -61,12 +68,31 @@ type StrategyExpenseEditModalProps = {
   planId: string;
   steps: StrategyExpenseStepOption[];
   expense?: StrategyExpenseEditValues | null;
-  /** Prefill Covered by step when creating (ignored when editing). */
+  /** Prefill Covered by investment item when creating (ignored when editing). */
   defaultCoveredByStepId?: string | null;
   isOpen: boolean;
   onClose: () => void;
   onSaved: () => void;
 };
+
+function numberToInput(value: number | null | undefined): string {
+  if (value === null || value === undefined) {
+    return '';
+  }
+  return String(value);
+}
+
+function formatMoney(value: number | null): string {
+  if (value === null) {
+    return '—';
+  }
+
+  return new Intl.NumberFormat(undefined, {
+    style: 'currency',
+    currency: 'USD',
+    maximumFractionDigits: 2,
+  }).format(value);
+}
 
 function parseOptionalNumber(value: string): number | null {
   const trimmed = value.trim();
@@ -80,6 +106,29 @@ function parseOptionalNumber(value: string): number | null {
   }
 
   return numericValue;
+}
+
+function parseOptionalYear(value: string): number | null {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  const numericValue = Number(trimmed);
+  if (!Number.isFinite(numericValue) || !Number.isInteger(numericValue)) {
+    return Number.NaN;
+  }
+
+  return numericValue;
+}
+
+function PreviewRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-baseline justify-between gap-3 text-sm">
+      <span className="text-gray-600">{label}</span>
+      <span className="font-medium tabular-nums text-gray-900">{value}</span>
+    </div>
+  );
 }
 
 export default function StrategyExpenseEditModal({
@@ -129,14 +178,12 @@ function StrategyExpenseEditModalForm({
   const [category, setCategory] = useState(
     expense?.category ?? StrategyExpenseCategory.OTHER
   );
-  const [amount, setAmount] = useState(
-    expense?.amount !== null && expense?.amount !== undefined
-      ? String(expense.amount)
-      : ''
-  );
+  const [amount, setAmount] = useState(numberToInput(expense?.amount));
   const [frequency, setFrequency] = useState(
     expense?.frequency ?? StrategyExpenseFrequency.MONTHLY
   );
+  const [startYear, setStartYear] = useState(numberToInput(expense?.startYear));
+  const [endYear, setEndYear] = useState(numberToInput(expense?.endYear));
   const [startTimelineLabel, setStartTimelineLabel] = useState(
     expense?.startTimelineLabel ?? ''
   );
@@ -157,6 +204,60 @@ function StrategyExpenseEditModalForm({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const timelinePreviewInput = useMemo((): StrategyTimelineExpenseInput => {
+    const parsedAmount = parseOptionalNumber(amount);
+    const parsedStartYear = parseOptionalYear(startYear);
+    const parsedEndYear = parseOptionalYear(endYear);
+
+    return {
+      amount: Number.isNaN(parsedAmount) ? null : parsedAmount,
+      frequency,
+      startYear: Number.isNaN(parsedStartYear) ? null : parsedStartYear,
+      endYear: Number.isNaN(parsedEndYear) ? null : parsedEndYear,
+    };
+  }, [amount, frequency, startYear, endYear]);
+
+  const expensePerYear = useMemo(() => {
+    if (frequency === StrategyExpenseFrequency.ONE_TIME) {
+      const parsedAmount = parseOptionalNumber(amount);
+      if (
+        parsedAmount === null ||
+        Number.isNaN(parsedAmount) ||
+        !startYear.trim()
+      ) {
+        return null;
+      }
+      return parsedAmount;
+    }
+
+    return getStrategyExpenseAnnualAmount(timelinePreviewInput);
+  }, [amount, frequency, startYear, timelinePreviewInput]);
+
+  const totalExpense = useMemo(
+    () => getStrategyExpenseTotal(timelinePreviewInput),
+    [timelinePreviewInput]
+  );
+
+  const timelineRangeLabel = useMemo(() => {
+    const parsedStart = parseOptionalYear(startYear);
+    const parsedEnd = parseOptionalYear(endYear);
+    if (
+      parsedStart === null ||
+      Number.isNaN(parsedStart) ||
+      parsedEnd === null ||
+      Number.isNaN(parsedEnd)
+    ) {
+      return null;
+    }
+    if (parsedStart === parsedEnd) {
+      return `Applies in ${parsedStart}`;
+    }
+    return `Applies from ${parsedStart} to ${parsedEnd}`;
+  }, [startYear, endYear]);
+
+  const hasPreviewFigures =
+    expensePerYear !== null || totalExpense !== null || timelineRangeLabel !== null;
+
   if (!isOpen) {
     return null;
   }
@@ -168,14 +269,28 @@ function StrategyExpenseEditModalForm({
 
     const trimmedTitle = title.trim();
     if (!trimmedTitle) {
-      setError('title is required');
+      setError('Expense name is required');
       setIsSubmitting(false);
       return;
     }
 
     const parsedAmount = parseOptionalNumber(amount);
     if (Number.isNaN(parsedAmount)) {
-      setError('amount must be a non-negative number');
+      setError('Amount must be a non-negative number');
+      setIsSubmitting(false);
+      return;
+    }
+
+    const parsedStartYear = parseOptionalYear(startYear);
+    if (Number.isNaN(parsedStartYear)) {
+      setError('Start year must be a whole number');
+      setIsSubmitting(false);
+      return;
+    }
+
+    const parsedEndYear = parseOptionalYear(endYear);
+    if (Number.isNaN(parsedEndYear)) {
+      setError('End year must be a whole number');
       setIsSubmitting(false);
       return;
     }
@@ -184,7 +299,7 @@ function StrategyExpenseEditModalForm({
     if (sortOrder.trim()) {
       const numericSort = Number(sortOrder);
       if (!Number.isInteger(numericSort)) {
-        setError('sortOrder must be an integer');
+        setError('Sort order must be a whole number');
         setIsSubmitting(false);
         return;
       }
@@ -196,6 +311,8 @@ function StrategyExpenseEditModalForm({
       category,
       amount: parsedAmount,
       frequency,
+      startYear: parsedStartYear,
+      endYear: parsedEndYear,
       startTimelineLabel: startTimelineLabel.trim() || null,
       endTimelineLabel: endTimelineLabel.trim() || null,
       priority,
@@ -220,256 +337,367 @@ function StrategyExpenseEditModalForm({
         throw new Error(
           typeof data.error === 'string'
             ? data.error
-            : 'Failed to save strategy expense'
+            : 'Failed to save expense'
         );
       }
 
       onSaved();
       onClose();
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : 'Failed to save strategy expense'
-      );
+      setError(err instanceof Error ? err.message : 'Failed to save expense');
     } finally {
       setIsSubmitting(false);
     }
   }
 
+  const fieldClassName =
+    'w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-1';
+
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto bg-black/40 p-4">
       <div className="flex min-h-full items-center justify-center">
-        <div className="w-full max-w-lg max-h-[min(90dvh,40rem)] overflow-y-auto rounded-xl bg-white p-4 shadow-xl sm:p-6">
+        <div className="w-full max-w-lg max-h-[min(90dvh,44rem)] overflow-y-auto rounded-xl bg-white p-4 shadow-xl sm:p-6">
           <h3 className="text-lg font-semibold text-gray-900">
-            {isEditing ? 'Edit Expense' : 'Add Expense'}
+            {isEditing ? 'Edit expense' : 'Add expense'}
           </h3>
           <p className="mt-1 text-sm text-gray-500">
-            Track a client expense and optionally link it to a covering strategy
-            step.
+            Track what the client pays over time — including premiums linked to
+            an investment item.
           </p>
 
           <form onSubmit={handleSubmit} className="mt-4 space-y-4">
-            <div>
-              <label
-                htmlFor="strategy-expense-title"
-                className="mb-1 block text-sm font-medium text-gray-700"
-              >
-                Title
-              </label>
-              <input
-                id="strategy-expense-title"
-                type="text"
-                value={title}
-                onChange={(event) => setTitle(event.target.value)}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-                required
-              />
-            </div>
-
-            <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-4">
               <div>
                 <label
-                  htmlFor="strategy-expense-category"
+                  htmlFor="strategy-expense-title"
                   className="mb-1 block text-sm font-medium text-gray-700"
                 >
-                  Category
-                </label>
-                <select
-                  id="strategy-expense-category"
-                  value={category}
-                  onChange={(event) => setCategory(event.target.value)}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-                >
-                  {EXPENSE_CATEGORIES.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label
-                  htmlFor="strategy-expense-priority"
-                  className="mb-1 block text-sm font-medium text-gray-700"
-                >
-                  Priority
-                </label>
-                <select
-                  id="strategy-expense-priority"
-                  value={priority}
-                  onChange={(event) => setPriority(event.target.value)}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-                >
-                  {EXPENSE_PRIORITIES.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div>
-                <label
-                  htmlFor="strategy-expense-amount"
-                  className="mb-1 block text-sm font-medium text-gray-700"
-                >
-                  Amount
+                  Expense name
                 </label>
                 <input
-                  id="strategy-expense-amount"
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={amount}
-                  onChange={(event) => setAmount(event.target.value)}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-                />
-              </div>
-              <div>
-                <label
-                  htmlFor="strategy-expense-frequency"
-                  className="mb-1 block text-sm font-medium text-gray-700"
-                >
-                  Frequency
-                </label>
-                <select
-                  id="strategy-expense-frequency"
-                  value={frequency}
-                  onChange={(event) => setFrequency(event.target.value)}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-                >
-                  {EXPENSE_FREQUENCIES.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div>
-                <label
-                  htmlFor="strategy-expense-start"
-                  className="mb-1 block text-sm font-medium text-gray-700"
-                >
-                  Start timeline
-                </label>
-                <input
-                  id="strategy-expense-start"
+                  id="strategy-expense-title"
                   type="text"
-                  value={startTimelineLabel}
-                  onChange={(event) => setStartTimelineLabel(event.target.value)}
-                  placeholder="e.g. Year 1"
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                  value={title}
+                  onChange={(event) => setTitle(event.target.value)}
+                  placeholder="e.g. Annual premium"
+                  className={fieldClassName}
+                  required
+                  autoFocus
                 />
               </div>
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div>
+                  <label
+                    htmlFor="strategy-expense-amount"
+                    className="mb-1 block text-sm font-medium text-gray-700"
+                  >
+                    Amount
+                  </label>
+                  <input
+                    id="strategy-expense-amount"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={amount}
+                    onChange={(event) => setAmount(event.target.value)}
+                    placeholder="0.00"
+                    className={fieldClassName}
+                  />
+                </div>
+                <div>
+                  <label
+                    htmlFor="strategy-expense-frequency"
+                    className="mb-1 block text-sm font-medium text-gray-700"
+                  >
+                    Frequency
+                  </label>
+                  <select
+                    id="strategy-expense-frequency"
+                    value={frequency}
+                    onChange={(event) => setFrequency(event.target.value)}
+                    className={fieldClassName}
+                  >
+                    {EXPENSE_FREQUENCIES.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div>
+                  <label
+                    htmlFor="strategy-expense-start-year"
+                    className="mb-1 block text-sm font-medium text-gray-700"
+                  >
+                    Start year
+                  </label>
+                  <input
+                    id="strategy-expense-start-year"
+                    type="number"
+                    step="1"
+                    value={startYear}
+                    onChange={(event) => setStartYear(event.target.value)}
+                    placeholder="e.g. 2026"
+                    className={fieldClassName}
+                  />
+                </div>
+                <div>
+                  <label
+                    htmlFor="strategy-expense-end-year"
+                    className="mb-1 block text-sm font-medium text-gray-700"
+                  >
+                    End year
+                  </label>
+                  <input
+                    id="strategy-expense-end-year"
+                    type="number"
+                    step="1"
+                    value={endYear}
+                    onChange={(event) => setEndYear(event.target.value)}
+                    placeholder="e.g. 2030"
+                    className={fieldClassName}
+                  />
+                </div>
+              </div>
+
               <div>
                 <label
-                  htmlFor="strategy-expense-end"
+                  htmlFor="strategy-expense-covered-by"
                   className="mb-1 block text-sm font-medium text-gray-700"
                 >
-                  End timeline
+                  Covered by investment item{' '}
+                  <span className="font-normal text-gray-500">(optional)</span>
                 </label>
-                <input
-                  id="strategy-expense-end"
-                  type="text"
-                  value={endTimelineLabel}
-                  onChange={(event) => setEndTimelineLabel(event.target.value)}
-                  placeholder="e.g. Year 5"
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-                />
+                <select
+                  id="strategy-expense-covered-by"
+                  value={coveredByStepId}
+                  onChange={(event) => setCoveredByStepId(event.target.value)}
+                  className={fieldClassName}
+                >
+                  <option value="">Not linked yet</option>
+                  {steps.map((step) => (
+                    <option key={step.id} value={step.id}>
+                      {step.title}
+                    </option>
+                  ))}
+                </select>
               </div>
             </div>
 
-            <div>
-              <label
-                htmlFor="strategy-expense-covered-by"
-                className="mb-1 block text-sm font-medium text-gray-700"
-              >
-                Covered by step (optional)
-              </label>
-              <select
-                id="strategy-expense-covered-by"
-                value={coveredByStepId}
-                onChange={(event) => setCoveredByStepId(event.target.value)}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-              >
-                <option value="">Not covered yet</option>
-                {steps.map((step) => (
-                  <option key={step.id} value={step.id}>
-                    {step.title}
-                  </option>
-                ))}
-              </select>
+            <div
+              className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-3"
+              aria-live="polite"
+            >
+              <p className="text-sm font-medium text-slate-800">
+                Suggested total
+              </p>
+              <p className="mt-0.5 text-xs leading-relaxed text-slate-500">
+                Suggested total based on amount, frequency, and timeline.
+              </p>
+              {hasPreviewFigures ? (
+                <div className="mt-3 space-y-1.5">
+                  <PreviewRow
+                    label={
+                      frequency === StrategyExpenseFrequency.ONE_TIME
+                        ? 'Expense in start year'
+                        : 'Expense per year'
+                    }
+                    value={formatMoney(expensePerYear)}
+                  />
+                  <PreviewRow
+                    label="Total over timeline"
+                    value={formatMoney(totalExpense)}
+                  />
+                  <PreviewRow
+                    label="Timeline"
+                    value={timelineRangeLabel ?? '—'}
+                  />
+                </div>
+              ) : (
+                <p className="mt-3 text-sm text-slate-500">
+                  Add an amount, frequency, and start/end years to see the
+                  suggested total here.
+                </p>
+              )}
             </div>
 
-            <div>
-              <label
-                htmlFor="strategy-expense-purpose"
-                className="mb-1 block text-sm font-medium text-gray-700"
-              >
-                Purpose
-              </label>
-              <textarea
-                id="strategy-expense-purpose"
-                value={purpose}
-                onChange={(event) => setPurpose(event.target.value)}
-                rows={2}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-              />
-            </div>
+            <details className="group rounded-lg border border-gray-200 bg-gray-50/60 open:bg-white">
+              <summary className="cursor-pointer list-none px-3 py-2.5 text-sm font-medium text-gray-800 marker:content-none [&::-webkit-details-marker]:hidden">
+                <span className="flex items-center justify-between gap-2">
+                  <span>More details</span>
+                  <span
+                    aria-hidden="true"
+                    className="text-xs font-normal text-gray-500 group-open:hidden"
+                  >
+                    Optional
+                  </span>
+                  <span
+                    aria-hidden="true"
+                    className="hidden text-xs font-normal text-gray-500 group-open:inline"
+                  >
+                    Hide
+                  </span>
+                </span>
+              </summary>
 
-            <div>
-              <label
-                htmlFor="strategy-expense-notes"
-                className="mb-1 block text-sm font-medium text-gray-700"
-              >
-                Notes
-              </label>
-              <textarea
-                id="strategy-expense-notes"
-                value={notes}
-                onChange={(event) => setNotes(event.target.value)}
-                rows={2}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-              />
-            </div>
+              <div className="space-y-4 border-t border-gray-200 px-3 py-3">
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div>
+                    <label
+                      htmlFor="strategy-expense-category"
+                      className="mb-1 block text-sm font-medium text-gray-700"
+                    >
+                      Category
+                    </label>
+                    <select
+                      id="strategy-expense-category"
+                      value={category}
+                      onChange={(event) => setCategory(event.target.value)}
+                      className={`${fieldClassName} bg-white`}
+                    >
+                      {EXPENSE_CATEGORIES.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label
+                      htmlFor="strategy-expense-priority"
+                      className="mb-1 block text-sm font-medium text-gray-700"
+                    >
+                      Priority
+                    </label>
+                    <select
+                      id="strategy-expense-priority"
+                      value={priority}
+                      onChange={(event) => setPriority(event.target.value)}
+                      className={`${fieldClassName} bg-white`}
+                    >
+                      {EXPENSE_PRIORITIES.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
 
-            <div>
-              <label
-                htmlFor="strategy-expense-sort-order"
-                className="mb-1 block text-sm font-medium text-gray-700"
-              >
-                Sort order
-              </label>
-              <input
-                id="strategy-expense-sort-order"
-                type="number"
-                step="1"
-                value={sortOrder}
-                onChange={(event) => setSortOrder(event.target.value)}
-                placeholder="Auto"
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-              />
-            </div>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div>
+                    <label
+                      htmlFor="strategy-expense-start-label"
+                      className="mb-1 block text-sm font-medium text-gray-700"
+                    >
+                      Start timeline label
+                    </label>
+                    <input
+                      id="strategy-expense-start-label"
+                      type="text"
+                      value={startTimelineLabel}
+                      onChange={(event) =>
+                        setStartTimelineLabel(event.target.value)
+                      }
+                      placeholder="e.g. Year 1"
+                      className={`${fieldClassName} bg-white`}
+                    />
+                  </div>
+                  <div>
+                    <label
+                      htmlFor="strategy-expense-end-label"
+                      className="mb-1 block text-sm font-medium text-gray-700"
+                    >
+                      End timeline label
+                    </label>
+                    <input
+                      id="strategy-expense-end-label"
+                      type="text"
+                      value={endTimelineLabel}
+                      onChange={(event) =>
+                        setEndTimelineLabel(event.target.value)
+                      }
+                      placeholder="e.g. Year 5"
+                      className={`${fieldClassName} bg-white`}
+                    />
+                  </div>
+                </div>
 
-            {error ? <p className="text-sm text-red-600">{error}</p> : null}
+                <div>
+                  <label
+                    htmlFor="strategy-expense-purpose"
+                    className="mb-1 block text-sm font-medium text-gray-700"
+                  >
+                    Purpose
+                  </label>
+                  <textarea
+                    id="strategy-expense-purpose"
+                    value={purpose}
+                    onChange={(event) => setPurpose(event.target.value)}
+                    rows={2}
+                    className={`${fieldClassName} bg-white`}
+                  />
+                </div>
+
+                <div>
+                  <label
+                    htmlFor="strategy-expense-notes"
+                    className="mb-1 block text-sm font-medium text-gray-700"
+                  >
+                    Notes
+                  </label>
+                  <textarea
+                    id="strategy-expense-notes"
+                    value={notes}
+                    onChange={(event) => setNotes(event.target.value)}
+                    rows={2}
+                    className={`${fieldClassName} bg-white`}
+                  />
+                </div>
+
+                <div>
+                  <label
+                    htmlFor="strategy-expense-sort-order"
+                    className="mb-1 block text-sm font-medium text-gray-700"
+                  >
+                    Sort order
+                  </label>
+                  <input
+                    id="strategy-expense-sort-order"
+                    type="number"
+                    step="1"
+                    value={sortOrder}
+                    onChange={(event) => setSortOrder(event.target.value)}
+                    placeholder="Auto"
+                    className={`${fieldClassName} bg-white`}
+                  />
+                </div>
+              </div>
+            </details>
+
+            {error ? (
+              <p className="text-sm text-red-600" role="alert">
+                {error}
+              </p>
+            ) : null}
 
             <div className="flex flex-col-reverse gap-3 pt-2 sm:flex-row sm:justify-end">
               <button
                 type="button"
                 onClick={onClose}
                 disabled={isSubmitting}
-                className="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-60"
+                className="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-1 disabled:opacity-60"
               >
                 Cancel
               </button>
               <button
                 type="submit"
                 disabled={isSubmitting}
-                className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-60"
+                className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-1 disabled:opacity-60"
               >
                 {isSubmitting
                   ? 'Saving…'

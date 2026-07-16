@@ -1,7 +1,7 @@
 # Profit Pulse Ally CRM
 ## Standard User Manual
 
-**Version:** 1.2 · **Audience:** Standard users (Relationship, Follow-up, and deal participants including doctors)
+**Version:** 1.3 · **Audience:** Standard users (Relationship, Follow-up, and deal participants including doctors)
 
 ---
 
@@ -220,6 +220,41 @@ Every stage change is logged on the client activity timeline.
 - Edit strategy text.
 - Create, edit, complete, and delete tasks (title, description, due date, assignee).
 
+#### Strategy Planner — Timeline Economics & Projection Journey *(when you have Strategy Planner access)*
+
+Use **Strategy Planner** on Client 360 to build illustrative plans: what the client invests, what income is expected, what expenses or premiums apply, and selected projection checkpoints.
+
+**Board / List — strategy items**
+
+When editing a strategy item (investment item), you can enter:
+
+- **Invest** amount
+- **Timeline** start and end year
+- **Income** amount and frequency (monthly, yearly, one-time, or custom)
+- Income start and end year
+- **Capital back** amount and capital return year
+
+Cards show compact totals such as total income, capital back, and **illustrative** position when those figures can be calculated from what you entered. Missing values show as a dash (—).
+
+**Board / List — expenses**
+
+Expenses can include amount, frequency, start year, and end year. Cards show total expense over the timeline when computable, plus which strategy item covers the expense when linked.
+
+**Projection Journey**
+
+Projection Journey is designed for manually selected milestone years and scenarios. It does not generate a full year-by-year projection. Use it to present important points in the client's investment journey, such as the initial investment, income checkpoints, exit scenarios, and total asset position.
+
+Open a plan → **Projection** to add or edit milestones. For each milestone you can:
+
+1. Choose year, title, and type.
+2. Select which **strategy items** contribute.
+3. Select which **expenses** contribute.
+4. Review suggested values (income/expenses/net for that year, cumulatives, capital returned, illustrative total position).
+5. Click **Use suggested values** if you want to apply those suggestions — they are **not** applied automatically while you type.
+
+Helper calculations use simple planning rules (for example monthly × 12, yearly as-is, one-time in the start year, inclusive year ranges). They do **not** include growth, compounding, IRR, ROI, yield, or guaranteed returns. Saved figures remain under your control.
+
+> Values are illustrative and based on advisor-entered assumptions. Actual results may vary. This view is for planning and presentation purposes only.
 
 #### Client Strategy Overview *(when you have Strategy Planner access)*
 
@@ -227,11 +262,11 @@ A **read-only** presentation page for clients — separate from Board, List, and
 
 - Open a plan → **View client overview** (beside the Board / List / Projection toggle).
 - Route: `/clients/[id]/strategy-plans/[planId]/overview`.
-- Shows a strategy snapshot, summary cards, a **Client Strategy Map** (goal → milestones → outcome), plan perks, disclaimer, and suggested next steps.
-- Milestones and figures are **manually entered** by the advisor; the report does not auto-generate every year.
+- Shows a strategy snapshot, summary cards (investment, income, expenses, capital back, illustrative total position), a **Client Strategy Map** (goal → milestones → outcome) with yearly cashflow figures and contributing item chips, plan perks, disclaimer, and suggested next steps.
+- Milestones and figures are **manually entered** by the advisor (or applied from suggestions when editing); the report does not auto-generate every year.
 - Use **Print** in the browser for a hard copy; use **← Back to Strategy Planner** to return to the workspace tab.
 
-> Projection milestones are illustrative and based on manually entered assumptions. Actual results may vary. This view is for planning and presentation purposes only.
+> Values are illustrative and based on advisor-entered assumptions. Actual results may vary. This view is for planning and presentation purposes only.
 
 #### Activity & Notes *(all assignees)*
 

@@ -94,6 +94,31 @@ export async function PUT(
       ...(parsed.data.timelineLabel !== undefined && {
         timelineLabel: parsed.data.timelineLabel,
       }),
+      ...(parsed.data.startYear !== undefined && {
+        startYear: parsed.data.startYear,
+      }),
+      ...(parsed.data.endYear !== undefined && { endYear: parsed.data.endYear }),
+      ...(parsed.data.investmentAmount !== undefined && {
+        investmentAmount: parsed.data.investmentAmount,
+      }),
+      ...(parsed.data.incomeAmount !== undefined && {
+        incomeAmount: parsed.data.incomeAmount,
+      }),
+      ...(parsed.data.incomeFrequency !== undefined && {
+        incomeFrequency: parsed.data.incomeFrequency,
+      }),
+      ...(parsed.data.incomeStartYear !== undefined && {
+        incomeStartYear: parsed.data.incomeStartYear,
+      }),
+      ...(parsed.data.incomeEndYear !== undefined && {
+        incomeEndYear: parsed.data.incomeEndYear,
+      }),
+      ...(parsed.data.capitalReturned !== undefined && {
+        capitalReturned: parsed.data.capitalReturned,
+      }),
+      ...(parsed.data.capitalReturnYear !== undefined && {
+        capitalReturnYear: parsed.data.capitalReturnYear,
+      }),
       ...(parsed.data.sortOrder !== undefined && {
         sortOrder: parsed.data.sortOrder,
       }),

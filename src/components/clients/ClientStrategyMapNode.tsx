@@ -46,16 +46,34 @@ function displayMoney(value: number | null | undefined) {
   return formatMoney(value) ?? '—';
 }
 
+function MetricRow({
+  label,
+  value,
+}: {
+  label: string;
+  value: number | null;
+}) {
+  return (
+    <p className="text-[11px] tabular-nums text-gray-600">
+      <span className="font-medium text-gray-700">{label}: </span>
+      {displayMoney(value)}
+    </p>
+  );
+}
+
 type ClientStrategyMapNodeProps = {
   node: ClientStrategyMapNodeModel;
   stepLabel?: number;
 };
 
 function ClientStrategyMapNode({ node, stepLabel }: ClientStrategyMapNodeProps) {
+  const isMilestone = node.kind !== 'goal' && node.kind !== 'outcome';
   const hasPrimary =
     node.primaryMetricLabel !== null && node.primaryMetricValue !== null;
   const hasSecondary =
     node.secondaryMetricLabel !== null && node.secondaryMetricValue !== null;
+  const hasSourceChips =
+    node.linkedStepChips.length > 0 || node.linkedExpenseChips.length > 0;
 
   return (
     <article
@@ -93,7 +111,26 @@ function ClientStrategyMapNode({ node, stepLabel }: ClientStrategyMapNodeProps) 
         <p className="mt-1 line-clamp-2 text-xs text-gray-500">{node.subtitle}</p>
       ) : null}
 
-      {hasPrimary ? (
+      {isMilestone ? (
+        <div
+          className="mt-2.5 space-y-0.5 rounded-lg bg-gray-50 px-2.5 py-2 print:bg-white"
+          aria-label="Milestone figures"
+        >
+          <MetricRow label="Spending this year" value={node.spendingThisYear} />
+          <MetricRow label="Earning this year" value={node.earningThisYear} />
+          <MetricRow label="Net this year" value={node.netThisYear} />
+          <MetricRow label="Cumulative income" value={node.cumulativeIncome} />
+          <MetricRow
+            label="Cumulative expenses"
+            value={node.cumulativeExpenses}
+          />
+          <MetricRow label="Capital returned" value={node.capitalReturned} />
+          <MetricRow
+            label="Illustrative total position"
+            value={node.illustrativeTotalPosition}
+          />
+        </div>
+      ) : hasPrimary ? (
         <div className="mt-2.5 rounded-lg bg-gray-50 px-2.5 py-2 print:bg-white">
           <p className="text-[10px] font-medium uppercase tracking-wide text-gray-500">
             {node.primaryMetricLabel}
@@ -104,7 +141,7 @@ function ClientStrategyMapNode({ node, stepLabel }: ClientStrategyMapNodeProps) 
         </div>
       ) : null}
 
-      {hasSecondary ? (
+      {!isMilestone && hasSecondary ? (
         <p className="mt-2 text-xs tabular-nums text-gray-600">
           <span className="font-medium text-gray-700">
             {node.secondaryMetricLabel}:
@@ -119,13 +156,46 @@ function ClientStrategyMapNode({ node, stepLabel }: ClientStrategyMapNodeProps) 
         </p>
       ) : null}
 
-      {node.linkedStepChips.length > 0 ? (
-        <div className="mt-2 flex flex-wrap gap-1.5">
-          {node.linkedStepChips.map((chip) => (
-            <CompactPill key={chip.id} tone="gray" size="xs" title={chip.title}>
-              Linked: {chip.title}
-            </CompactPill>
-          ))}
+      {hasSourceChips ? (
+        <div className="mt-2 space-y-1.5">
+          {node.linkedStepChips.length > 0 ? (
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-500">
+                Strategy items
+              </p>
+              <div className="mt-1 flex flex-wrap gap-1.5">
+                {node.linkedStepChips.map((chip) => (
+                  <CompactPill
+                    key={`step-${chip.id}`}
+                    tone="blue"
+                    size="xs"
+                    title={chip.title}
+                  >
+                    {chip.title}
+                  </CompactPill>
+                ))}
+              </div>
+            </div>
+          ) : null}
+          {node.linkedExpenseChips.length > 0 ? (
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-500">
+                Expenses
+              </p>
+              <div className="mt-1 flex flex-wrap gap-1.5">
+                {node.linkedExpenseChips.map((chip) => (
+                  <CompactPill
+                    key={`expense-${chip.id}`}
+                    tone="yellow"
+                    size="xs"
+                    title={chip.title}
+                  >
+                    {chip.title}
+                  </CompactPill>
+                ))}
+              </div>
+            </div>
+          ) : null}
         </div>
       ) : null}
 

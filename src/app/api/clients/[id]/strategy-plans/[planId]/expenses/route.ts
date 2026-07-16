@@ -57,6 +57,8 @@ export async function POST(
       frequency: parsed.data.frequency ?? DEFAULT_STRATEGY_EXPENSE_FREQUENCY,
       startTimelineLabel: parsed.data.startTimelineLabel ?? null,
       endTimelineLabel: parsed.data.endTimelineLabel ?? null,
+      startYear: parsed.data.startYear ?? null,
+      endYear: parsed.data.endYear ?? null,
       priority: parsed.data.priority ?? DEFAULT_STRATEGY_EXPENSE_PRIORITY,
       purpose: parsed.data.purpose ?? null,
       coveredByStepId: parsed.data.coveredByStepId ?? null,

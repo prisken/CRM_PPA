@@ -2,7 +2,7 @@
 
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
-import { memo, useMemo, useState, useSyncExternalStore } from 'react';
+import { memo, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import CompactPill from '@/components/ui/CompactPill';
 import ConfirmActionModal from '@/components/ui/ConfirmActionModal';
 import SectionCard from '@/components/ui/SectionCard';
@@ -16,15 +16,30 @@ import type { StrategyConnectionEditValues } from '@/components/clients/Strategy
 import type { StrategyExpenseEditValues } from '@/components/clients/StrategyExpenseEditModal';
 import type { StrategyStepEditValues } from '@/components/clients/StrategyStepEditModal';
 import {
+  toProjectionMilestoneEditValues,
+  type StrategyProjectionMilestoneEditValues,
+} from '@/components/clients/StrategyProjectionMilestoneEditModal';
+import {
   getStrategyPlannerViewServerSnapshot,
   getStrategyPlannerViewSnapshot,
   subscribeStrategyPlannerView,
   writeStoredStrategyPlannerView,
   type StrategyPlannerView,
 } from '@/components/clients/strategyPlannerViewPreference';
+import type { StrategyProjectionMilestone } from '@/lib/clientStrategyProjectionHelpers';
+import { buildProjectionMilestoneReorderIds } from '@/lib/clientStrategyProjectionHelpers';
+import {
+  getExpenseEconomicsLabels,
+  getStepEconomicsLabels,
+} from '@/components/clients/strategyTimelineEconomicsDisplay';
 
 const StrategyPlannerBoard = dynamic(
   () => import('@/components/clients/StrategyPlannerBoard'),
+  { ssr: false }
+);
+
+const StrategyProjectionJourneyView = dynamic(
+  () => import('@/components/clients/StrategyProjectionJourneyView'),
   { ssr: false }
 );
 
@@ -40,6 +55,11 @@ const StrategyConnectionEditModal = dynamic(
 
 const StrategyExpenseEditModal = dynamic(
   () => import('@/components/clients/StrategyExpenseEditModal'),
+  { ssr: false }
+);
+
+const StrategyProjectionMilestoneEditModal = dynamic(
+  () => import('@/components/clients/StrategyProjectionMilestoneEditModal'),
   { ssr: false }
 );
 
@@ -60,12 +80,23 @@ export type StrategyPlanDetailStep = {
   expectedIncomeAmount: number | null;
   expectedIncomeFrequency: string | null;
   timelineLabel: string | null;
+  startYear?: number | null;
+  endYear?: number | null;
+  investmentAmount?: number | null;
+  incomeAmount?: number | null;
+  incomeFrequency?: string | null;
+  incomeStartYear?: number | null;
+  incomeEndYear?: number | null;
+  capitalReturned?: number | null;
+  capitalReturnYear?: number | null;
   sortOrder: number;
   createdAt?: string;
   linkedDeal: {
     id: string;
     name: string;
-    dealValue?: number;
+    dealValue?: number | null;
+    status?: string | null;
+    dealType?: string | null;
   } | null;
 };
 
@@ -88,6 +119,8 @@ export type StrategyPlanDetailExpense = {
   frequency: string;
   startTimelineLabel: string | null;
   endTimelineLabel: string | null;
+  startYear?: number | null;
+  endYear?: number | null;
   priority: string;
   purpose: string | null;
   coveredByStepId?: string | null;
@@ -107,6 +140,8 @@ export type StrategyPlanDetail = {
   steps: StrategyPlanDetailStep[];
   connections: StrategyPlanDetailConnection[];
   expenses: StrategyPlanDetailExpense[];
+  /** Present when loaded from plan detail API; omit/empty until Projection UI wires CRUD. */
+  projectionMilestones?: StrategyProjectionMilestone[];
 };
 
 type StrategyPlanDetailViewProps = {
@@ -208,31 +243,43 @@ const COVERAGE_STATUS_STYLES: Record<
   },
 };
 
+function toMonthlyAmount(
+  amount: number | null | undefined,
+  frequency: string | null | undefined
+): number {
+  if (amount === null || amount === undefined || !Number.isFinite(amount)) {
+    return 0;
+  }
+
+  if (frequency === 'MONTHLY') {
+    return amount;
+  }
+
+  // Recurring yearly → normalize into the monthly coverage view.
+  if (frequency === 'YEARLY') {
+    return amount / 12;
+  }
+
+  // ONE_TIME / CUSTOM stay out of the recurring monthly comparison.
+  return 0;
+}
+
 function buildOutcomeSummary(
   steps: StrategyPlanDetailStep[],
   expenses: StrategyPlanDetailExpense[]
 ): OutcomeSummary {
-  const expectedMonthlyIncome = steps.reduce((sum, step) => {
-    if (
-      step.expectedIncomeFrequency === 'MONTHLY' &&
-      step.expectedIncomeAmount !== null &&
-      step.expectedIncomeAmount !== undefined
-    ) {
-      return sum + step.expectedIncomeAmount;
-    }
-    return sum;
-  }, 0);
+  const expectedMonthlyIncome = steps.reduce(
+    (sum, step) =>
+      sum +
+      toMonthlyAmount(step.expectedIncomeAmount, step.expectedIncomeFrequency),
+    0
+  );
 
-  const plannedMonthlyExpenses = expenses.reduce((sum, expense) => {
-    if (
-      expense.frequency === 'MONTHLY' &&
-      expense.amount !== null &&
-      expense.amount !== undefined
-    ) {
-      return sum + expense.amount;
-    }
-    return sum;
-  }, 0);
+  const plannedMonthlyExpenses = expenses.reduce(
+    (sum, expense) =>
+      sum + toMonthlyAmount(expense.amount, expense.frequency),
+    0
+  );
 
   const monthlyGap = expectedMonthlyIncome - plannedMonthlyExpenses;
 
@@ -259,15 +306,24 @@ function formatStatusLabel(status: string) {
   return STATUS_LABELS[status] ?? humanizeEnum(status) ?? status;
 }
 
-function MetaLine({ label, value }: { label: string; value: string | null }) {
-  if (!value?.trim()) {
+function MetaLine({
+  label,
+  value,
+  showEmptyDash = false,
+}: {
+  label: string;
+  value: string | null;
+  showEmptyDash?: boolean;
+}) {
+  const trimmed = value?.trim() ?? '';
+  if (!trimmed && !showEmptyDash) {
     return null;
   }
 
   return (
     <p className="text-xs text-gray-600">
       <span className="font-medium text-gray-700">{label}: </span>
-      {value.trim()}
+      {trimmed || '—'}
     </p>
   );
 }
@@ -304,6 +360,15 @@ function toStepEditValues(step: StrategyPlanDetailStep): StrategyStepEditValues 
     expectedIncomeAmount: step.expectedIncomeAmount,
     expectedIncomeFrequency: step.expectedIncomeFrequency,
     timelineLabel: step.timelineLabel,
+    startYear: step.startYear ?? null,
+    endYear: step.endYear ?? null,
+    investmentAmount: step.investmentAmount ?? null,
+    incomeAmount: step.incomeAmount ?? null,
+    incomeFrequency: step.incomeFrequency ?? null,
+    incomeStartYear: step.incomeStartYear ?? null,
+    incomeEndYear: step.incomeEndYear ?? null,
+    capitalReturned: step.capitalReturned ?? null,
+    capitalReturnYear: step.capitalReturnYear ?? null,
     sortOrder: step.sortOrder,
   };
 }
@@ -355,11 +420,25 @@ function StrategyPlanDetailView({
   );
   const [pendingDeleteExpense, setPendingDeleteExpense] =
     useState<StrategyPlanDetailExpense | null>(null);
+  const [isProjectionMilestoneModalOpen, setIsProjectionMilestoneModalOpen] =
+    useState(false);
+  const [editingProjectionMilestone, setEditingProjectionMilestone] =
+    useState<StrategyProjectionMilestoneEditValues | null>(null);
+  const [pendingDeleteProjectionMilestone, setPendingDeleteProjectionMilestone] =
+    useState<StrategyProjectionMilestone | null>(null);
+  const [deletingProjectionMilestoneId, setDeletingProjectionMilestoneId] =
+    useState<string | null>(null);
+  const [reorderingProjectionMilestoneId, setReorderingProjectionMilestoneId] =
+    useState<string | null>(null);
+  const [projectionActionError, setProjectionActionError] = useState<
+    string | null
+  >(null);
   const [isPlanDeleteModalOpen, setIsPlanDeleteModalOpen] = useState(false);
   const [deleteConfirmError, setDeleteConfirmError] = useState<string | null>(
     null
   );
   const [reorderingStepId, setReorderingStepId] = useState<string | null>(null);
+  const deleteAbortRef = useRef<AbortController | null>(null);
   const planDetailView = useSyncExternalStore(
     subscribeStrategyPlannerView,
     getStrategyPlannerViewSnapshot,
@@ -494,6 +573,8 @@ function StrategyPlanDetailView({
       frequency: expense.frequency,
       startTimelineLabel: expense.startTimelineLabel,
       endTimelineLabel: expense.endTimelineLabel,
+      startYear: expense.startYear ?? null,
+      endYear: expense.endYear ?? null,
       priority: expense.priority,
       purpose: expense.purpose,
       coveredByStepId:
@@ -508,6 +589,115 @@ function StrategyPlanDetailView({
     setIsExpenseModalOpen(false);
     setEditingExpense(null);
     setCreateExpenseCoveredByStepId(null);
+  }
+
+  function openCreateProjectionMilestone() {
+    setEditingProjectionMilestone(null);
+    setIsProjectionMilestoneModalOpen(true);
+  }
+
+  function openEditProjectionMilestone(milestone: StrategyProjectionMilestone) {
+    setEditingProjectionMilestone(toProjectionMilestoneEditValues(milestone));
+    setIsProjectionMilestoneModalOpen(true);
+  }
+
+  function closeProjectionMilestoneModal() {
+    setIsProjectionMilestoneModalOpen(false);
+    setEditingProjectionMilestone(null);
+  }
+
+  async function confirmDeleteProjectionMilestone() {
+    if (!pendingDeleteProjectionMilestone) {
+      return;
+    }
+
+    const milestone = pendingDeleteProjectionMilestone;
+    const controller = startDeleteRequest();
+    setDeletingProjectionMilestoneId(milestone.id);
+    setDeleteConfirmError(null);
+
+    try {
+      const response = await authenticatedFetch(
+        `/api/clients/${clientId}/strategy-plans/${plan.id}/projection-milestones/${milestone.id}`,
+        { method: 'DELETE', signal: controller.signal }
+      );
+
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({}));
+        throw new Error(
+          typeof body.error === 'string'
+            ? body.error
+            : 'Failed to delete projection milestone'
+        );
+      }
+
+      setPendingDeleteProjectionMilestone(null);
+      onRefresh?.();
+    } catch (err) {
+      if (controller.signal.aborted) {
+        return;
+      }
+      const message =
+        err instanceof Error
+          ? err.message
+          : 'Failed to delete projection milestone';
+      setDeleteConfirmError(message);
+    } finally {
+      if (deleteAbortRef.current === controller) {
+        deleteAbortRef.current = null;
+      }
+      setDeletingProjectionMilestoneId(null);
+    }
+  }
+
+  async function reorderProjectionMilestone(
+    milestoneId: string,
+    direction: 'earlier' | 'later'
+  ) {
+    if (!canManage || reorderingProjectionMilestoneId) {
+      return;
+    }
+
+    const nextOrderedIds = buildProjectionMilestoneReorderIds(
+      plan.projectionMilestones ?? [],
+      milestoneId,
+      direction
+    );
+    if (!nextOrderedIds) {
+      return;
+    }
+
+    setReorderingProjectionMilestoneId(milestoneId);
+    setProjectionActionError(null);
+
+    try {
+      const response = await authenticatedFetch(
+        `/api/clients/${clientId}/strategy-plans/${plan.id}/projection-milestones/reorder`,
+        {
+          method: 'PUT',
+          body: JSON.stringify({ orderedIds: nextOrderedIds }),
+        }
+      );
+
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({}));
+        throw new Error(
+          typeof body.error === 'string'
+            ? body.error
+            : 'Failed to reorder projection milestones'
+        );
+      }
+
+      onRefresh?.();
+    } catch (err) {
+      const message =
+        err instanceof Error
+          ? err.message
+          : 'Failed to reorder projection milestones';
+      setProjectionActionError(message);
+    } finally {
+      setReorderingProjectionMilestoneId(null);
+    }
   }
 
   async function reorderStep(
@@ -567,12 +757,25 @@ function StrategyPlanDetailView({
     }
   }
 
+  function abortPendingDeleteRequest() {
+    deleteAbortRef.current?.abort();
+    deleteAbortRef.current = null;
+  }
+
+  function startDeleteRequest() {
+    abortPendingDeleteRequest();
+    const controller = new AbortController();
+    deleteAbortRef.current = controller;
+    return controller;
+  }
+
   async function confirmDeleteStep() {
     if (!pendingDeleteStep) {
       return;
     }
 
     const step = pendingDeleteStep;
+    const controller = startDeleteRequest();
     setDeletingStepId(step.id);
     setStepActionError(null);
     setDeleteConfirmError(null);
@@ -580,7 +783,7 @@ function StrategyPlanDetailView({
     try {
       const response = await authenticatedFetch(
         `/api/clients/${clientId}/strategy-plans/${plan.id}/steps/${step.id}`,
-        { method: 'DELETE' }
+        { method: 'DELETE', signal: controller.signal }
       );
 
       if (!response.ok) {
@@ -595,11 +798,17 @@ function StrategyPlanDetailView({
       setPendingDeleteStep(null);
       onRefresh?.();
     } catch (err) {
+      if (controller.signal.aborted) {
+        return;
+      }
       const message =
         err instanceof Error ? err.message : 'Failed to delete strategy step';
       setDeleteConfirmError(message);
       setStepActionError(message);
     } finally {
+      if (deleteAbortRef.current === controller) {
+        deleteAbortRef.current = null;
+      }
       setDeletingStepId(null);
     }
   }
@@ -610,6 +819,7 @@ function StrategyPlanDetailView({
     }
 
     const connection = pendingDeleteConnection;
+    const controller = startDeleteRequest();
     setDeletingConnectionId(connection.id);
     setConnectionActionError(null);
     setDeleteConfirmError(null);
@@ -617,7 +827,7 @@ function StrategyPlanDetailView({
     try {
       const response = await authenticatedFetch(
         `/api/clients/${clientId}/strategy-plans/${plan.id}/connections/${connection.id}`,
-        { method: 'DELETE' }
+        { method: 'DELETE', signal: controller.signal }
       );
 
       if (!response.ok) {
@@ -632,6 +842,9 @@ function StrategyPlanDetailView({
       setPendingDeleteConnection(null);
       onRefresh?.();
     } catch (err) {
+      if (controller.signal.aborted) {
+        return;
+      }
       const message =
         err instanceof Error
           ? err.message
@@ -639,6 +852,9 @@ function StrategyPlanDetailView({
       setDeleteConfirmError(message);
       setConnectionActionError(message);
     } finally {
+      if (deleteAbortRef.current === controller) {
+        deleteAbortRef.current = null;
+      }
       setDeletingConnectionId(null);
     }
   }
@@ -649,6 +865,7 @@ function StrategyPlanDetailView({
     }
 
     const expense = pendingDeleteExpense;
+    const controller = startDeleteRequest();
     setDeletingExpenseId(expense.id);
     setExpenseActionError(null);
     setDeleteConfirmError(null);
@@ -656,7 +873,7 @@ function StrategyPlanDetailView({
     try {
       const response = await authenticatedFetch(
         `/api/clients/${clientId}/strategy-plans/${plan.id}/expenses/${expense.id}`,
-        { method: 'DELETE' }
+        { method: 'DELETE', signal: controller.signal }
       );
 
       if (!response.ok) {
@@ -671,6 +888,9 @@ function StrategyPlanDetailView({
       setPendingDeleteExpense(null);
       onRefresh?.();
     } catch (err) {
+      if (controller.signal.aborted) {
+        return;
+      }
       const message =
         err instanceof Error
           ? err.message
@@ -678,6 +898,9 @@ function StrategyPlanDetailView({
       setDeleteConfirmError(message);
       setExpenseActionError(message);
     } finally {
+      if (deleteAbortRef.current === controller) {
+        deleteAbortRef.current = null;
+      }
       setDeletingExpenseId(null);
     }
   }
@@ -741,8 +964,10 @@ function StrategyPlanDetailView({
 
       <p className="text-xs text-gray-500">
         {planDetailView === 'board'
-          ? 'Board maps this plan as a workspace canvas. Switch to List view for vertical CRUD lists.'
-          : 'Client goal → strategy steps / connections / expenses → outcome.'}
+          ? 'Board maps this plan as a workspace canvas. Switch to List for vertical CRUD, or Projection for selected journey milestones.'
+          : planDetailView === 'list'
+            ? 'Client goal → strategy steps / connections / expenses → outcome.'
+            : 'Illustrative years and scenarios — not an auto-generated yearly projection.'}
       </p>
 
       {planDetailView === 'list' ? (
@@ -804,11 +1029,15 @@ function StrategyPlanDetailView({
         </SectionCard>
       ) : null}
 
-      {(stepActionError || connectionActionError || expenseActionError) && (
+      {(stepActionError ||
+        connectionActionError ||
+        expenseActionError ||
+        projectionActionError) && (
         <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
           {stepActionError ? <p>{stepActionError}</p> : null}
           {connectionActionError ? <p>{connectionActionError}</p> : null}
           {expenseActionError ? <p>{expenseActionError}</p> : null}
+          {projectionActionError ? <p>{projectionActionError}</p> : null}
         </div>
       )}
 
@@ -852,6 +1081,18 @@ function StrategyPlanDetailView({
           >
             List view
           </button>
+          <button
+            type="button"
+            onClick={() => handlePlanDetailViewChange('projection')}
+            aria-pressed={planDetailView === 'projection'}
+            className={`min-w-0 flex-1 rounded-md px-3 py-1.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-1 sm:flex-none ${
+              planDetailView === 'projection'
+                ? 'bg-white text-gray-900 shadow-sm'
+                : 'text-gray-600 hover:text-gray-900'
+            }`}
+          >
+            Projection
+          </button>
         </div>
 
         <Link
@@ -861,7 +1102,7 @@ function StrategyPlanDetailView({
           View client overview
         </Link>
 
-        {canManage ? (
+        {canManage && planDetailView !== 'projection' ? (
           <div className="flex w-full min-w-0 flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
             <button
               type="button"
@@ -962,7 +1203,7 @@ function StrategyPlanDetailView({
               : undefined
           }
         />
-      ) : (
+      ) : planDetailView === 'list' ? (
         <div id="strategy-list-view" className={cardStackClass}>
       <SectionCard
         title="Strategy Steps"
@@ -997,19 +1238,19 @@ function StrategyPlanDetailView({
         ) : (
           <ul className={listSpacingClass}>
             {sortedSteps.map((step, index) => {
-              const amountLabel =
-                step.amountDescription?.trim() ||
-                formatMoney(step.plannedAmount) ||
-                formatMoney(step.linkedDeal?.dealValue);
+              const economics = getStepEconomicsLabels(step);
 
               const linkedDealLabel = step.linkedDeal
                 ? [
                     step.linkedDeal.name,
                     formatMoney(step.linkedDeal.dealValue),
+                    humanizeEnum(step.linkedDeal.status),
                   ]
                     .filter(Boolean)
                     .join(' · ')
                 : null;
+              const linkedDealId =
+                step.linkedDeal?.id ?? step.linkedDealId ?? null;
 
               return (
                 <li
@@ -1026,26 +1267,49 @@ function StrategyPlanDetailView({
                   </div>
                   <div className={`mt-1.5 ${listSpacingClass}`}>
                     <MetaLine label="Linked deal" value={linkedDealLabel} />
-                    <MetaLine label="Amount" value={amountLabel} />
+                    {linkedDealId ? (
+                      <a
+                        href={`#deal-${linkedDealId}`}
+                        className="text-xs font-medium text-emerald-800 underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-1"
+                      >
+                        View deal
+                      </a>
+                    ) : null}
+                    <MetaLine
+                      label="Invest"
+                      value={economics.invest}
+                      showEmptyDash
+                    />
+                    <MetaLine
+                      label="Income"
+                      value={economics.income}
+                      showEmptyDash
+                    />
+                    <MetaLine
+                      label="Timeline"
+                      value={economics.timeline}
+                      showEmptyDash
+                    />
+                    <MetaLine
+                      label="Total income"
+                      value={economics.totalIncome}
+                      showEmptyDash
+                    />
+                    <MetaLine
+                      label="Capital back"
+                      value={economics.capitalBack}
+                      showEmptyDash
+                    />
+                    <MetaLine
+                      label="Illustrative position"
+                      value={economics.illustrativePosition}
+                      showEmptyDash
+                    />
                     <MetaLine label="Purpose" value={step.purpose} />
                     <MetaLine
                       label="Expected achievement"
                       value={step.expectedAchievement}
                     />
-                    <MetaLine
-                      label="Expected income"
-                      value={
-                        step.expectedIncomeAmount !== null
-                          ? [
-                              formatMoney(step.expectedIncomeAmount),
-                              humanizeEnum(step.expectedIncomeFrequency),
-                            ]
-                              .filter(Boolean)
-                              .join(' · ')
-                          : null
-                      }
-                    />
-                    <MetaLine label="Timeline" value={step.timelineLabel} />
                   </div>
                   {canManage ? (
                     <div className="mt-2 flex flex-wrap gap-3">
@@ -1209,19 +1473,7 @@ function StrategyPlanDetailView({
         ) : (
           <ul className={listSpacingClass}>
             {sortedExpenses.map((expense) => {
-              const amountFrequency = [
-                formatMoney(expense.amount),
-                humanizeEnum(expense.frequency),
-              ]
-                .filter(Boolean)
-                .join(' · ');
-
-              const timeline =
-                expense.startTimelineLabel || expense.endTimelineLabel
-                  ? [expense.startTimelineLabel, expense.endTimelineLabel]
-                      .filter(Boolean)
-                      .join(' → ')
-                  : null;
+              const economics = getExpenseEconomicsLabels(expense);
 
               return (
                 <li
@@ -1238,16 +1490,29 @@ function StrategyPlanDetailView({
                   </div>
                   <div className={`mt-1.5 ${listSpacingClass}`}>
                     <MetaLine
+                      label="Amount"
+                      value={economics.amount}
+                      showEmptyDash
+                    />
+                    <MetaLine
+                      label="Timeline"
+                      value={economics.timeline}
+                      showEmptyDash
+                    />
+                    <MetaLine
+                      label="Total expense"
+                      value={economics.totalExpense}
+                      showEmptyDash
+                    />
+                    <MetaLine
+                      label="Covered by"
+                      value={economics.coveredBy}
+                    />
+                    <MetaLine
                       label="Category"
                       value={humanizeEnum(expense.category)}
                     />
-                    <MetaLine label="Amount" value={amountFrequency || null} />
-                    <MetaLine
-                      label="Covered by"
-                      value={expense.coveredByStep?.title ?? null}
-                    />
                     <MetaLine label="Purpose" value={expense.purpose} />
-                    <MetaLine label="Timeline" value={timeline} />
                   </div>
                   {canManage ? (
                     <div className="mt-2 flex flex-wrap gap-3">
@@ -1280,6 +1545,30 @@ function StrategyPlanDetailView({
         )}
       </SectionCard>
         </div>
+      ) : (
+        <StrategyProjectionJourneyView
+          milestones={plan.projectionMilestones ?? []}
+          canManage={canManage}
+          deletingMilestoneId={deletingProjectionMilestoneId}
+          reorderingMilestoneId={reorderingProjectionMilestoneId}
+          onAddMilestone={
+            canManage ? openCreateProjectionMilestone : undefined
+          }
+          onEditMilestone={
+            canManage ? openEditProjectionMilestone : undefined
+          }
+          onDeleteMilestone={
+            canManage
+              ? (milestone) => {
+                  setDeleteConfirmError(null);
+                  setPendingDeleteProjectionMilestone(milestone);
+                }
+              : undefined
+          }
+          onReorderMilestone={
+            canManage ? reorderProjectionMilestone : undefined
+          }
+        />
       )}
 
       {planDetailView === 'board' ? (
@@ -1293,7 +1582,7 @@ function StrategyPlanDetailView({
                 Outcome summary
               </p>
               <p className="text-[11px] text-gray-600">
-                Monthly coverage (MONTHLY items only)
+                Monthly coverage (MONTHLY + YEARLY÷12)
               </p>
             </div>
             <span
@@ -1331,19 +1620,20 @@ function StrategyPlanDetailView({
             </div>
           </div>
         </div>
-      ) : (
+      ) : planDetailView === 'list' ? (
         <SectionCard
           title="Outcome Summary"
           description="A simple monthly view of whether planned income may cover expenses."
         >
           <SectionHelper>
-            Only MONTHLY income and MONTHLY expenses are included. This is a
-            planning aid, not a financial projection.
+            Only MONTHLY amounts and YEARLY amounts (÷12) are included. ONE_TIME
+            and CUSTOM stay out of this recurring view. This is a planning aid,
+            not a financial projection.
           </SectionHelper>
           <div className={`rounded-lg border px-3 py-3 ${coverageStyles.panel}`}>
             <div className="flex flex-wrap items-center justify-between gap-2">
               <p className="text-xs font-medium text-gray-600">
-                Monthly coverage (MONTHLY items only)
+                Monthly coverage (MONTHLY + YEARLY÷12)
               </p>
               <span
                 className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold ${coverageStyles.badge}`}
@@ -1386,7 +1676,7 @@ function StrategyPlanDetailView({
             </p>
           </div>
         </SectionCard>
-      )}
+      ) : null}
 
       {canManage && isStepModalOpen ? (
         <StrategyStepEditModal
@@ -1444,6 +1734,43 @@ function StrategyPlanDetailView({
         />
       ) : null}
 
+      {canManage && isProjectionMilestoneModalOpen ? (
+        <StrategyProjectionMilestoneEditModal
+          clientId={clientId}
+          planId={plan.id}
+          steps={sortedSteps.map((step) => ({
+            id: step.id,
+            title: step.title,
+            investmentAmount: step.investmentAmount ?? null,
+            plannedAmount: step.plannedAmount,
+            incomeAmount: step.incomeAmount ?? null,
+            expectedIncomeAmount: step.expectedIncomeAmount,
+            incomeFrequency: step.incomeFrequency ?? null,
+            expectedIncomeFrequency: step.expectedIncomeFrequency,
+            startYear: step.startYear ?? null,
+            endYear: step.endYear ?? null,
+            incomeStartYear: step.incomeStartYear ?? null,
+            incomeEndYear: step.incomeEndYear ?? null,
+            capitalReturned: step.capitalReturned ?? null,
+            capitalReturnYear: step.capitalReturnYear ?? null,
+          }))}
+          expenses={plan.expenses.map((expense) => ({
+            id: expense.id,
+            title: expense.title,
+            amount: expense.amount,
+            frequency: expense.frequency,
+            startYear: expense.startYear ?? null,
+            endYear: expense.endYear ?? null,
+          }))}
+          milestone={editingProjectionMilestone}
+          isOpen={isProjectionMilestoneModalOpen}
+          onClose={closeProjectionMilestoneModal}
+          onSaved={() => {
+            onRefresh?.();
+          }}
+        />
+      ) : null}
+
       {canManage && pendingDeleteStep ? (
         <ConfirmActionModal
           isOpen
@@ -1470,9 +1797,8 @@ function StrategyPlanDetailView({
           isSubmitting={deletingStepId === pendingDeleteStep.id}
           error={deleteConfirmError}
           onClose={() => {
-            if (deletingStepId) {
-              return;
-            }
+            abortPendingDeleteRequest();
+            setDeletingStepId(null);
             setPendingDeleteStep(null);
             setDeleteConfirmError(null);
           }}
@@ -1507,9 +1833,8 @@ function StrategyPlanDetailView({
           isSubmitting={deletingConnectionId === pendingDeleteConnection.id}
           error={deleteConfirmError}
           onClose={() => {
-            if (deletingConnectionId) {
-              return;
-            }
+            abortPendingDeleteRequest();
+            setDeletingConnectionId(null);
             setPendingDeleteConnection(null);
             setDeleteConfirmError(null);
           }}
@@ -1544,14 +1869,45 @@ function StrategyPlanDetailView({
           isSubmitting={deletingExpenseId === pendingDeleteExpense.id}
           error={deleteConfirmError}
           onClose={() => {
-            if (deletingExpenseId) {
-              return;
-            }
+            abortPendingDeleteRequest();
+            setDeletingExpenseId(null);
             setPendingDeleteExpense(null);
             setDeleteConfirmError(null);
           }}
           onConfirm={() => {
             void confirmDeleteExpense();
+          }}
+        />
+      ) : null}
+
+      {canManage && pendingDeleteProjectionMilestone ? (
+        <ConfirmActionModal
+          isOpen
+          title="Delete projection milestone?"
+          description={
+            <>
+              Delete{' '}
+              <span className="font-medium text-gray-900">
+                {pendingDeleteProjectionMilestone.title}
+              </span>{' '}
+              ({pendingDeleteProjectionMilestone.year})? This cannot be undone.
+            </>
+          }
+          confirmLabel="Delete milestone"
+          tone="danger"
+          isSubmitting={
+            deletingProjectionMilestoneId ===
+            pendingDeleteProjectionMilestone.id
+          }
+          error={deleteConfirmError}
+          onClose={() => {
+            abortPendingDeleteRequest();
+            setDeletingProjectionMilestoneId(null);
+            setPendingDeleteProjectionMilestone(null);
+            setDeleteConfirmError(null);
+          }}
+          onConfirm={() => {
+            void confirmDeleteProjectionMilestone();
           }}
         />
       ) : null}

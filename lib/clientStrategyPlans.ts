@@ -8,7 +8,9 @@ import {
   type ClientStrategyConnection,
   type ClientStrategyExpense,
   type ClientStrategyPlan,
+  type ClientStrategyProjectionMilestone,
   type ClientStrategyStep,
+  type StrategyProjectionMilestoneType,
 } from '@prisma/client';
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
@@ -52,6 +54,15 @@ export const strategyStepDetailSelect = {
   expectedIncomeAmount: true,
   expectedIncomeFrequency: true,
   timelineLabel: true,
+  startYear: true,
+  endYear: true,
+  investmentAmount: true,
+  incomeAmount: true,
+  incomeFrequency: true,
+  incomeStartYear: true,
+  incomeEndYear: true,
+  capitalReturned: true,
+  capitalReturnYear: true,
   sortOrder: true,
   createdAt: true,
   updatedAt: true,
@@ -80,6 +91,8 @@ export const strategyExpenseDetailSelect = {
   frequency: true,
   startTimelineLabel: true,
   endTimelineLabel: true,
+  startYear: true,
+  endYear: true,
   priority: true,
   purpose: true,
   coveredByStepId: true,
@@ -88,6 +101,68 @@ export const strategyExpenseDetailSelect = {
   createdAt: true,
   updatedAt: true,
   coveredByStep: { select: strategyCoveredByStepSelect },
+} as const;
+
+export const strategyProjectionMilestoneDetailSelect = {
+  id: true,
+  strategyPlanId: true,
+  stepId: true,
+  year: true,
+  title: true,
+  type: true,
+  monthlyIncome: true,
+  monthsOfIncome: true,
+  annualIncome: true,
+  capitalInvested: true,
+  capitalRemaining: true,
+  incomeThisPeriod: true,
+  cumulativeIncome: true,
+  totalAssetPosition: true,
+  expensesThisYear: true,
+  cumulativeExpenses: true,
+  netCashflowThisYear: true,
+  capitalReturnedThisYear: true,
+  capitalReturnedToDate: true,
+  notes: true,
+  sortOrder: true,
+  createdAt: true,
+  updatedAt: true,
+  step: { select: strategyCoveredByStepSelect },
+  stepContributions: {
+    orderBy: { createdAt: 'asc' as const },
+    select: {
+      id: true,
+      milestoneId: true,
+      stepId: true,
+      contributionAmount: true,
+      notes: true,
+      createdAt: true,
+      updatedAt: true,
+      step: { select: strategyCoveredByStepSelect },
+    },
+  },
+  expenseContributions: {
+    orderBy: { createdAt: 'asc' as const },
+    select: {
+      id: true,
+      milestoneId: true,
+      expenseId: true,
+      contributionAmount: true,
+      notes: true,
+      createdAt: true,
+      updatedAt: true,
+      expense: {
+        select: {
+          id: true,
+          title: true,
+          category: true,
+          amount: true,
+          frequency: true,
+          sortOrder: true,
+        },
+      },
+    },
+  },
 } as const;
 
 export const strategyPlanDetailInclude = {
@@ -102,6 +177,14 @@ export const strategyPlanDetailInclude = {
   expenses: {
     orderBy: [{ sortOrder: 'asc' as const }, { createdAt: 'asc' as const }],
     select: strategyExpenseDetailSelect,
+  },
+  projectionMilestones: {
+    orderBy: [
+      { sortOrder: 'asc' as const },
+      { year: 'asc' as const },
+      { createdAt: 'asc' as const },
+    ],
+    select: strategyProjectionMilestoneDetailSelect,
   },
   owner: { select: { id: true, name: true, email: true } },
   createdBy: { select: { id: true, name: true, email: true } },
@@ -126,6 +209,7 @@ export const strategyPlanListSelect = {
       steps: true,
       connections: true,
       expenses: true,
+      projectionMilestones: true,
     },
   },
 } as const;
@@ -191,6 +275,15 @@ export function formatStrategyStep(
     expectedIncomeAmount: toNumberOrNull(step.expectedIncomeAmount),
     expectedIncomeFrequency: step.expectedIncomeFrequency,
     timelineLabel: step.timelineLabel,
+    startYear: step.startYear,
+    endYear: step.endYear,
+    investmentAmount: toNumberOrNull(step.investmentAmount),
+    incomeAmount: toNumberOrNull(step.incomeAmount),
+    incomeFrequency: step.incomeFrequency,
+    incomeStartYear: step.incomeStartYear,
+    incomeEndYear: step.incomeEndYear,
+    capitalReturned: toNumberOrNull(step.capitalReturned),
+    capitalReturnYear: step.capitalReturnYear,
     sortOrder: step.sortOrder,
     createdAt: step.createdAt.toISOString(),
     updatedAt: step.updatedAt.toISOString(),
@@ -227,6 +320,8 @@ export function formatStrategyExpense(
     frequency: expense.frequency,
     startTimelineLabel: expense.startTimelineLabel,
     endTimelineLabel: expense.endTimelineLabel,
+    startYear: expense.startYear,
+    endYear: expense.endYear,
     priority: expense.priority,
     purpose: expense.purpose,
     coveredByStepId: expense.coveredByStepId,
@@ -245,11 +340,129 @@ export function formatStrategyExpense(
   };
 }
 
+export function formatStrategyProjectionMilestone(
+  milestone: ClientStrategyProjectionMilestone & {
+    step?: CoveredByStepRecord | null;
+    stepContributions?: Array<{
+      id: string;
+      milestoneId: string;
+      stepId: string;
+      contributionAmount: { toString(): string } | number | null;
+      notes: string | null;
+      createdAt: Date;
+      updatedAt: Date;
+      step?: CoveredByStepRecord | null;
+    }>;
+    expenseContributions?: Array<{
+      id: string;
+      milestoneId: string;
+      expenseId: string;
+      contributionAmount: { toString(): string } | number | null;
+      notes: string | null;
+      createdAt: Date;
+      updatedAt: Date;
+      expense?: {
+        id: string;
+        title: string;
+        category: string;
+        amount: { toString(): string } | number | null;
+        frequency: string;
+        sortOrder: number;
+      } | null;
+    }>;
+  }
+) {
+  const selectedSteps = (milestone.stepContributions ?? []).map(
+    (contribution) => ({
+      id: contribution.id,
+      milestoneId: contribution.milestoneId,
+      stepId: contribution.stepId,
+      contributionAmount: toNumberOrNull(contribution.contributionAmount),
+      notes: contribution.notes,
+      createdAt: contribution.createdAt.toISOString(),
+      updatedAt: contribution.updatedAt.toISOString(),
+      step: contribution.step
+        ? {
+            id: contribution.step.id,
+            title: contribution.step.title,
+            stepType: contribution.step.stepType,
+            sortOrder: contribution.step.sortOrder,
+          }
+        : null,
+    })
+  );
+
+  const selectedExpenses = (milestone.expenseContributions ?? []).map(
+    (contribution) => ({
+      id: contribution.id,
+      milestoneId: contribution.milestoneId,
+      expenseId: contribution.expenseId,
+      contributionAmount: toNumberOrNull(contribution.contributionAmount),
+      notes: contribution.notes,
+      createdAt: contribution.createdAt.toISOString(),
+      updatedAt: contribution.updatedAt.toISOString(),
+      expense: contribution.expense
+        ? {
+            id: contribution.expense.id,
+            title: contribution.expense.title,
+            category: contribution.expense.category,
+            amount: toNumberOrNull(contribution.expense.amount),
+            frequency: contribution.expense.frequency,
+            sortOrder: contribution.expense.sortOrder,
+          }
+        : null,
+    })
+  );
+
+  return {
+    id: milestone.id,
+    strategyPlanId: milestone.strategyPlanId,
+    stepId: milestone.stepId,
+    year: milestone.year,
+    title: milestone.title,
+    type: milestone.type,
+    monthlyIncome: toNumberOrNull(milestone.monthlyIncome),
+    monthsOfIncome: milestone.monthsOfIncome,
+    annualIncome: toNumberOrNull(milestone.annualIncome),
+    capitalInvested: toNumberOrNull(milestone.capitalInvested),
+    capitalRemaining: toNumberOrNull(milestone.capitalRemaining),
+    incomeThisPeriod: toNumberOrNull(milestone.incomeThisPeriod),
+    cumulativeIncome: toNumberOrNull(milestone.cumulativeIncome),
+    totalAssetPosition: toNumberOrNull(milestone.totalAssetPosition),
+    expensesThisYear: toNumberOrNull(milestone.expensesThisYear),
+    cumulativeExpenses: toNumberOrNull(milestone.cumulativeExpenses),
+    netCashflowThisYear: toNumberOrNull(milestone.netCashflowThisYear),
+    capitalReturnedThisYear: toNumberOrNull(milestone.capitalReturnedThisYear),
+    capitalReturnedToDate: toNumberOrNull(milestone.capitalReturnedToDate),
+    notes: milestone.notes,
+    sortOrder: milestone.sortOrder,
+    createdAt: milestone.createdAt.toISOString(),
+    updatedAt: milestone.updatedAt.toISOString(),
+    step: milestone.step
+      ? {
+          id: milestone.step.id,
+          title: milestone.step.title,
+          stepType: milestone.step.stepType,
+          sortOrder: milestone.step.sortOrder,
+        }
+      : null,
+    selectedSteps,
+    selectedExpenses,
+    selectedStepIds: selectedSteps.map((entry) => entry.stepId),
+    selectedExpenseIds: selectedExpenses.map((entry) => entry.expenseId),
+  };
+}
+
 export function formatStrategyPlanSummary(
   plan: ClientStrategyPlan & {
     owner?: UserSummary | null;
     createdBy?: UserSummary;
-    _count?: { steps: number; connections: number; expenses: number };
+    _count?: {
+      steps: number;
+      connections: number;
+      expenses: number;
+      projectionMilestones?: number;
+    };
   }
 ) {
   return {
@@ -271,6 +484,7 @@ export function formatStrategyPlanSummary(
           steps: plan._count.steps,
           connections: plan._count.connections,
           expenses: plan._count.expenses,
+          projectionMilestones: plan._count.projectionMilestones ?? 0,
         }
       : undefined,
   };
@@ -284,6 +498,38 @@ export type StrategyPlanDetailRecord = ClientStrategyPlan & {
   expenses: Array<
     ClientStrategyExpense & { coveredByStep?: CoveredByStepRecord | null }
   >;
+  projectionMilestones: Array<
+    ClientStrategyProjectionMilestone & {
+      step?: CoveredByStepRecord | null;
+      stepContributions?: Array<{
+        id: string;
+        milestoneId: string;
+        stepId: string;
+        contributionAmount: { toString(): string } | number | null;
+        notes: string | null;
+        createdAt: Date;
+        updatedAt: Date;
+        step?: CoveredByStepRecord | null;
+      }>;
+      expenseContributions?: Array<{
+        id: string;
+        milestoneId: string;
+        expenseId: string;
+        contributionAmount: { toString(): string } | number | null;
+        notes: string | null;
+        createdAt: Date;
+        updatedAt: Date;
+        expense?: {
+          id: string;
+          title: string;
+          category: string;
+          amount: { toString(): string } | number | null;
+          frequency: string;
+          sortOrder: number;
+        } | null;
+      }>;
+    }
+  >;
 };
 
 export function formatStrategyPlanDetail(plan: StrategyPlanDetailRecord) {
@@ -292,6 +538,9 @@ export function formatStrategyPlanDetail(plan: StrategyPlanDetailRecord) {
     steps: plan.steps.map(formatStrategyStep),
     connections: plan.connections.map(formatStrategyConnection),
     expenses: plan.expenses.map(formatStrategyExpense),
+    projectionMilestones: plan.projectionMilestones.map(
+      formatStrategyProjectionMilestone
+    ),
   };
 }
 
@@ -401,6 +650,137 @@ export async function assertCoveredByStepBelongsToPlan(
   }
 
   return null;
+}
+
+export async function assertProjectionStepBelongsToPlan(
+  strategyPlanId: string,
+  stepId: string | null | undefined
+) {
+  if (stepId === undefined || stepId === null) {
+    return null;
+  }
+
+  const step = await prisma.clientStrategyStep.findFirst({
+    where: { id: stepId, strategyPlanId },
+    select: { id: true },
+  });
+
+  if (!step) {
+    return NextResponse.json(
+      {
+        error: 'stepId must reference a step on this strategy plan',
+      },
+      { status: 400 }
+    );
+  }
+
+  return null;
+}
+
+export async function assertMilestoneSourceStepsBelongToPlan(
+  strategyPlanId: string,
+  stepIds: string[] | undefined
+) {
+  if (stepIds === undefined) {
+    return null;
+  }
+
+  if (stepIds.length === 0) {
+    return null;
+  }
+
+  const steps = await prisma.clientStrategyStep.findMany({
+    where: { strategyPlanId, id: { in: stepIds } },
+    select: { id: true },
+  });
+
+  if (steps.length !== stepIds.length) {
+    const found = new Set(steps.map((step) => step.id));
+    const missing = stepIds.filter((id) => !found.has(id));
+    return NextResponse.json(
+      {
+        error: `selectedStepIds must reference steps on this strategy plan (invalid: ${missing.join(', ')})`,
+      },
+      { status: 400 }
+    );
+  }
+
+  return null;
+}
+
+export async function assertMilestoneSourceExpensesBelongToPlan(
+  strategyPlanId: string,
+  expenseIds: string[] | undefined
+) {
+  if (expenseIds === undefined) {
+    return null;
+  }
+
+  if (expenseIds.length === 0) {
+    return null;
+  }
+
+  const expenses = await prisma.clientStrategyExpense.findMany({
+    where: { strategyPlanId, id: { in: expenseIds } },
+    select: { id: true },
+  });
+
+  if (expenses.length !== expenseIds.length) {
+    const found = new Set(expenses.map((expense) => expense.id));
+    const missing = expenseIds.filter((id) => !found.has(id));
+    return NextResponse.json(
+      {
+        error: `selectedExpenseIds must reference expenses on this strategy plan (invalid: ${missing.join(', ')})`,
+      },
+      { status: 400 }
+    );
+  }
+
+  return null;
+}
+
+/**
+ * Replace milestone contribution links. Pass undefined to leave unchanged.
+ * Empty array clears all links of that kind.
+ */
+export async function replaceMilestoneSourceLinks(
+  milestoneId: string,
+  selectedStepIds: string[] | undefined,
+  selectedExpenseIds: string[] | undefined
+) {
+  if (selectedStepIds === undefined && selectedExpenseIds === undefined) {
+    return;
+  }
+
+  await prisma.$transaction(async (tx) => {
+    if (selectedStepIds !== undefined) {
+      await tx.clientStrategyProjectionMilestoneStep.deleteMany({
+        where: { milestoneId },
+      });
+      if (selectedStepIds.length > 0) {
+        await tx.clientStrategyProjectionMilestoneStep.createMany({
+          data: selectedStepIds.map((stepId) => ({
+            milestoneId,
+            stepId,
+          })),
+        });
+      }
+    }
+
+    if (selectedExpenseIds !== undefined) {
+      await tx.clientStrategyProjectionMilestoneExpense.deleteMany({
+        where: { milestoneId },
+      });
+      if (selectedExpenseIds.length > 0) {
+        await tx.clientStrategyProjectionMilestoneExpense.createMany({
+          data: selectedExpenseIds.map((expenseId) => ({
+            milestoneId,
+            expenseId,
+          })),
+        });
+      }
+    }
+  });
 }
 
 export function parseOrderedIds(body: unknown): string[] | { error: string } {
@@ -515,12 +895,59 @@ export async function reorderStrategyExpenses(
   return { expenses };
 }
 
+export async function reorderStrategyProjectionMilestones(
+  strategyPlanId: string,
+  orderedIds: string[]
+) {
+  const existing = await prisma.clientStrategyProjectionMilestone.findMany({
+    where: { strategyPlanId },
+    select: { id: true },
+  });
+  const existingIds = new Set(existing.map((milestone) => milestone.id));
+
+  if (
+    orderedIds.length !== existingIds.size ||
+    orderedIds.some((id) => !existingIds.has(id))
+  ) {
+    return {
+      error: NextResponse.json(
+        {
+          error:
+            'orderedIds must include every projection milestone id for this strategy plan exactly once',
+        },
+        { status: 400 }
+      ),
+    };
+  }
+
+  await prisma.$transaction(
+    orderedIds.map((id, index) =>
+      prisma.clientStrategyProjectionMilestone.update({
+        where: { id },
+        data: { sortOrder: index },
+      })
+    )
+  );
+
+  const projectionMilestones =
+    await prisma.clientStrategyProjectionMilestone.findMany({
+      where: { strategyPlanId },
+      orderBy: [{ sortOrder: 'asc' }, { year: 'asc' }, { createdAt: 'asc' }],
+      select: strategyProjectionMilestoneDetailSelect,
+    });
+
+  return { projectionMilestones };
+}
+
 export const DEFAULT_STRATEGY_EXPENSE_CATEGORY = StrategyExpenseCategory.OTHER;
 export const DEFAULT_STRATEGY_EXPENSE_FREQUENCY =
   StrategyExpenseFrequency.MONTHLY;
 export const DEFAULT_STRATEGY_EXPENSE_PRIORITY = StrategyExpensePriority.MEDIUM;
 export const DEFAULT_STRATEGY_STEP_TYPE = StrategyStepType.MANUAL;
 export const DEFAULT_STRATEGY_PLAN_STATUS = StrategyPlanStatus.DRAFT;
+/** Literal default — avoids crashing list routes if Prisma enum export is briefly stale in dev HMR. */
+export const DEFAULT_STRATEGY_PROJECTION_MILESTONE_TYPE =
+  'CUSTOM' as StrategyProjectionMilestoneType;
 
 export async function nextStepSortOrder(strategyPlanId: string) {
   const last = await prisma.clientStrategyStep.findFirst({
@@ -533,6 +960,15 @@ export async function nextStepSortOrder(strategyPlanId: string) {
 
 export async function nextExpenseSortOrder(strategyPlanId: string) {
   const last = await prisma.clientStrategyExpense.findFirst({
+    where: { strategyPlanId },
+    orderBy: { sortOrder: 'desc' },
+    select: { sortOrder: true },
+  });
+  return (last?.sortOrder ?? -1) + 1;
+}
+
+export async function nextProjectionMilestoneSortOrder(strategyPlanId: string) {
+  const last = await prisma.clientStrategyProjectionMilestone.findFirst({
     where: { strategyPlanId },
     orderBy: { sortOrder: 'desc' },
     select: { sortOrder: true },

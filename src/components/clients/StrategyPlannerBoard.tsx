@@ -4,6 +4,15 @@ import { memo, useMemo, type ReactNode } from 'react';
 import { ArrowDown, ArrowRight, CornerDownRight } from 'lucide-react';
 import { useDisplayDensity } from '@/components/ui/DisplayDensityProvider';
 import { getTightStackSpacingClass } from '@/components/ui/displayDensity';
+import {
+  buildStepProjectionBadges,
+  type StepProjectionBadge,
+  type StrategyProjectionMilestone,
+} from '@/lib/clientStrategyProjectionHelpers';
+import {
+  getExpenseEconomicsLabels,
+  getStepEconomicsLabels,
+} from '@/components/clients/strategyTimelineEconomicsDisplay';
 
 /** Matches StrategyPlanDetailView / formatStrategyPlanDetail step payload. */
 export type StrategyBoardStep = {
@@ -18,12 +27,23 @@ export type StrategyBoardStep = {
   expectedIncomeAmount: number | null;
   expectedIncomeFrequency: string | null;
   timelineLabel: string | null;
+  startYear?: number | null;
+  endYear?: number | null;
+  investmentAmount?: number | null;
+  incomeAmount?: number | null;
+  incomeFrequency?: string | null;
+  incomeStartYear?: number | null;
+  incomeEndYear?: number | null;
+  capitalReturned?: number | null;
+  capitalReturnYear?: number | null;
   sortOrder: number;
   createdAt?: string;
   linkedDeal: {
     id: string;
     name: string;
-    dealValue?: number;
+    dealValue?: number | null;
+    status?: string | null;
+    dealType?: string | null;
   } | null;
 };
 
@@ -46,6 +66,8 @@ export type StrategyBoardExpense = {
   frequency: string;
   startTimelineLabel: string | null;
   endTimelineLabel: string | null;
+  startYear?: number | null;
+  endYear?: number | null;
   priority: string;
   purpose: string | null;
   coveredByStepId?: string | null;
@@ -65,6 +87,8 @@ export type StrategyBoardPlan = {
   steps: StrategyBoardStep[];
   connections: StrategyBoardConnection[];
   expenses: StrategyBoardExpense[];
+  /** Optional; step cards show compact badges when milestones link via stepId. */
+  projectionMilestones?: StrategyProjectionMilestone[];
 };
 
 export type StrategyPlannerBoardProps = {
@@ -154,13 +178,17 @@ function MetaLine({
   label,
   value,
   clamp,
+  showEmptyDash = false,
 }: {
   label: string;
   value: string | null;
   clamp?: boolean;
   dense?: boolean;
+  /** When true, render "—" instead of hiding missing values. */
+  showEmptyDash?: boolean;
 }) {
-  if (!value?.trim()) {
+  const trimmed = value?.trim() ?? '';
+  if (!trimmed && !showEmptyDash) {
     return null;
   }
 
@@ -171,7 +199,7 @@ function MetaLine({
       }`}
     >
       <span className="font-medium text-gray-700">{label}: </span>
-      {value.trim()}
+      {trimmed || '—'}
     </p>
   );
 }
@@ -208,6 +236,96 @@ function TypeKindBadge({
       <span className="sr-only">{kindMeta.name}: </span>
       <span className="truncate">{label}</span>
     </span>
+  );
+}
+
+function LegendSwatch({
+  letter,
+  accentClass,
+  label,
+}: {
+  letter: string;
+  accentClass: string;
+  label: string;
+}) {
+  return (
+    <li className="inline-flex min-w-0 items-center gap-1.5 text-[11px] text-gray-700">
+      <span
+        className={`inline-flex h-5 w-5 shrink-0 items-center justify-center rounded border border-l-[3px] bg-white text-[10px] font-semibold text-gray-600 ${accentClass}`}
+        aria-hidden="true"
+      >
+        {letter}
+      </span>
+      <span>{label}</span>
+    </li>
+  );
+}
+
+function BoardLegendItems() {
+  return (
+    <ul className="flex list-none flex-wrap items-center gap-x-3 gap-y-1.5 p-0">
+      <LegendSwatch
+        letter="S"
+        accentClass="border-blue-200 border-l-blue-600"
+        label="Step"
+      />
+      <LegendSwatch
+        letter="C"
+        accentClass="border-violet-200 border-l-violet-600 bg-violet-50/80"
+        label="Connection"
+      />
+      <LegendSwatch
+        letter="X"
+        accentClass="border-violet-200 border-l-violet-700"
+        label="Cross link"
+      />
+      <LegendSwatch
+        letter="E"
+        accentClass="border-amber-200 border-l-amber-600 bg-amber-50/80"
+        label="Step-linked expense"
+      />
+      <LegendSwatch
+        letter="P"
+        accentClass="border-amber-200 border-l-amber-500 border-dashed"
+        label="Plan-level expense"
+      />
+    </ul>
+  );
+}
+
+/** Compact key for board chrome; collapsed on narrow screens. */
+function BoardLegend() {
+  return (
+    <div className="min-w-0">
+      <details className="rounded-md border border-gray-200 bg-white/90 sm:hidden">
+        <summary
+          className={focusableControlClass(
+            'cursor-pointer list-none px-2.5 py-1.5 text-[11px] font-medium text-gray-700 marker:content-none [&::-webkit-details-marker]:hidden'
+          )}
+        >
+          <span className="inline-flex items-center gap-1">
+            Board legend
+            <span className="text-gray-400" aria-hidden="true">
+              ▾
+            </span>
+          </span>
+        </summary>
+        <div className="border-t border-gray-100 px-2.5 py-2">
+          <BoardLegendItems />
+        </div>
+      </details>
+
+      <div
+        className="hidden min-w-0 sm:block"
+        role="group"
+        aria-label="Board legend"
+      >
+        <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-gray-500">
+          Legend
+        </p>
+        <BoardLegendItems />
+      </div>
+    </div>
   );
 }
 
@@ -425,6 +543,7 @@ function ExpenseWidget({
   canManage,
   compact,
   dense,
+  showCoveredBy = true,
   deleting,
   onEdit,
   onDelete,
@@ -433,21 +552,13 @@ function ExpenseWidget({
   canManage: boolean;
   compact?: boolean;
   dense?: boolean;
+  /** Hide when nested under the covering step to avoid repeating the parent title. */
+  showCoveredBy?: boolean;
   deleting?: boolean;
   onEdit?: () => void;
   onDelete?: () => void;
 }) {
-  const amountFrequency = [formatMoney(expense.amount), humanizeEnum(expense.frequency)]
-    .filter(Boolean)
-    .join(' · ');
-
-  const timeline =
-    expense.startTimelineLabel || expense.endTimelineLabel
-      ? [expense.startTimelineLabel, expense.endTimelineLabel]
-          .filter(Boolean)
-          .join(' → ')
-      : null;
-
+  const economics = getExpenseEconomicsLabels(expense);
   const categoryLabel =
     humanizeEnum(expense.category) ?? expense.category;
   const priorityLabel =
@@ -467,9 +578,33 @@ function ExpenseWidget({
         <TypeKindBadge kind="expense" label={priorityLabel} />
       </div>
       <div className="mt-1 space-y-0.5">
+        <MetaLine
+          label="Amount"
+          value={economics.amount}
+          dense={dense}
+          showEmptyDash
+        />
+        <MetaLine
+          label="Timeline"
+          value={economics.timeline}
+          dense={dense}
+          showEmptyDash
+        />
+        <MetaLine
+          label="Total expense"
+          value={economics.totalExpense}
+          dense={dense}
+          showEmptyDash
+        />
+        {showCoveredBy ? (
+          <MetaLine
+            label="Covered by"
+            value={economics.coveredBy}
+            dense={dense}
+          />
+        ) : null}
         <MetaLine label="Category" value={categoryLabel} dense={dense} />
-        <MetaLine label="Amount" value={amountFrequency || null} dense={dense} />
-        <MetaLine label="Timeline" value={timeline} dense={dense} />
+        <MetaLine label="Purpose" value={expense.purpose} clamp dense={dense} />
       </div>
       <ManageActions
         canManage={canManage}
@@ -751,6 +886,7 @@ function StepNode({
   index,
   stepCount,
   expenses,
+  projectionBadges = [],
   canManage,
   dense,
   deletingStepId,
@@ -767,6 +903,7 @@ function StepNode({
   index: number;
   stepCount: number;
   expenses: StrategyBoardExpense[];
+  projectionBadges?: StepProjectionBadge[];
   canManage: boolean;
   dense?: boolean;
   deletingStepId?: string | null;
@@ -782,24 +919,18 @@ function StepNode({
     direction: 'earlier' | 'later'
   ) => void;
 }) {
-  const plannedAmountLabel =
-    step.amountDescription?.trim() || formatMoney(step.plannedAmount);
-
-  const expectedIncomeLabel =
-    step.expectedIncomeAmount !== null && step.expectedIncomeAmount !== undefined
-      ? [
-          formatMoney(step.expectedIncomeAmount),
-          humanizeEnum(step.expectedIncomeFrequency),
-        ]
-          .filter(Boolean)
-          .join(' · ')
-      : null;
+  const economics = getStepEconomicsLabels(step);
 
   const hasLinkedDeal = Boolean(step.linkedDealId || step.linkedDeal);
+  const linkedDealId = step.linkedDeal?.id ?? step.linkedDealId ?? null;
   const linkedDealName =
     step.linkedDeal?.name?.trim() ||
-    (step.linkedDealId ? 'Linked deal' : null);
+    (linkedDealId ? 'Linked deal' : null);
   const linkedDealValue = formatMoney(step.linkedDeal?.dealValue);
+  const linkedDealStatus = humanizeEnum(step.linkedDeal?.status);
+  const linkedDealMeta = [linkedDealValue, linkedDealStatus]
+    .filter(Boolean)
+    .join(' · ');
   const canReorder =
     canManage && Boolean(onReorderStep) && stepCount > 1;
 
@@ -821,26 +952,93 @@ function StepNode({
       </div>
 
       {hasLinkedDeal ? (
-        <div className="mt-1.5 max-w-full min-w-0">
-          <span
-            className="inline-flex max-w-full min-w-0 items-center truncate rounded-full border border-emerald-300 bg-white px-1.5 py-0.5 text-[11px] font-medium text-gray-800"
-            title={[linkedDealName, linkedDealValue].filter(Boolean).join(' · ')}
-          >
-            <span className="font-semibold text-gray-500" aria-hidden="true">
+        <div className="mt-1.5 max-w-full min-w-0 rounded-md border border-emerald-200 bg-emerald-50/70 px-2 py-1.5">
+          <div className="flex items-start gap-1.5">
+            <span
+              className="mt-0.5 shrink-0 text-[10px] font-semibold text-emerald-800"
+              aria-hidden="true"
+            >
               D
             </span>
-            <span className="sr-only">Linked deal: </span>
-            <span className="ml-1 truncate">
-              {linkedDealName ?? 'Linked deal'}
-              {linkedDealValue ? ` · ${linkedDealValue}` : ''}
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-[11px] font-medium text-gray-900">
+                <span className="sr-only">Linked deal: </span>
+                {linkedDealName ?? 'Linked deal'}
+              </p>
+              {linkedDealMeta ? (
+                <p className="mt-0.5 truncate text-[10px] text-gray-600">
+                  {linkedDealMeta}
+                </p>
+              ) : null}
+              {linkedDealId ? (
+                <a
+                  href={`#deal-${linkedDealId}`}
+                  className={focusableControlClass(
+                    'mt-1 inline-block text-[11px] font-medium text-emerald-800 underline-offset-2 hover:text-emerald-950 hover:underline'
+                  )}
+                >
+                  View deal
+                </a>
+              ) : null}
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {projectionBadges.length > 0 ? (
+        <div
+          className="mt-1.5 flex flex-wrap gap-1"
+          aria-label="Projection highlights"
+        >
+          {projectionBadges.map((badge) => (
+            <span
+              key={badge.kind}
+              className="inline-flex max-w-full truncate rounded-full border border-indigo-200 bg-indigo-50 px-1.5 py-0.5 text-[10px] font-medium text-indigo-900"
+              title={badge.label}
+            >
+              {badge.label}
             </span>
-          </span>
+          ))}
         </div>
       ) : null}
 
       <div className="mt-1.5 space-y-0.5">
-        <MetaLine label="Amount" value={plannedAmountLabel} dense={dense} />
-        <MetaLine label="Income" value={expectedIncomeLabel} dense={dense} />
+        <MetaLine
+          label="Invest"
+          value={economics.invest}
+          dense={dense}
+          showEmptyDash
+        />
+        <MetaLine
+          label="Income"
+          value={economics.income}
+          dense={dense}
+          showEmptyDash
+        />
+        <MetaLine
+          label="Timeline"
+          value={economics.timeline}
+          dense={dense}
+          showEmptyDash
+        />
+        <MetaLine
+          label="Total income"
+          value={economics.totalIncome}
+          dense={dense}
+          showEmptyDash
+        />
+        <MetaLine
+          label="Capital back"
+          value={economics.capitalBack}
+          dense={dense}
+          showEmptyDash
+        />
+        <MetaLine
+          label="Illustrative position"
+          value={economics.illustrativePosition}
+          dense={dense}
+          showEmptyDash
+        />
         <MetaLine label="Purpose" value={step.purpose} clamp dense={dense} />
         <MetaLine
           label="Achievement"
@@ -848,7 +1046,6 @@ function StepNode({
           clamp
           dense={dense}
         />
-        <MetaLine label="Timeline" value={step.timelineLabel} dense={dense} />
       </div>
 
       {canReorder && onReorderStep ? (
@@ -898,6 +1095,7 @@ function StepNode({
                 canManage={canManage}
                 compact
                 dense={dense}
+                showCoveredBy={false}
                 deleting={deletingExpenseId === expense.id}
                 onEdit={onEditExpense ? () => onEditExpense(expense) : undefined}
                 onDelete={
@@ -1014,6 +1212,22 @@ function StrategyPlannerBoard({
 
   const layout = useMemo(() => buildBoardLayout(plan), [plan]);
 
+  const projectionBadgesByStepId = useMemo(() => {
+    const milestones = plan.projectionMilestones ?? [];
+    const map = new Map<string, StepProjectionBadge[]>();
+    if (milestones.length === 0) {
+      return map;
+    }
+
+    for (const step of plan.steps) {
+      const badges = buildStepProjectionBadges(milestones, step.id, 3);
+      if (badges.length > 0) {
+        map.set(step.id, badges);
+      }
+    }
+    return map;
+  }, [plan.projectionMilestones, plan.steps]);
+
   const {
     sortedSteps,
     adjacentByGap,
@@ -1109,6 +1323,10 @@ function StrategyPlannerBoard({
         {boardActions ? (
           <div className="shrink-0">{boardActions}</div>
         ) : null}
+      </div>
+
+      <div className="mb-3">
+        <BoardLegend />
       </div>
 
       <div
@@ -1211,6 +1429,9 @@ function StrategyPlannerBoard({
                             step={step}
                             index={index}
                             expenses={expensesByStepId.get(step.id) ?? []}
+                            projectionBadges={
+                              projectionBadgesByStepId.get(step.id) ?? []
+                            }
                             {...stepNodeProps}
                           />
                         </li>
@@ -1267,6 +1488,9 @@ function StrategyPlannerBoard({
                         step={step}
                         index={index}
                         expenses={expensesByStepId.get(step.id) ?? []}
+                        projectionBadges={
+                          projectionBadgesByStepId.get(step.id) ?? []
+                        }
                         {...stepNodeProps}
                       />
                       {!isLast && nextStep ? (

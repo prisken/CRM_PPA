@@ -1,10 +1,10 @@
 /**
  * View-model helpers for the read-only Client Strategy Map report.
  *
- * Consumes existing Strategy Plan / Step / Projection Milestone data.
+ * Consumes Strategy Plan / Step / Expense / Projection Milestone data.
  * Does not generate years, invent projections, or compute growth/ROI/yield.
- * Suggestion math from Projection Journey is not applied here — persisted
- * milestone values only.
+ * Prefers persisted milestone values; timeline helpers only fill gaps when
+ * clearly derived from entered step/expense fields.
  */
 import type { StrategyProjectionMilestoneType } from '@prisma/client';
 import {
@@ -14,12 +14,37 @@ import {
   type StrategyProjectionMilestone,
   type StrategyProjectionMilestoneStepSummary,
 } from '@/lib/clientStrategyProjectionHelpers';
+import {
+  getStrategyExpenseTotal,
+  getStrategyStepTotalIncome,
+  type StrategyTimelineExpenseInput,
+  type StrategyTimelineStepInput,
+} from '@/lib/clientStrategyTimelineCalculations';
 
 export type ClientStrategyReportStep = {
   id: string;
   title: string;
   stepType?: string | null;
   sortOrder?: number | null;
+  plannedAmount?: number | null;
+  investmentAmount?: number | null;
+  incomeAmount?: number | null;
+  incomeFrequency?: string | null;
+  incomeStartYear?: number | null;
+  incomeEndYear?: number | null;
+  startYear?: number | null;
+  endYear?: number | null;
+  capitalReturned?: number | null;
+  capitalReturnYear?: number | null;
+};
+
+export type ClientStrategyReportExpense = {
+  id: string;
+  title: string;
+  amount?: number | null;
+  frequency?: string | null;
+  startYear?: number | null;
+  endYear?: number | null;
 };
 
 export type ClientStrategyReportPlanInput = {
@@ -30,6 +55,7 @@ export type ClientStrategyReportPlanInput = {
   description?: string | null;
   milestones?: readonly StrategyProjectionMilestone[] | null;
   steps?: readonly ClientStrategyReportStep[] | null;
+  expenses?: readonly ClientStrategyReportExpense[] | null;
 };
 
 /** Maps a formatted strategy plan detail payload to report helper input. */
@@ -44,6 +70,24 @@ export function toClientStrategyReportPlanInput(plan: {
     title: string;
     stepType?: string | null;
     sortOrder?: number | null;
+    plannedAmount?: number | null;
+    investmentAmount?: number | null;
+    incomeAmount?: number | null;
+    incomeFrequency?: string | null;
+    incomeStartYear?: number | null;
+    incomeEndYear?: number | null;
+    startYear?: number | null;
+    endYear?: number | null;
+    capitalReturned?: number | null;
+    capitalReturnYear?: number | null;
+  }[];
+  expenses?: readonly {
+    id: string;
+    title: string;
+    amount?: number | null;
+    frequency?: string | null;
+    startYear?: number | null;
+    endYear?: number | null;
   }[];
   projectionMilestones?: readonly StrategyProjectionMilestone[] | null;
 }): ClientStrategyReportPlanInput {
@@ -59,6 +103,24 @@ export function toClientStrategyReportPlanInput(plan: {
       title: step.title,
       stepType: step.stepType ?? null,
       sortOrder: step.sortOrder ?? null,
+      plannedAmount: step.plannedAmount ?? null,
+      investmentAmount: step.investmentAmount ?? null,
+      incomeAmount: step.incomeAmount ?? null,
+      incomeFrequency: step.incomeFrequency ?? null,
+      incomeStartYear: step.incomeStartYear ?? null,
+      incomeEndYear: step.incomeEndYear ?? null,
+      startYear: step.startYear ?? null,
+      endYear: step.endYear ?? null,
+      capitalReturned: step.capitalReturned ?? null,
+      capitalReturnYear: step.capitalReturnYear ?? null,
+    })),
+    expenses: (plan.expenses ?? []).map((expense) => ({
+      id: expense.id,
+      title: expense.title,
+      amount: expense.amount ?? null,
+      frequency: expense.frequency ?? null,
+      startYear: expense.startYear ?? null,
+      endYear: expense.endYear ?? null,
     })),
   };
 }
@@ -73,10 +135,13 @@ export type ClientStrategyMapNodeKind =
   | 'custom_review'
   | 'outcome';
 
-export type ClientStrategyMapLinkedStepChip = {
+export type ClientStrategyMapLinkedChip = {
   id: string;
   title: string;
 };
+
+/** @deprecated Prefer ClientStrategyMapLinkedChip */
+export type ClientStrategyMapLinkedStepChip = ClientStrategyMapLinkedChip;
 
 export type ClientStrategyMapNode = {
   id: string;
@@ -89,9 +154,18 @@ export type ClientStrategyMapNode = {
   primaryMetricValue: number | null;
   secondaryMetricLabel: string | null;
   secondaryMetricValue: number | null;
+  /** Milestone yearly figures (null on goal/outcome). */
+  spendingThisYear: number | null;
+  earningThisYear: number | null;
+  netThisYear: number | null;
+  cumulativeIncome: number | null;
+  cumulativeExpenses: number | null;
+  capitalReturned: number | null;
+  illustrativeTotalPosition: number | null;
   benefitText: string | null;
   notesPreview: string | null;
-  linkedStepChips: ClientStrategyMapLinkedStepChip[];
+  linkedStepChips: ClientStrategyMapLinkedChip[];
+  linkedExpenseChips: ClientStrategyMapLinkedChip[];
   /** Stable display order: Goal=0, milestones=1..n, Outcome=n+1 */
   order: number;
   /** Sort key for milestones (null for goal/outcome). */
@@ -102,14 +176,23 @@ export type ClientStrategyReportSummary = {
   planTitle: string | null;
   clientGoal: string | null;
   expectedOutcome: string | null;
+  /** Sum of step investment/planned amounts when present. */
+  totalPlannedInvestment: number | null;
+  /** Legacy alias used by older UI — same as totalPlannedInvestment when set. */
   initialCapital: number | null;
+  /** Persisted incomeThisPeriod for the calendar year, when a matching milestone exists. */
+  incomeThisYear: number | null;
+  incomeThisYearSourceYear: number | null;
   targetMonthlyIncome: number | null;
   projectedCumulativeIncome: number | null;
+  totalPlannedExpenses: number | null;
+  capitalExpectedBack: number | null;
   projectedAssetPosition: number | null;
   timelineStartYear: number | null;
   timelineEndYear: number | null;
   milestoneCount: number;
   stepCount: number;
+  expenseCount: number;
   /** First milestone title in journey order (no date-based "upcoming" logic). */
   firstMilestoneTitle: string | null;
   nextMilestoneTitle: string | null;
@@ -133,6 +216,23 @@ const GUARANTEE_LANGUAGE_PATTERN =
 
 function isFiniteNumber(value: number | null | undefined): value is number {
   return typeof value === 'number' && Number.isFinite(value);
+}
+
+function sumNullable(
+  values: Array<number | null | undefined>
+): number | null {
+  let total = 0;
+  let sawValue = false;
+
+  for (const value of values) {
+    if (!isFiniteNumber(value)) {
+      continue;
+    }
+    total += value;
+    sawValue = true;
+  }
+
+  return sawValue ? total : null;
 }
 
 function truncateNotes(
@@ -236,6 +336,9 @@ export function getPrimaryMetricForMilestone(
     | 'incomeThisPeriod'
     | 'cumulativeIncome'
     | 'totalAssetPosition'
+    | 'expensesThisYear'
+    | 'netCashflowThisYear'
+    | 'capitalReturnedToDate'
   >
 ): ClientStrategyReportMetric | null {
   const type = normalizeMilestoneType(milestone.type);
@@ -245,31 +348,46 @@ export function getPrimaryMetricForMilestone(
       return firstAvailableMetric([
         { label: 'Capital invested', value: milestone.capitalInvested },
         { label: 'Capital remaining', value: milestone.capitalRemaining },
+        {
+          label: 'Illustrative total position',
+          value: milestone.totalAssetPosition,
+        },
       ]);
     case 'INCOME_CHECKPOINT':
       return firstAvailableMetric([
+        { label: 'Income this year', value: milestone.incomeThisPeriod },
         { label: 'Monthly income', value: milestone.monthlyIncome },
         { label: 'Cumulative income', value: milestone.cumulativeIncome },
         { label: 'Annual income', value: milestone.annualIncome },
-        { label: 'Income this period', value: milestone.incomeThisPeriod },
       ]);
     case 'MATURITY_SCENARIO':
     case 'EXIT_SCENARIO':
       return firstAvailableMetric([
-        { label: 'Total asset position', value: milestone.totalAssetPosition },
+        {
+          label: 'Illustrative total position',
+          value: milestone.totalAssetPosition,
+        },
+        {
+          label: 'Capital returned',
+          value: milestone.capitalReturnedToDate,
+        },
         { label: 'Capital remaining', value: milestone.capitalRemaining },
         { label: 'Cumulative income', value: milestone.cumulativeIncome },
       ]);
     case 'CUSTOM':
     default:
       return firstAvailableMetric([
-        { label: 'Total asset position', value: milestone.totalAssetPosition },
+        {
+          label: 'Illustrative total position',
+          value: milestone.totalAssetPosition,
+        },
+        { label: 'Income this year', value: milestone.incomeThisPeriod },
         { label: 'Cumulative income', value: milestone.cumulativeIncome },
+        { label: 'Net this year', value: milestone.netCashflowThisYear },
         { label: 'Monthly income', value: milestone.monthlyIncome },
         { label: 'Capital invested', value: milestone.capitalInvested },
         { label: 'Capital remaining', value: milestone.capitalRemaining },
         { label: 'Annual income', value: milestone.annualIncome },
-        { label: 'Income this period', value: milestone.incomeThisPeriod },
       ]);
   }
 }
@@ -289,6 +407,10 @@ export function getSecondaryMetricForMilestone(
     | 'incomeThisPeriod'
     | 'cumulativeIncome'
     | 'totalAssetPosition'
+    | 'expensesThisYear'
+    | 'cumulativeExpenses'
+    | 'netCashflowThisYear'
+    | 'capitalReturnedToDate'
   >
 ): ClientStrategyReportMetric | null {
   const primary = getPrimaryMetricForMilestone(milestone);
@@ -300,27 +422,38 @@ export function getSecondaryMetricForMilestone(
     case 'INITIAL_INVESTMENT':
       candidates = [
         { label: 'Capital remaining', value: milestone.capitalRemaining },
+        { label: 'Income this year', value: milestone.incomeThisPeriod },
         { label: 'Monthly income', value: milestone.monthlyIncome },
       ];
       break;
     case 'INCOME_CHECKPOINT':
       candidates = [
+        { label: 'Expenses this year', value: milestone.expensesThisYear },
+        { label: 'Net this year', value: milestone.netCashflowThisYear },
         { label: 'Cumulative income', value: milestone.cumulativeIncome },
         { label: 'Capital remaining', value: milestone.capitalRemaining },
-        { label: 'Total asset position', value: milestone.totalAssetPosition },
+        {
+          label: 'Illustrative total position',
+          value: milestone.totalAssetPosition,
+        },
       ];
       break;
     case 'MATURITY_SCENARIO':
     case 'EXIT_SCENARIO':
       candidates = [
-        { label: 'Capital remaining', value: milestone.capitalRemaining },
         { label: 'Cumulative income', value: milestone.cumulativeIncome },
+        {
+          label: 'Cumulative expenses',
+          value: milestone.cumulativeExpenses,
+        },
+        { label: 'Capital remaining', value: milestone.capitalRemaining },
         { label: 'Monthly income', value: milestone.monthlyIncome },
       ];
       break;
     case 'CUSTOM':
     default:
       candidates = [
+        { label: 'Expenses this year', value: milestone.expensesThisYear },
         { label: 'Cumulative income', value: milestone.cumulativeIncome },
         { label: 'Monthly income', value: milestone.monthlyIncome },
         { label: 'Capital remaining', value: milestone.capitalRemaining },
@@ -346,26 +479,157 @@ export function getSecondaryMetricForMilestone(
   return null;
 }
 
+function toTimelineStepInput(
+  step: ClientStrategyReportStep
+): StrategyTimelineStepInput {
+  return {
+    investmentAmount: step.investmentAmount ?? step.plannedAmount ?? null,
+    startYear: step.startYear ?? null,
+    endYear: step.endYear ?? null,
+    incomeAmount: step.incomeAmount ?? null,
+    incomeFrequency: step.incomeFrequency ?? null,
+    incomeStartYear: step.incomeStartYear ?? null,
+    incomeEndYear: step.incomeEndYear ?? null,
+    capitalReturned: step.capitalReturned ?? null,
+    capitalReturnYear: step.capitalReturnYear ?? null,
+  };
+}
+
+function toTimelineExpenseInput(
+  expense: ClientStrategyReportExpense
+): StrategyTimelineExpenseInput {
+  return {
+    amount: expense.amount ?? null,
+    frequency: expense.frequency ?? null,
+    startYear: expense.startYear ?? null,
+    endYear: expense.endYear ?? null,
+  };
+}
+
+function getStepInvestmentAmount(
+  step: ClientStrategyReportStep
+): number | null {
+  if (isFiniteNumber(step.investmentAmount)) {
+    return step.investmentAmount;
+  }
+  if (isFiniteNumber(step.plannedAmount)) {
+    return step.plannedAmount;
+  }
+  return null;
+}
+
+function pickIncomeThisYearFromMilestones(
+  milestones: readonly StrategyProjectionMilestone[],
+  referenceYear: number
+): { value: number | null; year: number | null } {
+  const matches = sortProjectionMilestones(milestones).filter(
+    (milestone) => milestone.year === referenceYear
+  );
+
+  for (let index = matches.length - 1; index >= 0; index -= 1) {
+    const milestone = matches[index]!;
+    if (isFiniteNumber(milestone.incomeThisPeriod)) {
+      return { value: milestone.incomeThisPeriod, year: referenceYear };
+    }
+  }
+
+  return { value: null, year: null };
+}
+
+function pickCapitalExpectedBack(
+  milestones: readonly StrategyProjectionMilestone[],
+  steps: readonly ClientStrategyReportStep[]
+): number | null {
+  const latestFirst = [...milestones].sort((a, b) => {
+    if (a.year !== b.year) {
+      return b.year - a.year;
+    }
+    if (a.sortOrder !== b.sortOrder) {
+      return b.sortOrder - a.sortOrder;
+    }
+    return 0;
+  });
+
+  for (const milestone of latestFirst) {
+    if (isFiniteNumber(milestone.capitalReturnedToDate)) {
+      return milestone.capitalReturnedToDate;
+    }
+  }
+
+  for (const milestone of latestFirst) {
+    if (isFiniteNumber(milestone.capitalReturnedThisYear)) {
+      return milestone.capitalReturnedThisYear;
+    }
+  }
+
+  return sumNullable(steps.map((step) => step.capitalReturned ?? null));
+}
+
 function resolveLinkedStepChips(
   milestone: StrategyProjectionMilestone,
   stepsById: Map<string, ClientStrategyReportStep>
-): ClientStrategyMapLinkedStepChip[] {
-  if (!milestone.stepId) {
-    return [];
+): ClientStrategyMapLinkedChip[] {
+  const chips: ClientStrategyMapLinkedChip[] = [];
+  const seen = new Set<string>();
+
+  for (const entry of milestone.selectedSteps ?? []) {
+    const id = entry.stepId;
+    if (!id || seen.has(id)) {
+      continue;
+    }
+    const title =
+      entry.step?.title?.trim() ||
+      stepsById.get(id)?.title?.trim() ||
+      null;
+    if (!title) {
+      continue;
+    }
+    seen.add(id);
+    chips.push({ id, title });
   }
 
-  const fromNested: StrategyProjectionMilestoneStepSummary | null | undefined =
-    milestone.step;
-  if (fromNested?.id && fromNested.title) {
-    return [{ id: fromNested.id, title: fromNested.title }];
+  if (milestone.stepId && !seen.has(milestone.stepId)) {
+    const fromNested: StrategyProjectionMilestoneStepSummary | null | undefined =
+      milestone.step;
+    if (fromNested?.id && fromNested.title) {
+      seen.add(fromNested.id);
+      chips.push({ id: fromNested.id, title: fromNested.title });
+    } else {
+      const fromPlan = stepsById.get(milestone.stepId);
+      if (fromPlan) {
+        seen.add(fromPlan.id);
+        chips.push({ id: fromPlan.id, title: fromPlan.title });
+      }
+    }
   }
 
-  const fromPlan = stepsById.get(milestone.stepId);
-  if (fromPlan) {
-    return [{ id: fromPlan.id, title: fromPlan.title }];
+  return chips;
+}
+
+function resolveLinkedExpenseChips(
+  milestone: StrategyProjectionMilestone,
+  expensesById: Map<string, ClientStrategyReportExpense>
+): ClientStrategyMapLinkedChip[] {
+  const chips: ClientStrategyMapLinkedChip[] = [];
+  const seen = new Set<string>();
+
+  for (const entry of milestone.selectedExpenses ?? []) {
+    const id = entry.expenseId;
+    if (!id || seen.has(id)) {
+      continue;
+    }
+    const title =
+      entry.expense?.title?.trim() ||
+      expensesById.get(id)?.title?.trim() ||
+      null;
+    if (!title) {
+      continue;
+    }
+    seen.add(id);
+    chips.push({ id, title });
   }
 
-  return [];
+  return chips;
 }
 
 function milestoneSortKey(milestone: StrategyProjectionMilestone): string {
@@ -375,20 +639,61 @@ function milestoneSortKey(milestone: StrategyProjectionMilestone): string {
   return `${milestone.year}:${milestone.sortOrder}:${createdAt}:${milestone.id}`;
 }
 
+function emptyYearlyFields() {
+  return {
+    spendingThisYear: null as number | null,
+    earningThisYear: null as number | null,
+    netThisYear: null as number | null,
+    cumulativeIncome: null as number | null,
+    cumulativeExpenses: null as number | null,
+    capitalReturned: null as number | null,
+    illustrativeTotalPosition: null as number | null,
+  };
+}
+
 /**
  * Snapshot metrics for the Client Strategy Map report.
- * Reuses Projection Journey summary selection for money/year fields.
+ * Prefers persisted milestone values; uses step/expense timeline helpers only
+ * as safe fallbacks for plan-level totals.
  */
 export function buildClientStrategyReportSummary(
-  input: ClientStrategyReportPlanInput
+  input: ClientStrategyReportPlanInput,
+  options?: { referenceYear?: number }
 ): ClientStrategyReportSummary {
   const milestones = input.milestones ?? [];
   const steps = input.steps ?? [];
+  const expenses = input.expenses ?? [];
   const journey = buildProjectionJourneySummary(milestones);
   const sorted = sortProjectionMilestones(milestones);
   const firstMilestoneTitle = sorted[0]?.title?.trim()
     ? sorted[0]!.title.trim()
     : null;
+
+  const totalPlannedInvestment = sumNullable(
+    steps.map((step) => getStepInvestmentAmount(step))
+  );
+
+  const referenceYear =
+    options?.referenceYear ?? new Date().getFullYear();
+  const incomeThisYearPick = pickIncomeThisYearFromMilestones(
+    milestones,
+    referenceYear
+  );
+
+  const stepIncomeTotalFallback = sumNullable(
+    steps.map((step) => getStrategyStepTotalIncome(toTimelineStepInput(step)))
+  );
+
+  const totalPlannedExpenses = sumNullable(
+    expenses.map((expense) =>
+      getStrategyExpenseTotal(toTimelineExpenseInput(expense))
+    )
+  );
+
+  const capitalExpectedBack = pickCapitalExpectedBack(milestones, steps);
+
+  const initialCapital =
+    journey.initialCapital ?? totalPlannedInvestment ?? null;
 
   return {
     planTitle: input.title?.trim() ? input.title.trim() : null,
@@ -396,14 +701,21 @@ export function buildClientStrategyReportSummary(
     expectedOutcome: input.expectedOutcome?.trim()
       ? input.expectedOutcome.trim()
       : null,
-    initialCapital: journey.initialCapital,
+    totalPlannedInvestment,
+    initialCapital,
+    incomeThisYear: incomeThisYearPick.value,
+    incomeThisYearSourceYear: incomeThisYearPick.year,
     targetMonthlyIncome: journey.monthlyIncome,
-    projectedCumulativeIncome: journey.cumulativeIncome,
+    projectedCumulativeIncome:
+      journey.cumulativeIncome ?? stepIncomeTotalFallback,
+    totalPlannedExpenses,
+    capitalExpectedBack,
     projectedAssetPosition: journey.totalAssetPosition,
     timelineStartYear: journey.firstProjectionYear,
     timelineEndYear: journey.latestProjectionYear,
     milestoneCount: milestones.length,
     stepCount: steps.length,
+    expenseCount: expenses.length,
     firstMilestoneTitle,
     // No date-based "upcoming" logic — mirrors first title for consumers.
     nextMilestoneTitle: firstMilestoneTitle,
@@ -420,7 +732,11 @@ export function buildClientStrategyMapNodes(
 ): ClientStrategyMapNode[] {
   const milestones = input.milestones ?? [];
   const steps = input.steps ?? [];
+  const expenses = input.expenses ?? [];
   const stepsById = new Map(steps.map((step) => [step.id, step]));
+  const expensesById = new Map(
+    expenses.map((expense) => [expense.id, expense])
+  );
   const sorted = sortProjectionMilestones(milestones);
 
   const goalTitle = input.clientGoal?.trim()
@@ -441,10 +757,12 @@ export function buildClientStrategyMapNodes(
       primaryMetricValue: null,
       secondaryMetricLabel: null,
       secondaryMetricValue: null,
+      ...emptyYearlyFields(),
       benefitText:
         'Helps show the planned client goal this illustrative strategy map is designed to support.',
       notesPreview: null,
       linkedStepChips: [],
+      linkedExpenseChips: [],
       order: 0,
       sortKey: null,
     },
@@ -454,6 +772,10 @@ export function buildClientStrategyMapNodes(
     const kind = mapMilestoneTypeToNodeKind(milestone.type);
     const primary = getPrimaryMetricForMilestone(milestone);
     const secondary = getSecondaryMetricForMilestone(milestone);
+    const capitalReturned =
+      milestone.capitalReturnedToDate ??
+      milestone.capitalReturnedThisYear ??
+      null;
 
     nodes.push({
       id: milestone.id,
@@ -466,9 +788,17 @@ export function buildClientStrategyMapNodes(
       primaryMetricValue: primary?.value ?? null,
       secondaryMetricLabel: secondary?.label ?? null,
       secondaryMetricValue: secondary?.value ?? null,
+      spendingThisYear: milestone.expensesThisYear ?? null,
+      earningThisYear: milestone.incomeThisPeriod ?? null,
+      netThisYear: milestone.netCashflowThisYear ?? null,
+      cumulativeIncome: milestone.cumulativeIncome ?? null,
+      cumulativeExpenses: milestone.cumulativeExpenses ?? null,
+      capitalReturned,
+      illustrativeTotalPosition: milestone.totalAssetPosition ?? null,
       benefitText: getClientBenefitForMilestoneType(milestone.type),
       notesPreview: truncateNotes(milestone.notes),
       linkedStepChips: resolveLinkedStepChips(milestone, stepsById),
+      linkedExpenseChips: resolveLinkedExpenseChips(milestone, expensesById),
       order: index + 1,
       sortKey: milestoneSortKey(milestone),
     });
@@ -489,10 +819,12 @@ export function buildClientStrategyMapNodes(
     primaryMetricValue: null,
     secondaryMetricLabel: null,
     secondaryMetricValue: null,
+    ...emptyYearlyFields(),
     benefitText:
       'Supports review of the planned expected outcome based on manually entered strategy assumptions.',
     notesPreview: null,
     linkedStepChips: [],
+    linkedExpenseChips: [],
     order: sorted.length + 1,
     sortKey: null,
   });
@@ -519,7 +851,23 @@ function hasAnyCapitalField(
     (m) =>
       isFiniteNumber(m.capitalInvested) ||
       isFiniteNumber(m.capitalRemaining) ||
-      isFiniteNumber(m.totalAssetPosition)
+      isFiniteNumber(m.totalAssetPosition) ||
+      isFiniteNumber(m.capitalReturnedToDate) ||
+      isFiniteNumber(m.capitalReturnedThisYear)
+  );
+}
+
+function hasAnyExpenseField(
+  milestones: readonly StrategyProjectionMilestone[],
+  expenses: readonly ClientStrategyReportExpense[]
+): boolean {
+  if (expenses.length > 0) {
+    return true;
+  }
+  return milestones.some(
+    (m) =>
+      isFiniteNumber(m.expensesThisYear) ||
+      isFiniteNumber(m.cumulativeExpenses)
   );
 }
 
@@ -528,6 +876,17 @@ function hasExitOrMaturity(
 ): boolean {
   return milestones.some(
     (m) => m.type === 'EXIT_SCENARIO' || m.type === 'MATURITY_SCENARIO'
+  );
+}
+
+function hasSelectedSources(
+  milestones: readonly StrategyProjectionMilestone[]
+): boolean {
+  return milestones.some(
+    (m) =>
+      (m.selectedSteps?.length ?? 0) > 0 ||
+      (m.selectedExpenses?.length ?? 0) > 0 ||
+      Boolean(m.stepId)
   );
 }
 
@@ -540,6 +899,7 @@ export function buildClientStrategyPerks(
 ): ClientStrategyPerk[] {
   const milestones = input.milestones ?? [];
   const steps = input.steps ?? [];
+  const expenses = input.expenses ?? [];
   const perks: ClientStrategyPerk[] = [];
 
   if (milestones.length > 0) {
@@ -560,21 +920,30 @@ export function buildClientStrategyPerks(
     });
   }
 
+  if (hasAnyExpenseField(milestones, expenses)) {
+    perks.push({
+      id: 'expense-visibility',
+      title: 'Expense & premium visibility',
+      description:
+        'Helps show planned expenses or premiums alongside income so spending and earning can be reviewed together.',
+    });
+  }
+
   if (hasAnyCapitalField(milestones)) {
     perks.push({
       id: 'capital-position',
       title: 'Capital position visibility',
       description:
-        'Supports review of planned capital and asset-position checkpoints where those figures were entered.',
+        'Supports review of planned capital, returned capital, and illustrative asset-position checkpoints where those figures were entered.',
     });
   }
 
-  if (steps.length > 0) {
+  if (steps.length > 0 || hasSelectedSources(milestones)) {
     perks.push({
       id: 'advisor-guided-steps',
-      title: 'Advisor-guided steps',
+      title: 'Advisor-guided contributions',
       description:
-        'Links selected strategy steps to milestones so the client can see how plan actions relate to the journey.',
+        'Links selected strategy items and expenses to milestones so the client can see what contributes to each checkpoint.',
     });
   }
 
@@ -592,7 +961,7 @@ export function buildClientStrategyPerks(
       id: 'manual-assumptions',
       title: 'Manually controlled assumptions',
       description:
-        'Saved figures remain under advisor control. Helper suggestions are optional and are never forced into this report.',
+        'Values are illustrative and based on advisor-entered assumptions. Helper suggestions are optional and are never forced into this report.',
     });
   }
 

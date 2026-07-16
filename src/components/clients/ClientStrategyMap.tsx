@@ -103,7 +103,7 @@ function renderNodeList(
         <div
           className={
             orientation === 'horizontal'
-              ? 'w-[15.5rem] max-w-[calc(100vw-3rem)] shrink-0'
+              ? 'w-[17.5rem] max-w-[calc(100vw-3rem)] shrink-0'
               : 'w-full'
           }
         >

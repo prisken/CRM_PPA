@@ -17,6 +17,7 @@ import {
   StrategyExpenseCategory,
   StrategyExpenseFrequency,
   StrategyPlanStatus,
+  StrategyProjectionMilestoneType,
   StrategyStepType,
   UserRole,
   UserStatus,
@@ -40,6 +41,14 @@ import {
 import {
   PUT as updateExpense,
 } from '../src/app/api/clients/[id]/strategy-plans/[planId]/expenses/[expenseId]/route';
+import {
+  PUT as updateProjectionMilestone,
+} from '../src/app/api/clients/[id]/strategy-plans/[planId]/projection-milestones/[milestoneId]/route';
+import { PUT as reorderProjectionMilestones } from '../src/app/api/clients/[id]/strategy-plans/[planId]/projection-milestones/reorder/route';
+import {
+  GET as listProjectionMilestones,
+  POST as createProjectionMilestone,
+} from '../src/app/api/clients/[id]/strategy-plans/[planId]/projection-milestones/route';
 import {
   GET as listPlans,
   POST as createPlan,
@@ -741,6 +750,514 @@ async function main() {
     `status ${coveredBadRes.status}`
   );
 
+  // --- 5b. Projection milestones ---
+  const milestoneCreateRes = await createProjectionMilestone(
+    await authRequest(
+      `/api/clients/${client.id}/strategy-plans/${planId}/projection-milestones`,
+      doctorToken,
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          year: 2030,
+          title: 'Income year 5',
+          type: StrategyProjectionMilestoneType.INCOME_CHECKPOINT,
+          stepId: dealStepId,
+          monthlyIncome: 1000,
+          monthsOfIncome: 12,
+          // Manual override — must NOT be rewritten as 1000 * 12
+          cumulativeIncome: 9999,
+          capitalRemaining: 50000,
+          totalAssetPosition: 12345,
+        }),
+      }
+    ),
+    { params: planParams }
+  );
+  const milestoneCreateBody = (await milestoneCreateRes.json()) as {
+    projectionMilestone?: {
+      id: string;
+      cumulativeIncome: number | null;
+      totalAssetPosition: number | null;
+      year: number;
+    };
+    error?: string;
+  };
+  const milestoneId = milestoneCreateBody.projectionMilestone?.id ?? null;
+  record(
+    'create projection milestone preserves manual totals',
+    milestoneCreateRes.status === 201 &&
+      milestoneCreateBody.projectionMilestone?.cumulativeIncome === 9999 &&
+      milestoneCreateBody.projectionMilestone?.totalAssetPosition === 12345 &&
+      milestoneCreateBody.projectionMilestone?.year === 2030,
+    milestoneCreateBody.error ??
+      `cum=${milestoneCreateBody.projectionMilestone?.cumulativeIncome}`
+  );
+
+  const milestoneBadYearRes = await createProjectionMilestone(
+    await authRequest(
+      `/api/clients/${client.id}/strategy-plans/${planId}/projection-milestones`,
+      doctorToken,
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          year: 1200,
+          title: 'Too early',
+          type: StrategyProjectionMilestoneType.CUSTOM,
+        }),
+      }
+    ),
+    { params: planParams }
+  );
+  record(
+    'projection milestone rejects out-of-range year',
+    milestoneBadYearRes.status === 400,
+    `status ${milestoneBadYearRes.status}`
+  );
+
+  const milestoneBadStepRes = await createProjectionMilestone(
+    await authRequest(
+      `/api/clients/${client.id}/strategy-plans/${planId}/projection-milestones`,
+      doctorToken,
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          year: 2031,
+          title: 'Cross plan step',
+          type: StrategyProjectionMilestoneType.CUSTOM,
+          stepId: otherPlanStepId,
+        }),
+      }
+    ),
+    { params: planParams }
+  );
+  record(
+    'projection milestone rejects step from another plan',
+    milestoneBadStepRes.status === 400,
+    `status ${milestoneBadStepRes.status}`
+  );
+
+  const milestoneSecondRes = await createProjectionMilestone(
+    await authRequest(
+      `/api/clients/${client.id}/strategy-plans/${planId}/projection-milestones`,
+      doctorToken,
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          year: 2040,
+          title: 'Exit',
+          type: StrategyProjectionMilestoneType.EXIT_SCENARIO,
+        }),
+      }
+    ),
+    { params: planParams }
+  );
+  const milestoneSecondBody = (await milestoneSecondRes.json()) as {
+    projectionMilestone?: { id: string };
+  };
+  const milestoneSecondId = milestoneSecondBody.projectionMilestone?.id ?? null;
+
+  const listMilestonesRes = await listProjectionMilestones(
+    await authRequest(
+      `/api/clients/${client.id}/strategy-plans/${planId}/projection-milestones`,
+      relationshipToken
+    ),
+    { params: planParams }
+  );
+  const listMilestonesBody = (await listMilestonesRes.json()) as {
+    projectionMilestones?: Array<{ id: string }>;
+  };
+  record(
+    'list projection milestones (view access)',
+    listMilestonesRes.status === 200 &&
+      (listMilestonesBody.projectionMilestones?.length ?? 0) >= 2,
+    `count=${listMilestonesBody.projectionMilestones?.length ?? 0}`
+  );
+
+  if (milestoneId) {
+    const updateMilestoneRes = await updateProjectionMilestone(
+      await authRequest(
+        `/api/clients/${client.id}/strategy-plans/${planId}/projection-milestones/${milestoneId}`,
+        doctorToken,
+        {
+          method: 'PUT',
+          body: JSON.stringify({
+            notes: 'Advisor adjusted',
+            cumulativeIncome: 8888,
+          }),
+        }
+      ),
+      {
+        params: Promise.resolve({
+          id: client.id,
+          planId,
+          milestoneId,
+        }),
+      }
+    );
+    const updateMilestoneBody = (await updateMilestoneRes.json()) as {
+      projectionMilestone?: { cumulativeIncome: number | null; notes: string | null };
+      error?: string;
+    };
+    record(
+      'update projection milestone keeps manual cumulativeIncome',
+      updateMilestoneRes.status === 200 &&
+        updateMilestoneBody.projectionMilestone?.cumulativeIncome === 8888 &&
+        updateMilestoneBody.projectionMilestone?.notes === 'Advisor adjusted',
+      updateMilestoneBody.error ??
+        `cum=${updateMilestoneBody.projectionMilestone?.cumulativeIncome}`
+    );
+  } else {
+    record('update projection milestone keeps manual cumulativeIncome', false, 'no milestone');
+  }
+
+  if (milestoneId && milestoneSecondId) {
+    const reorderRes = await reorderProjectionMilestones(
+      await authRequest(
+        `/api/clients/${client.id}/strategy-plans/${planId}/projection-milestones/reorder`,
+        doctorToken,
+        {
+          method: 'PUT',
+          body: JSON.stringify({
+            orderedIds: [milestoneSecondId, milestoneId],
+          }),
+        }
+      ),
+      { params: planParams }
+    );
+    const reorderBody = (await reorderRes.json()) as {
+      projectionMilestones?: Array<{ id: string; sortOrder: number }>;
+      error?: string;
+    };
+    record(
+      'reorder projection milestones',
+      reorderRes.status === 200 &&
+        reorderBody.projectionMilestones?.[0]?.id === milestoneSecondId &&
+        reorderBody.projectionMilestones?.[0]?.sortOrder === 0,
+      reorderBody.error ?? `status ${reorderRes.status}`
+    );
+  } else {
+    record('reorder projection milestones', false, 'missing milestone ids');
+  }
+
+  // --- 5c. Timeline economics fields + milestone source links ---
+  const timelineStepRes = await createStep(
+    await authRequest(
+      `/api/clients/${client.id}/strategy-plans/${planId}/steps`,
+      doctorToken,
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          title: 'Timeline investment',
+          investmentAmount: 100000,
+          startYear: 2026,
+          endYear: 2030,
+          incomeAmount: 1000,
+          incomeFrequency: 'MONTHLY',
+          incomeStartYear: 2026,
+          incomeEndYear: 2030,
+          capitalReturned: 100000,
+          capitalReturnYear: 2030,
+          plannedAmount: 100000,
+        }),
+      }
+    ),
+    { params: planParams }
+  );
+  const timelineStepBody = (await timelineStepRes.json()) as {
+    step?: {
+      id: string;
+      investmentAmount: number | null;
+      incomeAmount: number | null;
+      incomeFrequency: string | null;
+      incomeStartYear: number | null;
+      incomeEndYear: number | null;
+      capitalReturned: number | null;
+      capitalReturnYear: number | null;
+    };
+    error?: string;
+  };
+  const timelineStepId = timelineStepBody.step?.id ?? null;
+  record(
+    'create step with timeline economics fields',
+    timelineStepRes.status === 201 &&
+      timelineStepBody.step?.investmentAmount === 100000 &&
+      timelineStepBody.step?.incomeAmount === 1000 &&
+      timelineStepBody.step?.incomeFrequency === 'MONTHLY' &&
+      timelineStepBody.step?.incomeStartYear === 2026 &&
+      timelineStepBody.step?.capitalReturnYear === 2030,
+    timelineStepBody.error ?? `step=${timelineStepId}`
+  );
+
+  if (timelineStepId) {
+    const timelineStepUpdateRes = await updateStep(
+      await authRequest(
+        `/api/clients/${client.id}/strategy-plans/${planId}/steps/${timelineStepId}`,
+        doctorToken,
+        {
+          method: 'PUT',
+          body: JSON.stringify({
+            capitalReturned: 110000,
+            endYear: 2031,
+          }),
+        }
+      ),
+      {
+        params: Promise.resolve({
+          id: client.id,
+          planId,
+          stepId: timelineStepId,
+        }),
+      }
+    );
+    const timelineStepUpdateBody = (await timelineStepUpdateRes.json()) as {
+      step?: { capitalReturned: number | null; endYear: number | null };
+      error?: string;
+    };
+    record(
+      'update step timeline fields',
+      timelineStepUpdateRes.status === 200 &&
+        timelineStepUpdateBody.step?.capitalReturned === 110000 &&
+        timelineStepUpdateBody.step?.endYear === 2031,
+      timelineStepUpdateBody.error ?? 'ok'
+    );
+  } else {
+    record('update step timeline fields', false, 'no timeline step');
+  }
+
+  const timelineExpenseRes = await createExpense(
+    await authRequest(
+      `/api/clients/${client.id}/strategy-plans/${planId}/expenses`,
+      doctorToken,
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          title: 'One-time setup',
+          amount: 100000,
+          frequency: StrategyExpenseFrequency.ONE_TIME,
+          startYear: 2026,
+          endYear: 2026,
+        }),
+      }
+    ),
+    { params: planParams }
+  );
+  const timelineExpenseBody = (await timelineExpenseRes.json()) as {
+    expense?: {
+      id: string;
+      startYear: number | null;
+      endYear: number | null;
+      amount: number | null;
+    };
+    error?: string;
+  };
+  const timelineExpenseId = timelineExpenseBody.expense?.id ?? null;
+  record(
+    'create expense with start/end year',
+    timelineExpenseRes.status === 201 &&
+      timelineExpenseBody.expense?.startYear === 2026 &&
+      timelineExpenseBody.expense?.endYear === 2026 &&
+      timelineExpenseBody.expense?.amount === 100000,
+    timelineExpenseBody.error ?? `expense=${timelineExpenseId}`
+  );
+
+  if (timelineExpenseId) {
+    const timelineExpenseUpdateRes = await updateExpense(
+      await authRequest(
+        `/api/clients/${client.id}/strategy-plans/${planId}/expenses/${timelineExpenseId}`,
+        doctorToken,
+        {
+          method: 'PUT',
+          body: JSON.stringify({ endYear: 2027 }),
+        }
+      ),
+      {
+        params: Promise.resolve({
+          id: client.id,
+          planId,
+          expenseId: timelineExpenseId,
+        }),
+      }
+    );
+    const timelineExpenseUpdateBody = (await timelineExpenseUpdateRes.json()) as {
+      expense?: { endYear: number | null };
+      error?: string;
+    };
+    record(
+      'update expense start/end year',
+      timelineExpenseUpdateRes.status === 200 &&
+        timelineExpenseUpdateBody.expense?.endYear === 2027,
+      timelineExpenseUpdateBody.error ?? 'ok'
+    );
+  } else {
+    record('update expense start/end year', false, 'no timeline expense');
+  }
+
+  let sourceMilestoneId: string | null = null;
+  if (timelineStepId && timelineExpenseId) {
+    const sourceMilestoneRes = await createProjectionMilestone(
+      await authRequest(
+        `/api/clients/${client.id}/strategy-plans/${planId}/projection-milestones`,
+        doctorToken,
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            year: 2030,
+            title: 'Sources checkpoint',
+            type: StrategyProjectionMilestoneType.INCOME_CHECKPOINT,
+            expensesThisYear: 0,
+            cumulativeExpenses: 100000,
+            netCashflowThisYear: 12000,
+            capitalReturnedThisYear: 100000,
+            capitalReturnedToDate: 100000,
+            selectedStepIds: [timelineStepId],
+            selectedExpenseIds: [timelineExpenseId],
+          }),
+        }
+      ),
+      { params: planParams }
+    );
+    const sourceMilestoneBody = (await sourceMilestoneRes.json()) as {
+      projectionMilestone?: {
+        id: string;
+        expensesThisYear: number | null;
+        cumulativeExpenses: number | null;
+        selectedStepIds: string[];
+        selectedExpenseIds: string[];
+        selectedSteps: Array<{ stepId: string }>;
+        selectedExpenses: Array<{ expenseId: string }>;
+      };
+      error?: string;
+    };
+    sourceMilestoneId = sourceMilestoneBody.projectionMilestone?.id ?? null;
+    record(
+      'create milestone with selected step/expense ids',
+      sourceMilestoneRes.status === 201 &&
+        sourceMilestoneBody.projectionMilestone?.expensesThisYear === 0 &&
+        sourceMilestoneBody.projectionMilestone?.cumulativeExpenses === 100000 &&
+        sourceMilestoneBody.projectionMilestone?.selectedStepIds?.includes(
+          timelineStepId
+        ) &&
+        sourceMilestoneBody.projectionMilestone?.selectedExpenseIds?.includes(
+          timelineExpenseId
+        ) &&
+        (sourceMilestoneBody.projectionMilestone?.selectedSteps.length ?? 0) ===
+          1,
+      sourceMilestoneBody.error ?? `milestone=${sourceMilestoneId}`
+    );
+  } else {
+    record(
+      'create milestone with selected step/expense ids',
+      false,
+      'missing timeline step/expense'
+    );
+  }
+
+  if (sourceMilestoneId && timelineStepId && dealStepId) {
+    const replaceSourcesRes = await updateProjectionMilestone(
+      await authRequest(
+        `/api/clients/${client.id}/strategy-plans/${planId}/projection-milestones/${sourceMilestoneId}`,
+        doctorToken,
+        {
+          method: 'PUT',
+          body: JSON.stringify({
+            sourceStepIds: [dealStepId],
+            sourceExpenseIds: [],
+          }),
+        }
+      ),
+      {
+        params: Promise.resolve({
+          id: client.id,
+          planId,
+          milestoneId: sourceMilestoneId,
+        }),
+      }
+    );
+    const replaceSourcesBody = (await replaceSourcesRes.json()) as {
+      projectionMilestone?: {
+        selectedStepIds: string[];
+        selectedExpenseIds: string[];
+      };
+      error?: string;
+    };
+    record(
+      'update milestone replaces/clears selected source ids',
+      replaceSourcesRes.status === 200 &&
+        replaceSourcesBody.projectionMilestone?.selectedStepIds?.length === 1 &&
+        replaceSourcesBody.projectionMilestone?.selectedStepIds[0] ===
+          dealStepId &&
+        replaceSourcesBody.projectionMilestone?.selectedExpenseIds?.length === 0,
+      replaceSourcesBody.error ??
+        `steps=${replaceSourcesBody.projectionMilestone?.selectedStepIds?.join(',')}`
+    );
+
+    const preserveSourcesRes = await updateProjectionMilestone(
+      await authRequest(
+        `/api/clients/${client.id}/strategy-plans/${planId}/projection-milestones/${sourceMilestoneId}`,
+        doctorToken,
+        {
+          method: 'PUT',
+          body: JSON.stringify({ notes: 'preserve sources' }),
+        }
+      ),
+      {
+        params: Promise.resolve({
+          id: client.id,
+          planId,
+          milestoneId: sourceMilestoneId,
+        }),
+      }
+    );
+    const preserveSourcesBody = (await preserveSourcesRes.json()) as {
+      projectionMilestone?: {
+        notes: string | null;
+        selectedStepIds: string[];
+      };
+      error?: string;
+    };
+    record(
+      'update milestone without source ids preserves links',
+      preserveSourcesRes.status === 200 &&
+        preserveSourcesBody.projectionMilestone?.notes === 'preserve sources' &&
+        preserveSourcesBody.projectionMilestone?.selectedStepIds?.[0] ===
+          dealStepId,
+      preserveSourcesBody.error ?? 'ok'
+    );
+  } else {
+    record(
+      'update milestone replaces/clears selected source ids',
+      false,
+      'no source milestone'
+    );
+    record(
+      'update milestone without source ids preserves links',
+      false,
+      'no source milestone'
+    );
+  }
+
+  const badSourceStepRes = await createProjectionMilestone(
+    await authRequest(
+      `/api/clients/${client.id}/strategy-plans/${planId}/projection-milestones`,
+      doctorToken,
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          year: 2032,
+          title: 'Bad sources',
+          type: StrategyProjectionMilestoneType.CUSTOM,
+          selectedStepIds: [otherPlanStepId],
+        }),
+      }
+    ),
+    { params: planParams }
+  );
+  record(
+    'milestone rejects selectedStepIds from another plan',
+    badSourceStepRes.status === 400,
+    `status ${badSourceStepRes.status}`
+  );
+
   // --- 6. Fetch plan includes ---
   const getRes = await getPlan(
     await authRequest(
@@ -754,12 +1271,20 @@ async function main() {
       id: string;
       steps: Array<{
         id: string;
+        investmentAmount?: number | null;
         linkedDeal?: { id: string; name: string } | null;
       }>;
       connections: Array<{ id: string }>;
       expenses: Array<{
         id: string;
+        startYear?: number | null;
         coveredByStep?: { id: string } | null;
+      }>;
+      projectionMilestones: Array<{
+        id: string;
+        selectedStepIds?: string[];
+        selectedExpenseIds?: string[];
+        selectedSteps?: Array<{ stepId: string }>;
       }>;
     };
     error?: string;
@@ -779,6 +1304,48 @@ async function main() {
     'fetch plan includes expenses',
     Boolean(fetched?.expenses.some((e) => e.id === expenseId)),
     `expenses=${fetched?.expenses.length ?? 0}`
+  );
+  record(
+    'fetch plan includes projection milestones',
+    Boolean(
+      fetched?.projectionMilestones?.some((m) => m.id === milestoneId)
+    ),
+    `milestones=${fetched?.projectionMilestones?.length ?? 0}`
+  );
+  record(
+    'fetch plan includes timeline step fields',
+    Boolean(
+      timelineStepId &&
+        fetched?.steps.some(
+          (step) =>
+            step.id === timelineStepId && step.investmentAmount === 100000
+        )
+    ),
+    'missing timeline step fields'
+  );
+  record(
+    'fetch plan includes expense year fields',
+    Boolean(
+      timelineExpenseId &&
+        fetched?.expenses.some(
+          (expense) =>
+            expense.id === timelineExpenseId && expense.startYear === 2026
+        )
+    ),
+    'missing expense years'
+  );
+  record(
+    'fetch plan includes milestone selected source links',
+    Boolean(
+      sourceMilestoneId &&
+        fetched?.projectionMilestones?.some(
+          (m) =>
+            m.id === sourceMilestoneId &&
+            (m.selectedStepIds?.length ?? 0) === 1 &&
+            (m.selectedSteps?.length ?? 0) === 1
+        )
+    ),
+    'missing selected sources on detail'
   );
   record(
     'fetch plan includes linked deal details',

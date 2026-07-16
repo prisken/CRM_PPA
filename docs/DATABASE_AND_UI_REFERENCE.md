@@ -3,7 +3,7 @@
 > **Single source of truth** for schema, APIs, permissions, UI structure, and shipped feature status.  
 > Prefer this document over chat notes, old handoffs, or divergent markdown. User-facing PDFs (`USER_MANUAL_*.pdf`) and one-off migration guides under `docs/` are **supplements**, not replacements.
 
-**Last updated:** July 15, 2026 (Important Dates + calendar widget, Client Strategy Builder, deal participants, Lead Command Center)  
+**Last updated:** July 16, 2026 (Strategy Planner Timeline Economics; Client Strategy Overview report; Projection Journey; Board/List Outcome Summary; Important Dates + calendar; deal participants; Lead Command Center)  
 **Repository:** [CRM_PPA](https://github.com/prisken/CRM_PPA)  
 **Deployment branch:** `deploy`  
 **Last deployed commit:** `40c5518`  
@@ -25,7 +25,7 @@ This document describes the PostgreSQL database schema, API surface, and fronten
 | **Multi email / phone contacts** | ✅ `ClientContact` table; `emails`/`phones` arrays on create + details; Client 360 multi-entry UI; search/dupes/ingest/match any contact |
 | **Important Dates CRUD + time** | ✅ `ClientImportantDate` table; UTC wall-clock date/time; Client 360 panel + lead preview; activity log on create/update/delete |
 | **Important Dates Calendar** | ✅ `ImportantDatesCalendarWidget` on `/dashboard` and `/admin` Schedule sections; CLIENT/LEAD filters; SUPER_ADMIN sees all |
-| **Client Strategy Builder** | ✅ Plans/steps/connections/expenses; Client 360 workspace tab **Strategy Planner**; `npm run test:client-strategy` |
+| **Client Strategy Builder / Strategy Planner** | ✅ Plans/steps/connections/expenses + **Timeline Economics** (invest/income/expense years, capital returned) + **Projection Journey** milestones (source selection + suggested values) + **Client Strategy Overview** read-only report. Client 360 workspace tab **Strategy Planner** (not right rail). Board / List / Projection (`crm-client-strategy-planner-view`); overview `/clients/[id]/strategy-plans/[planId]/overview`. Outcome Summary MONTHLY + YEARLY÷12. Tests: `npm run test:client-strategy`, `npm run test:strategy-projection`, `npm run test:strategy-timeline`, `npm run test:strategy-report` |
 | Company hierarchy | ✅ Colleagues by company, add employee as lead |
 | Role-based pipeline advances | ✅ Standard users; super admin full control |
 | Standard user lead creation | ✅ Add Lead on dashboard with auto-assignment |
@@ -347,6 +347,7 @@ Standard users advance one stage at a time via **Move to Next Stage** + confirma
 | `StrategyExpenseFrequency` | `MONTHLY`, `YEARLY`, `ONE_TIME`, `CUSTOM` | `ClientStrategyExpense.frequency` |
 | `StrategyExpenseCategory` | `HOUSING`, `EDUCATION`, `HEALTHCARE`, `INSURANCE`, `RETIREMENT`, `LIFESTYLE`, `BUSINESS`, `DEBT`, `FAMILY_SUPPORT`, `EMERGENCY`, `OTHER` | `ClientStrategyExpense.category` |
 | `StrategyExpensePriority` | `LOW`, `MEDIUM`, `HIGH`, `CRITICAL` | `ClientStrategyExpense.priority` |
+| `StrategyProjectionMilestoneType` | `INITIAL_INVESTMENT`, `INCOME_CHECKPOINT`, `EXIT_SCENARIO`, `MATURITY_SCENARIO`, `CUSTOM` | `ClientStrategyProjectionMilestone.type` |
 | `TaskStatus` | `PENDING`, `IN_PROGRESS`, `COMPLETED`, `CANCELLED` | `Task.status` |
 | `ActivityLogType` | `NOTE`, `CALL`, `EMAIL`, `MEETING`, `SYSTEM` | `ClientActivityLog.type` |
 | `LeadSourceType` | `GOOGLE_FORMS`, `PROFIT_PULSE_ALLY`, `MANUAL`, `OTHER` | `ClientSourceRecord.source` |
@@ -481,13 +482,223 @@ Canonical important dates for clients/leads (shared `Client` model). See [Import
 
 ### Client Strategy Builder
 
-Structured strategy plans on Client 360 workspace tab **Strategy Planner** (`ClientStrategyBuilderWidget`). Permissions: view = core read; manage/delete = SUPER_ADMIN, legacy client `DOCTOR`, or deal-level `DOCTOR` participant. Tests: `npm run test:client-strategy`, `npm run test:strategy-report`.
+Structured strategy plans (`ClientStrategyPlan` + nested steps/connections/expenses/projection milestones). **UI:** Client 360 left/main **Workspace** tab **Strategy Planner** (`WorkspacePanel` → `ClientStrategyBuilderWidget`). Not shown in the right-side at-a-glance rail. Permissions: view = core read; manage/delete = SUPER_ADMIN, legacy client `DOCTOR`, or deal-level `DOCTOR` participant. Tests: `npm run test:client-strategy`, `npm run test:strategy-projection`, `npm run test:strategy-timeline`, `npm run test:strategy-report`.
+
+**Board / List / Projection:** Plan detail defaults to Board; toggle persists in `localStorage` key `crm-client-strategy-planner-view` (`board` | `list` | `projection`). List keeps vertical CRUD sections. Board (`StrategyPlannerBoard`) maps the plan as a canvas and shows compact timeline economics on step/expense cards. Projection (`StrategyProjectionJourneyView`) is a third mode for manually selected journey milestones (yearly cashflow + contributing sources).
+
+| Board element | Mapping |
+|---------------|---------|
+| Steps | Primary nodes ordered by `sortOrder`, then `createdAt` |
+| Adjacent connections | Lane between neighboring steps (`\|Δindex\| === 1`) |
+| Skip-step connections | Cross links / cross-plan lane |
+| Expenses with `coveredByStepId` | Under the matching step |
+| Uncovered expenses | Plan-level expenses lane |
+| Projection badges (optional) | Up to 3 compact chips when milestones link via `stepId` (projected income, Exit Scenario year, Total Asset Position) |
+| Step card economics | Invest, Income, Timeline, Total income, Capital back, Illustrative position (dashes when missing) |
+| Expense card economics | Amount/frequency, Timeline years, Total expense, Covered by (when linked) |
+
+**Board chrome / affordances:** compact collapsible legend (Step, Connection, Cross link, Step-linked expense, Plan-level expense). Manage-only: inline add connection between adjacent steps (prefills `fromStepId`/`toStepId`); add expense on a step (prefills `coveredByStepId`); step Move left/right (`lg+`) or up/down (mobile) via existing `PUT …/steps/reorder`. Confirm deletes can be cancelled (abort in-flight request).
+
+**Linked deals:** Step payload includes nested `linkedDeal` (name, value, status, …) from existing plan APIs. Board/List show a compact deal chip when linked; **View deal** scrolls to Deal Info (`#deal-info` / `#deal-{id}`) when that widget is present. No extra deal fetch.
+
+**Outcome Summary** (Board + List): recurring monthly coverage view. Includes `MONTHLY` amounts as-is and `YEARLY` as amount÷12 for both step income and expenses. `ONE_TIME` / `CUSTOM` excluded. Planning aid only — not a projection. Label: “Monthly coverage (MONTHLY + YEARLY÷12)”.
+
+#### Strategy Planner Timeline Economics
+
+**A. Purpose**
+
+Timeline Economics lets advisors enter **planning arithmetic** on strategy items (steps) and expenses: what the client invests, what income is expected and when, what expenses/premiums run over which years, and when capital may be returned. Projection milestones can select contributing items/expenses and optionally apply **suggested** yearly figures.
+
+Values are **illustrative** and based on **advisor-entered assumptions**. There is **no** growth, compounding, IRR, ROI, yield, or guaranteed-return math.
+
+**B. Strategy item (step) fields**
+
+Additive timeline fields on `ClientStrategyStep` (legacy `plannedAmount` / `expectedIncome*` retained):
+
+| Field | Notes |
+|--------|------|
+| `investmentAmount` | Planned invest amount |
+| `startYear` / `endYear` | Inclusive investment timeline years |
+| `incomeAmount` / `incomeFrequency` | Income amount and frequency |
+| `incomeStartYear` / `incomeEndYear` | Inclusive income window |
+| `capitalReturned` / `capitalReturnYear` | Capital expected back and the year it applies |
+
+UI labels (Board/List/modals): Invest, Income, Timeline, Total income, Capital back, Illustrative position.
+
+**C. Expense timeline fields**
+
+On `ClientStrategyExpense` (legacy timeline labels retained):
+
+| Field | Notes |
+|--------|------|
+| `amount` / `frequency` | Expense amount and frequency |
+| `startYear` / `endYear` | Inclusive expense window |
+| Helper total | `getStrategyExpenseTotal` — total over the inclusive range when amount/frequency/years are computable |
+
+UI labels: Amount, Timeline, Total expense, Covered by (when linked to a strategy item).
+
+**D. Projection milestone source selection**
+
+When creating/editing a projection milestone (`StrategyProjectionMilestoneEditModal`):
+
+1. Choose year, title, and milestone type.
+2. Select contributing **strategy items** (`selectedStepIds` → join `ClientStrategyProjectionMilestoneStep`).
+3. Select contributing **expenses** (`selectedExpenseIds` → join `ClientStrategyProjectionMilestoneExpense`).
+4. Review suggested calculations from `buildProjectionMilestoneSuggestionFromSources`.
+5. Click **Use suggested values** to copy suggestions into editable fields (not auto-applied while typing or when sources change).
+
+Persisted milestone money fields (advisor-entered unless suggestions are applied): `incomeThisPeriod`, `expensesThisYear`, `netCashflowThisYear`, `cumulativeIncome`, `cumulativeExpenses`, `capitalReturnedThisYear`, `capitalReturnedToDate`, `totalAssetPosition`, plus existing capital/income fields.
+
+**E. Helper calculation rules** (`lib/clientStrategyTimelineCalculations.ts`)
+
+| Rule | Behavior |
+|------|----------|
+| `MONTHLY` | Amount × 12 for a calendar year |
+| `YEARLY` | Amount as-is for a calendar year |
+| `ONE_TIME` | Amount applies in the start year (caller/year range rules) |
+| `CUSTOM` | Not auto-totalled (returns null) |
+| Year ranges | **Inclusive** start/end years |
+| Missing inputs | Helpers return null (UI shows —); out-of-range known windows return 0 where defined |
+
+Illustrative total position (step helper): total income over income window + capital returned when both are computable — **not** a forecast or guaranteed outcome.
+
+**F. Compliance**
+
+- Illustrative only; advisor-entered assumptions.
+- No growth, compounding, IRR, ROI, or yield.
+- No guaranteed returns / guarantee language.
+- Suggestions are helpers only; backend does **not** recompute or overwrite saved values on save.
+- Advisor must click **Use suggested values** to apply suggestions.
+
+**G. Tests**
+
+| Script | Coverage |
+|--------|----------|
+| `npm run test:strategy-timeline` | `scripts/test-client-strategy-timeline-calculations.ts` |
+| `npm run test:strategy-projection` | Projection Journey helpers / reorder / badges |
+| `npm run test:strategy-report` | Client Strategy Overview report helpers (economics + source chips) |
+| `npm run test:client-strategy` | Strategy Builder API integration (incl. timeline fields / sources) |
+
+#### Projection Journey (manual milestones)
+
+**A. Purpose**
+
+Projection Journey lets advisors **manually create selected projection milestones** for a strategy plan — presentational checkpoints such as:
+
+- Initial investment (`INITIAL_INVESTMENT`)
+- Income checkpoint (`INCOME_CHECKPOINT`)
+- Exit scenario (`EXIT_SCENARIO`)
+- Maturity scenario (`MATURITY_SCENARIO`)
+- Custom milestone (`CUSTOM`)
+
+It is **not** an automatic yearly forecast, multi-year generator, or investment calculator (no growth, compounding, IRR, ROI, or yield).
+
+**B. Usage note (user-facing)**
+
+> Projection Journey is designed for manually selected milestone years and scenarios. It does not generate a full year-by-year projection. Use it to present important points in the client's investment journey, such as the initial investment, income checkpoints, exit scenarios, and total asset position. Helper calculations are available for convenience, but saved values remain manually controlled by the advisor.
+
+**C. UI location**
+
+Third Strategy Planner mode alongside **Board** and **List**: toggle persists in `localStorage` key `crm-client-strategy-planner-view` (`board` | `list` | `projection`). Rendered by `StrategyProjectionJourneyView` inside `StrategyPlanDetailView`. Cards/table prioritize yearly earning/spending/net, cumulatives, capital returned, illustrative total position, and contributing source chips. Optional board badges when a milestone links to a step (`stepId`). Outcome Summary remains Board/List only.
+
+**D. Manual milestone behavior**
+
+- Projection Journey **only shows manually created** milestones.
+- It does **not** automatically generate every year.
+- Advisors control which years/scenarios appear.
+- **Saved values are advisor-entered** (stored exactly as submitted).
+- Advisors may select contributing strategy items and expenses for each milestone.
+
+**E. Helper math behavior**
+
+Two layers of optional UI suggestions:
+
+1. **Legacy month×months helpers** in `lib/clientStrategyProjectionHelpers.ts` (e.g. `monthlyIncome × monthsOfIncome`).
+2. **Timeline source suggestions** via `buildProjectionMilestoneSuggestionFromSources` (`lib/clientStrategyTimelineCalculations.ts`) from selected steps/expenses for the milestone year (income/expenses/net/cumulatives/capital returned/illustrative position).
+
+Rules:
+
+- Suggestions are **optional**.
+- Users must click **Use suggested values** (or legacy **Use suggestion**) to apply them (click-only; no auto-fill while typing).
+- The **backend does not force or recompute** these values on create/update.
+- Manually entered values take priority; changing sources after edits does not overwrite fields until Apply is clicked.
+- Compliance cue: suggestions are based on selected plans and expenses; values are illustrative and advisor-controlled.
+
+**F. Compliance / disclaimer (UI copy)**
+
+Shown on the Projection tab:
+
+> Projection milestones are illustrative. Figures are advisor-entered or applied from suggestions based on selected plans and expenses—they are not guarantees. Actual results may vary. This view is for planning and presentation purposes only.
+
+**G. Milestone types (`StrategyProjectionMilestoneType`)**
+
+`INITIAL_INVESTMENT` | `INCOME_CHECKPOINT` | `EXIT_SCENARIO` | `MATURITY_SCENARIO` | `CUSTOM`
+
+**H. Database model — `ClientStrategyProjectionMilestone`**
+
+Prisma model / table for plan-scoped milestones. FK column is `strategyPlanId` (route param `[planId]`).
+
+| Field | Type | Notes |
+|--------|------|-------|
+| `id` | TEXT PK | cuid |
+| `strategyPlanId` | TEXT FK → ClientStrategyPlan | CASCADE (plan id in APIs) |
+| `stepId` | TEXT FK → ClientStrategyStep | Optional SET NULL (legacy primary link) |
+| `year` | INT | Calendar year (~1900–2200) |
+| `title` | TEXT | |
+| `type` | StrategyProjectionMilestoneType | Default `CUSTOM` |
+| `monthlyIncome` | DECIMAL(12,2) | Optional |
+| `monthsOfIncome` | INT | Optional |
+| `annualIncome` | DECIMAL(12,2) | Optional |
+| `capitalInvested` | DECIMAL(12,2) | Optional |
+| `capitalRemaining` | DECIMAL(12,2) | Optional |
+| `incomeThisPeriod` | DECIMAL(12,2) | Optional — earning this year |
+| `cumulativeIncome` | DECIMAL(12,2) | Optional; advisor-entered |
+| `totalAssetPosition` | DECIMAL(12,2) | Optional; illustrative total position |
+| `expensesThisYear` | DECIMAL(12,2) | Optional — spending this year |
+| `cumulativeExpenses` | DECIMAL(12,2) | Optional |
+| `netCashflowThisYear` | DECIMAL(12,2) | Optional |
+| `capitalReturnedThisYear` | DECIMAL(12,2) | Optional |
+| `capitalReturnedToDate` | DECIMAL(12,2) | Optional |
+| `notes` | TEXT | Optional |
+| `sortOrder` | INT | Default 0; same-year reorder |
+| `createdAt` / `updatedAt` | TIMESTAMP | |
+
+**Join tables (source selection):**
+
+| Model | Links | Notes |
+|--------|-------|-------|
+| `ClientStrategyProjectionMilestoneStep` | milestone ↔ step | Selected contributing strategy items (`selectedStepIds`) |
+| `ClientStrategyProjectionMilestoneExpense` | milestone ↔ expense | Selected contributing expenses (`selectedExpenseIds`) |
+
+**I. API routes**
+
+Base: `/api/clients/[id]/strategy-plans/[planId]/projection-milestones`
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| GET | `…/projection-milestones` | View (core read) | List milestones for the plan (includes selected sources when present) |
+| POST | `…/projection-milestones` | Manage | Create milestone (optional `selectedStepIds` / `selectedExpenseIds`; no helper overwrite) |
+| PUT/PATCH | `…/projection-milestones/[milestoneId]` | Manage | Update milestone + source links |
+| DELETE | `…/projection-milestones/[milestoneId]` | Manage | Delete milestone |
+| PUT | `…/projection-milestones/reorder` | Manage | Body `{ orderedIds }` — same-year Move up/down |
+
+Plan `GET` includes `projectionMilestones` with nested selected sources. Permissions match other strategy nested resources (`lib/clientStrategyPermissions.ts`).
+
+**J. Known limitations**
+
+- No automatic year generation / multi-year generator / year-by-year forecast (unless built separately later).
+- No investment growth, compounding, IRR, ROI, or yield calculations.
+- Suggestions are helper calculations only; advisor must click **Use suggested values** to apply.
+- No commission/deal injection into milestones.
+- Reorder is only within the same calendar year.
+- No dedicated browser E2E yet.
+- No deep link to the Projection sub-view; no seed/demo journey data.
 
 #### Client Strategy Overview / Strategy Map (read-only report)
 
 **A. Purpose**
 
-Client-facing, **read-only** visual overview of a strategy plan — separate from advisor management views (Board / List / Projection). Helps clients understand the plan, perks, manually selected milestones, and illustrative journey at a glance. **Not** an automatic year-by-year forecast or investment calculator.
+Client-facing, **read-only** visual overview of a strategy plan — separate from advisor management views (Board / List / Projection). Helps clients understand the plan, perks, manually selected milestones, timeline economics, and illustrative journey at a glance. **Not** an automatic year-by-year forecast or investment calculator.
 
 **B. UI location**
 
@@ -503,16 +714,17 @@ Does **not** add a fourth Board/List/Projection management mode.
 
 **C. Data sources**
 
-Loaded server-side via existing `loadStrategyPlanDetail` + `formatStrategyPlanDetail` (no new tables). Mapped with `toClientStrategyReportPlanInput` (`lib/clientStrategyReportHelpers.ts`):
+Loaded server-side via existing `loadStrategyPlanDetail` + `formatStrategyPlanDetail` (no new tables beyond timeline economics already on plan detail). Mapped with `toClientStrategyReportPlanInput` (`lib/clientStrategyReportHelpers.ts`):
 
 | Source | Used for |
 |--------|----------|
 | `ClientStrategyPlan` | Title, `clientGoal`, `expectedOutcome`, `description`, `status` |
-| `ClientStrategyStep` | Step count; linked step chips when milestone `stepId` matches |
-| `ClientStrategyProjectionMilestone` | Map nodes, summary cards, perks — **persisted values only** |
+| `ClientStrategyStep` | Step count; investment/income/capital fields; linked / selected strategy-item chips |
+| `ClientStrategyExpense` | Expense totals and selected expense chips |
+| `ClientStrategyProjectionMilestone` | Map nodes, summary cards, perks — **persisted values preferred** |
 | Client name | `getClient360CoreData` for snapshot header |
 
-No backend recomputation, growth/compounding, or forced helper values on the report.
+No backend recomputation, growth/compounding, or forced helper values on the report. Timeline helpers may support display totals only when clearly derived from entered step/expense fields; they never override saved milestone values.
 
 **D. Client Strategy Map (node behavior)**
 
@@ -524,30 +736,32 @@ Generated by `buildClientStrategyMapNodes` — CSS layout only (no canvas, graph
 | Milestones | Sorted `year` ASC → `sortOrder` ASC → `createdAt` ASC → `id` |
 | Outcome | `expectedOutcome` |
 
-Per milestone node (concise): type label, title, year, primary/secondary metrics (when stored), compliance-safe benefit text, optional linked step chip, truncated notes preview.
+Per milestone node (concise): year; spending/earning/net this year; cumulative income/expenses; capital returned; illustrative total position; compliance-safe benefit text; compact chips for selected strategy items and expenses; truncated notes preview. Missing values → `—`.
 
 **E. At-a-glance summary cards**
 
-From `buildClientStrategyReportSummary` (reuses Projection Journey summary selection; missing → `—`):
+From `buildClientStrategyReportSummary` (missing → `—`):
 
-- Initial Capital
-- Target Monthly Income
-- Projected Cumulative Income
-- Projected Asset Position
+- Total planned investment
+- Income this year / Target income (monthly)
+- Total projected income
+- Total planned expenses
+- Capital expected back
+- Illustrative total position
 - Timeline (first/latest milestone year)
-- Milestones / Steps count
+- Milestones / items count
 
 **F. Plan perks / benefits**
 
-From `buildClientStrategyPerks` — deterministic list from data presence (roadmap, income visibility, capital position, advisor-guided steps, exit/maturity, manually controlled assumptions). Compliance-safe copy; does **not** imply guaranteed outcomes.
+From `buildClientStrategyPerks` — deterministic list from data presence (roadmap, income visibility, expense/premium visibility, capital position, advisor-guided contributions, exit/maturity, manually controlled assumptions). Compliance-safe copy; does **not** imply guaranteed outcomes.
 
 **G. Assumptions / disclaimer (UI copy)**
 
-> Projection milestones are illustrative and based on manually entered assumptions. Actual results may vary. This view is for planning and presentation purposes only.
+> Values are illustrative and based on advisor-entered assumptions.
 
 Also stated on the report:
 
-- Values are manually entered by the advisor.
+- Values shown are manually entered by the advisor.
 - Helper suggestions (if used when editing milestones) are optional and never forced into this report.
 - This report does not automatically generate year-by-year projections.
 - No backend recomputation or forced values.
@@ -563,8 +777,10 @@ Also stated on the report:
 
 | Module / script | Role |
 |-----------------|------|
-| `lib/clientStrategyReportHelpers.ts` | `buildClientStrategyReportSummary`, `buildClientStrategyMapNodes`, `buildClientStrategyPerks`, `getClientBenefitForMilestoneType`, `getPrimaryMetricForMilestone`, `toClientStrategyReportPlanInput` |
+| `lib/clientStrategyTimelineCalculations.ts` | Timeline economics helpers (step/expense totals; milestone source suggestions) |
+| `lib/clientStrategyReportHelpers.ts` | `buildClientStrategyReportSummary`, `buildClientStrategyMapNodes`, `buildClientStrategyPerks`, `toClientStrategyReportPlanInput` |
 | `npm run test:strategy-report` | `scripts/test-client-strategy-report-helpers.ts` |
+| `npm run test:strategy-timeline` | `scripts/test-client-strategy-timeline-calculations.ts` |
 
 **J. Known limitations**
 
@@ -574,6 +790,7 @@ Also stated on the report:
 - No dedicated browser E2E yet.
 - No custom node positioning or coordinate storage.
 - Back link does not re-open the same plan in plan detail (no plan deep-link).
+- Still no compounding/growth/IRR/ROI/yield; no automatic year-by-year forecast generator.
 
 #### `ClientStrategyPlan`
 
@@ -597,10 +814,15 @@ Also stated on the report:
 | `linkedDealId` | TEXT FK → Deal | Optional SET NULL |
 | `title` | TEXT | |
 | `stepType` | StrategyStepType | Default `MANUAL` |
-| `plannedAmount` | DECIMAL(12,2) | Optional |
+| `plannedAmount` | DECIMAL(12,2) | Optional (legacy) |
 | `amountDescription` / `purpose` / `expectedAchievement` / `timelineLabel` | TEXT | Optional |
-| `expectedIncomeAmount` | DECIMAL(12,2) | Optional |
-| `expectedIncomeFrequency` | StrategyIncomeFrequency | Optional |
+| `expectedIncomeAmount` | DECIMAL(12,2) | Optional (legacy) |
+| `expectedIncomeFrequency` | StrategyIncomeFrequency | Optional (`MONTHLY` / `YEARLY` feed Outcome Summary) |
+| `startYear` / `endYear` | INT | Optional inclusive investment timeline |
+| `investmentAmount` | DECIMAL(12,2) | Optional planned invest |
+| `incomeAmount` / `incomeFrequency` | DECIMAL / enum | Optional timeline income |
+| `incomeStartYear` / `incomeEndYear` | INT | Optional inclusive income window |
+| `capitalReturned` / `capitalReturnYear` | DECIMAL / INT | Optional capital back |
 | `sortOrder` | INT | Default 0 |
 
 #### `ClientStrategyConnection`
@@ -609,9 +831,9 @@ Links two steps in a plan (`fromStepId` → `toStepId`) with `connectionType` an
 
 #### `ClientStrategyExpense`
 
-Plan expenses with `category`, `frequency`, optional `coveredByStepId`, priority, amounts, timeline labels.
+Plan expenses with `category`, `frequency` (`MONTHLY` / `YEARLY` included in Outcome Summary; `ONE_TIME` / `CUSTOM` not), optional `coveredByStepId`, priority, amounts, legacy timeline labels, and inclusive `startYear` / `endYear` for timeline economics.
 
-**APIs:** under `/api/clients/[id]/strategy-plans` (list/create plan; nested `steps`, `connections`, `expenses`, reorder).
+**APIs (plans + nested):** under `/api/clients/[id]/strategy-plans` (list/create plan; nested `steps`, `connections`, `expenses`, `projection-milestones` — see Projection Journey and Timeline Economics sections above).
 
 ---
 
@@ -903,6 +1125,8 @@ erDiagram
 | `20260702090904_add_deal_participants` | `DealType` enum; `Deal.dealType` (default `CUSTOM`); `DealParticipantRole` enum; `DealParticipant` table |
 | `20260702094324_add_deal_participant_returnables` | `isReturnableRequired`, `returnablePercent`, `returnableAmount` on `DealParticipant` |
 | `20260715181000_add_client_strategy_builder` | Client Strategy Builder tables (plans, steps, connections, expenses) |
+| `20260716010000_add_strategy_projection_milestones` | `StrategyProjectionMilestoneType` enum; `ClientStrategyProjectionMilestone` table |
+| `20260716120000_add_strategy_timeline_economics` | Step/expense timeline fields; milestone cashflow fields; `ClientStrategyProjectionMilestoneStep` / `…Expense` join tables |
 | `20260715184000_add_client_important_dates` | `client_important_dates` table + backfill from legacy JSON; dual-write retained |
 | `20260715211000_add_client_contacts` | `ClientContactKind` enum; `client_contacts` multi email/phone + backfill from `Client.email`/`phone` |
 
@@ -1358,6 +1582,11 @@ Per merge (pairwise step or full `mergeClients` call), in a **single Prisma tran
 | POST | `/api/clients/[id]/strategy-plans` | SUPER_ADMIN, legacy client `DOCTOR`, or deal `DOCTOR` participant | Create plan |
 | GET/PUT/PATCH/DELETE | `/api/clients/[id]/strategy-plans/[planId]` | View = core read; mutate = manage (above) | Plan detail / update / delete |
 | POST/PUT/PATCH/DELETE | `.../steps`, `.../connections`, `.../expenses` (+ reorder) | Manage | Nested Strategy Builder resources — see `lib/clientStrategyPermissions.ts` |
+| GET | `/api/clients/[id]/strategy-plans/[planId]/projection-milestones` | View = core read | List Projection Journey milestones for the plan |
+| POST | `/api/clients/[id]/strategy-plans/[planId]/projection-milestones` | Manage | Create milestone (manual values only; backend does not recompute helpers) |
+| PUT/PATCH | `/api/clients/[id]/strategy-plans/[planId]/projection-milestones/[milestoneId]` | Manage | Update milestone |
+| DELETE | `/api/clients/[id]/strategy-plans/[planId]/projection-milestones/[milestoneId]` | Manage | Delete milestone |
+| PUT | `/api/clients/[id]/strategy-plans/[planId]/projection-milestones/reorder` | Manage | Body `{ orderedIds }` — same-year Move up/down only |
 | GET | `/api/clients/[id]/deals` | Deal view access (session) — super admin, relationship/follow-up assignee, legacy doctor, or deal-level doctor participant | List deals. Response: `{ client_id, deals: DealResponse[] }` each with `participants` array |
 | POST | `/api/clients/[id]/deals` | Deal create access (session) | Create deal. Body: `name`, `dealValue`, `totalCommission`, `status`, optional `dealType`, optional `participants[]`. Without `participants`, builds defaults from client assignments + `dealType`. Creates returnables if `WON` |
 | PUT | `/api/clients/[id]/deals/[dealId]` | Deal manage access (session) | Update deal. Body may include `dealType`, `participants[]` (replaces all rows). Participant-backed WON deals require 100% split + amount/returnable validation (`Validation failed` + `details`). Triggers returnable generation on transition to `WON` |
@@ -1961,24 +2190,22 @@ Lazy-loads tab content via `GET /api/clients/[id]/workspace?tab=...` when a tab 
 | Tab | Query param | Component | Features |
 |-----|-------------|-----------|----------|
 | Strategy & Tasks | `strategy-tasks` | `StrategyAndTasks` | Edit strategy text, create/edit/complete/delete tasks (super admin or `DOCTOR`) |
-| Strategy Planner | `strategy-planner` | `ClientStrategyBuilderWidget` | Structured plans/steps/connections/expenses. Shown only when `strategyAccess.canView`. Deep link `#strategy-planner`. Fetches its own APIs (not workspace tab payload) |
+| Strategy Planner | `strategy-planner` | `ClientStrategyBuilderWidget` (+ `StrategyPlanDetailView`, `StrategyPlannerBoard`, `StrategyProjectionJourneyView`) | Structured plans with timeline economics. Board/List/Projection (`crm-client-strategy-planner-view`); **View client overview** → `/clients/[id]/strategy-plans/[planId]/overview`; Projection Journey = manual illustrative milestones with optional source selection; board/list show Invest/Income/Timeline totals; Outcome Summary MONTHLY + YEARLY÷12 on Board/List. Shown when `strategyAccess.canView`. Deep link `#strategy-planner`. Own strategy-plan APIs. Stays mounted after first visit |
 | Activity & Notes | `activity-notes` | `ActivityLog` | View merged activity, add/edit/delete interactions, filter by type |
 
 **Tab navigation:** Horizontal tabs on `md+` (`hidden md:flex`); Headless UI dropdown on mobile (`block md:hidden`).
 
-Deep link: `#activity-notes` opens Activity tab and scrolls into view.
+Deep links: `#strategy-planner` opens Strategy Planner (when allowed); `#activity-notes` opens Activity — both scroll the workspace into view. Plan overview: `/clients/[id]/strategy-plans/[planId]/overview` (view permission; separate from workspace tab). Deal Info anchors: `#deal-info`, `#deal-{dealId}` (expand list + scroll when linked from Strategy Planner).
 
-**Right column — At-a-glance widgets:**
+**Right column — At-a-glance widgets** (Strategy Planner is **not** in this rail):
 
 | Widget | Component | Who can edit |
 |--------|-----------|--------------|
 | Client Details | `ClientDetailsWidget` + `ClientDetailsEditModal` + `ImportantDatesPanel` | Super admin **or** `RELATIONSHIP` assignee (details + important dates CRUD) |
-| Deal Info | `DealInfoWidget` + `DealEditModal` | Users with deal view access — participant table per deal, deal type label, committed/potential values, secured commission from participant rows. Amber **legacy fallback** warning when `usesLegacyCommissionFallback`. **Edit** when `canCreateDeal` / `canManageDeal(dealId)` |
+| Deal Info | `DealInfoWidget` + `DealEditModal` | Users with deal view access — participant table per deal, deal type label, committed/potential values, secured commission from participant rows. Amber **legacy fallback** warning when `usesLegacyCommissionFallback`. **Edit** when `canCreateDeal` / `canManageDeal(dealId)`. Anchors `#deal-info` / `#deal-{id}` for Strategy Planner View deal |
 | Assigned Team | `AssignedTeamWidget` | Super admin assigns **Relationship** and **Follow-up** only. Legacy client-level doctors in collapsed section. No new doctor assignments at client level |
 | Company Hierarchy | `CompanyHierarchyWidget` | Receives `hierarchy` prop from server; add employee leads via `POST /api/clients/[id]/employees` |
 | Lead Source Records | `ClientSourceRecordsWidget` | Fetches `GET /api/clients/[id]/source-records` on mount; collapsible raw payload per ingest |
-
-**Strategy Planner** lives in the left workspace tab `strategy-planner` (not the right column). See workspace tabs above.
 
 ---
 
@@ -2061,8 +2288,22 @@ Deep link: `#activity-notes` opens Activity tab and scrolls into view.
 | `ClientDetailsWidget` | `src/components/clients/ClientDetailsWidget.tsx` |
 | `ClientDetailsEditModal` | `src/components/clients/ClientDetailsEditModal.tsx` |
 | `ImportantDatesPanel` | `src/components/clients/ImportantDatesPanel.tsx` |
-| `ClientStrategyBuilderWidget` | `src/components/clients/ClientStrategyBuilderWidget.tsx` |
-| `StrategyPlanDetailView` / edit/delete modals | `src/components/clients/StrategyPlan*.tsx`, `StrategyStepEditModal.tsx`, `StrategyConnectionEditModal.tsx`, `StrategyExpenseEditModal.tsx` |
+| `ClientStrategyBuilderWidget` | `src/components/clients/ClientStrategyBuilderWidget.tsx` | Strategy Planner tab — plan list + detail host |
+| `StrategyPlanDetailView` | `src/components/clients/StrategyPlanDetailView.tsx` | Board/List/Projection toggle, CRUD, reorder, Outcome Summary, Projection wiring |
+| `StrategyPlannerBoard` | `src/components/clients/StrategyPlannerBoard.tsx` | Board canvas, legend, linked-deal chip / View deal, timeline economics on cards, optional projection badges |
+| `StrategyProjectionJourneyView` | `src/components/clients/StrategyProjectionJourneyView.tsx` | Projection Journey summary / yearly cashflow timeline / table + source chips + disclaimer |
+| `StrategyProjectionMilestoneEditModal` | `src/components/clients/StrategyProjectionMilestoneEditModal.tsx` | Create/edit milestones; source checkboxes; click-to-apply **Use suggested values** |
+| `lib/clientStrategyTimelineCalculations.ts` | `lib/clientStrategyTimelineCalculations.ts` | Timeline economics helpers + `buildProjectionMilestoneSuggestionFromSources` |
+| `strategyTimelineEconomicsDisplay.ts` | `src/components/clients/strategyTimelineEconomicsDisplay.ts` | Compact Board/List economics labels |
+| `ClientStrategyOverviewReport` | `src/components/clients/ClientStrategyOverviewReport.tsx` | Read-only Client Strategy Overview report shell (sections 1–6) |
+| `ClientStrategyOverviewPageShell` | `src/components/clients/ClientStrategyOverviewPageShell.tsx` | Overview page chrome: back link, Print, report host |
+| `ClientStrategyMap` / `ClientStrategyMapNode` | `src/components/clients/ClientStrategyMap.tsx`, `ClientStrategyMapNode.tsx` | CSS node map (no canvas/graph) |
+| `ClientStrategyMapSummary` | `src/components/clients/ClientStrategyMapSummary.tsx` | At-a-glance summary cards |
+| `ClientStrategyPerks` | `src/components/clients/ClientStrategyPerks.tsx` | Plan perks / benefits list |
+| `lib/clientStrategyReportHelpers.ts` | `lib/clientStrategyReportHelpers.ts` | Report view-model builders (summary, map nodes, perks) |
+| `strategyPlannerViewPreference` | `src/components/clients/strategyPlannerViewPreference.ts` | `localStorage` key `crm-client-strategy-planner-view` (`board` \| `list` \| `projection`) |
+| Strategy plan/step/connection/expense modals | `StrategyPlanEditModal`, `StrategyPlanDeleteModal`, `StrategyStepEditModal`, `StrategyConnectionEditModal`, `StrategyExpenseEditModal` | Prefills for adjacent connection / step expense create |
+| `ConfirmActionModal` | `src/components/ui/ConfirmActionModal.tsx` | Shared confirms; cancel aborts in-flight strategy deletes |
 | `DealInfoWidget` | `src/components/clients/DealInfoWidget.tsx` | Deal list, participant display, returnable summary per doctor |
 | `DealEditModal` | `src/components/clients/DealEditModal.tsx` | Participant editor: user picker, external names, templates, doctor returnables, safe template apply |
 | `ParticipantUserPicker` | `src/components/clients/ParticipantUserPicker.tsx` | Searchable user select for internal participant rows |
@@ -2356,6 +2597,9 @@ npx tsx scripts/test-lead-command-center.ts # Lead Command Center lib smoke test
 npm run test:merge-custom-fields            # mergeClients + fieldOverrides integration test
 npm run test:client-access                  # Client 360 access helpers
 npm run test:client-strategy                # Strategy Builder API integration
+npm run test:strategy-projection            # Projection Journey helper math / sort / badges
+npm run test:strategy-timeline              # Timeline economics helpers (MONTHLY×12, inclusive years, source suggestions)
+npm run test:strategy-report                # Client Strategy Overview report helpers
 npm run test:important-dates                # Important Dates CRUD + permissions + activity log
 npm run test:important-dates-calendar       # Calendar visibility + range filters
 npm run test:all                            # Full suite (includes HTTP tests — needs running server)
@@ -2570,4 +2814,7 @@ Related: `lib/pipelinePermissions.ts` exports `getNextPipelineStage`, `canUserAd
 | Legacy models | `Strategy` + `Document` coexist with `Client.strategyText`; Client 360 uses `strategyText` |
 | Legacy endpoints | `GET /api/get-dashboard-data` and `GET /api/dashboard/standard` — tests/backward compat only; live UI uses per-widget routes |
 | Skeleton loaders | Standard dashboard only; super admin and Client 360 use inline pulse placeholders |
-| Client Strategy Overview | Read-only report at `/clients/[id]/strategy-plans/[planId]/overview`. View permission only. CSS node map (no DnD/canvas/graph/coordinates). Uses persisted milestone values; no auto year-by-year generation. Browser print only — no PDF/share link/versioning/approval workflow/E2E. Back link to `#strategy-planner` does not re-open same plan |
+| Strategy Planner board | Expense reorder API exists; no board UI for expense reorder yet. Board/List/Projection preference is browser `localStorage` only. Outcome Summary excludes `ONE_TIME` / `CUSTOM` income and expenses. Timeline economics cards show dashes for missing values. Internal component name remains `ClientStrategyBuilderWidget` |
+| Strategy Planner Timeline Economics | Planning arithmetic only — no compounding/growth/IRR/ROI/yield. Suggestions are helpers; advisor must click **Use suggested values**. No automatic year-by-year forecast generator. Backend never overwrites saved milestone values |
+| Strategy Projection Journey | Manual milestones only (no auto year series). Source selection of strategy items/expenses optional. No growth/compounding/IRR/ROI/yield. No commission/deal injection. Reorder same calendar year only. Helper math is UI click-to-apply only (backend never recomputes). No deep link to Projection sub-view; no seed/demo data; no dedicated browser E2E yet |
+| Client Strategy Overview | Read-only report at `/clients/[id]/strategy-plans/[planId]/overview`. View permission only. CSS node map (no DnD/canvas/graph/coordinates). Prefers persisted milestone values; may use timeline helpers only as safe display totals. No auto year-by-year generation. Browser print only — no PDF/share link/versioning/approval workflow/E2E. Back link to `#strategy-planner` does not re-open same plan |

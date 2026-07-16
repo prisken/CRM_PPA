@@ -5,6 +5,7 @@ import {
   StrategyExpensePriority,
   StrategyIncomeFrequency,
   StrategyPlanStatus,
+  StrategyProjectionMilestoneType,
   StrategyStepType,
 } from '@prisma/client';
 
@@ -43,6 +44,15 @@ export type CreateStrategyStepInput = {
   expectedIncomeAmount?: number | null;
   expectedIncomeFrequency?: StrategyIncomeFrequency | null;
   timelineLabel?: string | null;
+  startYear?: number | null;
+  endYear?: number | null;
+  investmentAmount?: number | null;
+  incomeAmount?: number | null;
+  incomeFrequency?: StrategyIncomeFrequency | null;
+  incomeStartYear?: number | null;
+  incomeEndYear?: number | null;
+  capitalReturned?: number | null;
+  capitalReturnYear?: number | null;
   sortOrder?: number;
 };
 
@@ -57,6 +67,15 @@ export type UpdateStrategyStepInput = {
   expectedIncomeAmount?: number | null;
   expectedIncomeFrequency?: StrategyIncomeFrequency | null;
   timelineLabel?: string | null;
+  startYear?: number | null;
+  endYear?: number | null;
+  investmentAmount?: number | null;
+  incomeAmount?: number | null;
+  incomeFrequency?: StrategyIncomeFrequency | null;
+  incomeStartYear?: number | null;
+  incomeEndYear?: number | null;
+  capitalReturned?: number | null;
+  capitalReturnYear?: number | null;
   sortOrder?: number;
 };
 
@@ -85,6 +104,8 @@ export type CreateStrategyExpenseInput = {
   frequency?: StrategyExpenseFrequency;
   startTimelineLabel?: string | null;
   endTimelineLabel?: string | null;
+  startYear?: number | null;
+  endYear?: number | null;
   priority?: StrategyExpensePriority;
   purpose?: string | null;
   coveredByStepId?: string | null;
@@ -99,12 +120,68 @@ export type UpdateStrategyExpenseInput = {
   frequency?: StrategyExpenseFrequency;
   startTimelineLabel?: string | null;
   endTimelineLabel?: string | null;
+  startYear?: number | null;
+  endYear?: number | null;
   priority?: StrategyExpensePriority;
   purpose?: string | null;
   coveredByStepId?: string | null;
   notes?: string | null;
   sortOrder?: number;
 };
+
+export type CreateStrategyProjectionMilestoneInput = {
+  year: number;
+  title: string;
+  type: StrategyProjectionMilestoneType;
+  stepId?: string | null;
+  monthlyIncome?: number | null;
+  monthsOfIncome?: number | null;
+  annualIncome?: number | null;
+  capitalInvested?: number | null;
+  capitalRemaining?: number | null;
+  incomeThisPeriod?: number | null;
+  cumulativeIncome?: number | null;
+  totalAssetPosition?: number | null;
+  expensesThisYear?: number | null;
+  cumulativeExpenses?: number | null;
+  netCashflowThisYear?: number | null;
+  capitalReturnedThisYear?: number | null;
+  capitalReturnedToDate?: number | null;
+  /** Replace milestone→step contribution links. Omitted on update = preserve. */
+  selectedStepIds?: string[];
+  /** Replace milestone→expense contribution links. Omitted on update = preserve. */
+  selectedExpenseIds?: string[];
+  notes?: string | null;
+  sortOrder?: number;
+};
+
+export type UpdateStrategyProjectionMilestoneInput = {
+  year?: number;
+  title?: string;
+  type?: StrategyProjectionMilestoneType;
+  stepId?: string | null;
+  monthlyIncome?: number | null;
+  monthsOfIncome?: number | null;
+  annualIncome?: number | null;
+  capitalInvested?: number | null;
+  capitalRemaining?: number | null;
+  incomeThisPeriod?: number | null;
+  cumulativeIncome?: number | null;
+  totalAssetPosition?: number | null;
+  expensesThisYear?: number | null;
+  cumulativeExpenses?: number | null;
+  netCashflowThisYear?: number | null;
+  capitalReturnedThisYear?: number | null;
+  capitalReturnedToDate?: number | null;
+  selectedStepIds?: string[];
+  selectedExpenseIds?: string[];
+  notes?: string | null;
+  sortOrder?: number;
+};
+
+/** Inclusive calendar-year bounds for projection milestones. */
+export const STRATEGY_PROJECTION_YEAR_MIN = 1900;
+export const STRATEGY_PROJECTION_YEAR_MAX = 2200;
 
 function fail(error: string): ValidationFailure {
   return { ok: false, error };
@@ -220,6 +297,27 @@ function parseOptionalMoney(
   return { ok: true, data: numericValue };
 }
 
+/** Optional money that may be negative (e.g. net cashflow). */
+function parseOptionalSignedMoney(
+  value: unknown,
+  fieldName: string
+): ValidationResult<number | null | undefined> {
+  if (value === undefined) {
+    return { ok: true, data: undefined };
+  }
+
+  if (value === null || value === '') {
+    return { ok: true, data: null };
+  }
+
+  const numericValue = Number(value);
+  if (!Number.isFinite(numericValue)) {
+    return fail(`${fieldName} must be a finite number`);
+  }
+
+  return { ok: true, data: numericValue };
+}
+
 function parseOptionalSortOrder(
   value: unknown,
   fieldName: string
@@ -234,6 +332,175 @@ function parseOptionalSortOrder(
   }
 
   return { ok: true, data: numericValue };
+}
+
+function parseRequiredYear(
+  value: unknown,
+  fieldName: string
+): ValidationResult<number> {
+  if (value === undefined || value === null || value === '') {
+    return fail(`${fieldName} is required`);
+  }
+
+  const numericValue = Number(value);
+  if (!Number.isFinite(numericValue) || !Number.isInteger(numericValue)) {
+    return fail(`${fieldName} must be an integer`);
+  }
+
+  if (
+    numericValue < STRATEGY_PROJECTION_YEAR_MIN ||
+    numericValue > STRATEGY_PROJECTION_YEAR_MAX
+  ) {
+    return fail(
+      `${fieldName} must be between ${STRATEGY_PROJECTION_YEAR_MIN} and ${STRATEGY_PROJECTION_YEAR_MAX}`
+    );
+  }
+
+  return { ok: true, data: numericValue };
+}
+
+function parseOptionalYear(
+  value: unknown,
+  fieldName: string
+): ValidationResult<number | undefined> {
+  if (value === undefined) {
+    return { ok: true, data: undefined };
+  }
+
+  return parseRequiredYear(value, fieldName);
+}
+
+/** Optional calendar year that may be cleared with null. */
+function parseOptionalNullableYear(
+  value: unknown,
+  fieldName: string
+): ValidationResult<number | null | undefined> {
+  if (value === undefined) {
+    return { ok: true, data: undefined };
+  }
+
+  if (value === null || value === '') {
+    return { ok: true, data: null };
+  }
+
+  const parsed = parseRequiredYear(value, fieldName);
+  if (!parsed.ok) {
+    return parsed;
+  }
+
+  return { ok: true, data: parsed.data };
+}
+
+/**
+ * Optional id list. Accepts primary key or alias (e.g. selectedStepIds / sourceStepIds).
+ * undefined = omitted; null or [] = clear; non-empty array = replace set.
+ */
+function parseOptionalIdList(
+  input: Record<string, unknown>,
+  primaryKey: string,
+  aliasKey: string
+): ValidationResult<string[] | undefined> {
+  const hasPrimary = Object.prototype.hasOwnProperty.call(input, primaryKey);
+  const hasAlias = Object.prototype.hasOwnProperty.call(input, aliasKey);
+
+  if (!hasPrimary && !hasAlias) {
+    return { ok: true, data: undefined };
+  }
+
+  const primaryValue = hasPrimary ? input[primaryKey] : undefined;
+  const aliasValue = hasAlias ? input[aliasKey] : undefined;
+
+  if (hasPrimary && hasAlias) {
+    const primaryList = normalizeIdListValue(primaryValue, primaryKey);
+    if (!primaryList.ok) return primaryList;
+    const aliasList = normalizeIdListValue(aliasValue, aliasKey);
+    if (!aliasList.ok) return aliasList;
+
+    const a = primaryList.data ?? [];
+    const b = aliasList.data ?? [];
+    if (a.length !== b.length || a.some((id, index) => id !== b[index])) {
+      return fail(`${primaryKey} and ${aliasKey} must match when both are provided`);
+    }
+
+    return { ok: true, data: a };
+  }
+
+  return normalizeIdListValue(
+    hasPrimary ? primaryValue : aliasValue,
+    hasPrimary ? primaryKey : aliasKey
+  );
+}
+
+function normalizeIdListValue(
+  value: unknown,
+  fieldName: string
+): ValidationResult<string[] | undefined> {
+  if (value === undefined) {
+    return { ok: true, data: undefined };
+  }
+
+  if (value === null) {
+    return { ok: true, data: [] };
+  }
+
+  if (!Array.isArray(value)) {
+    return fail(`${fieldName} must be an array of ids`);
+  }
+
+  const ids: string[] = [];
+  for (let index = 0; index < value.length; index++) {
+    const entry = value[index];
+    if (typeof entry !== 'string' || !entry.trim()) {
+      return fail(`${fieldName}[${index}] must be a non-empty string`);
+    }
+    ids.push(entry.trim());
+  }
+
+  if (new Set(ids).size !== ids.length) {
+    return fail(`${fieldName} must not contain duplicates`);
+  }
+
+  return { ok: true, data: ids };
+}
+
+function parseOptionalNonNegativeInt(
+  value: unknown,
+  fieldName: string
+): ValidationResult<number | null | undefined> {
+  if (value === undefined) {
+    return { ok: true, data: undefined };
+  }
+
+  if (value === null || value === '') {
+    return { ok: true, data: null };
+  }
+
+  const numericValue = Number(value);
+  if (
+    !Number.isFinite(numericValue) ||
+    !Number.isInteger(numericValue) ||
+    numericValue < 0
+  ) {
+    return fail(`${fieldName} must be a non-negative integer`);
+  }
+
+  return { ok: true, data: numericValue };
+}
+
+function parseRequiredEnum<T extends string>(
+  value: unknown,
+  fieldName: string,
+  allowed: readonly T[]
+): ValidationResult<T> {
+  if (value === undefined || value === null || value === '') {
+    return fail(`${fieldName} is required`);
+  }
+
+  if (typeof value !== 'string' || !allowed.includes(value as T)) {
+    return fail(`${fieldName} must be one of: ${allowed.join(', ')}`);
+  }
+
+  return { ok: true, data: value as T };
 }
 
 function assignIfDefined<T extends Record<string, unknown>, K extends keyof T>(
@@ -253,6 +520,13 @@ const INCOME_FREQUENCIES = Object.values(StrategyIncomeFrequency);
 const EXPENSE_FREQUENCIES = Object.values(StrategyExpenseFrequency);
 const EXPENSE_CATEGORIES = Object.values(StrategyExpenseCategory);
 const EXPENSE_PRIORITIES = Object.values(StrategyExpensePriority);
+const PROJECTION_MILESTONE_TYPES: StrategyProjectionMilestoneType[] = [
+  'INITIAL_INVESTMENT',
+  'INCOME_CHECKPOINT',
+  'EXIT_SCENARIO',
+  'MATURITY_SCENARIO',
+  'CUSTOM',
+];
 
 export const createStrategyPlanSchema: StrategySchema<CreateStrategyPlanInput> =
   {
@@ -399,6 +673,61 @@ function parseStrategyStepFields(
   const timelineLabel = parseOptionalString(input.timelineLabel, 'timelineLabel');
   if (!timelineLabel.ok) return timelineLabel;
   assignIfDefined(data, 'timelineLabel', timelineLabel.data);
+
+  const startYear = parseOptionalNullableYear(input.startYear, 'startYear');
+  if (!startYear.ok) return startYear;
+  assignIfDefined(data, 'startYear', startYear.data);
+
+  const endYear = parseOptionalNullableYear(input.endYear, 'endYear');
+  if (!endYear.ok) return endYear;
+  assignIfDefined(data, 'endYear', endYear.data);
+
+  const investmentAmount = parseOptionalMoney(
+    input.investmentAmount,
+    'investmentAmount'
+  );
+  if (!investmentAmount.ok) return investmentAmount;
+  assignIfDefined(data, 'investmentAmount', investmentAmount.data);
+
+  const incomeAmount = parseOptionalMoney(input.incomeAmount, 'incomeAmount');
+  if (!incomeAmount.ok) return incomeAmount;
+  assignIfDefined(data, 'incomeAmount', incomeAmount.data);
+
+  const incomeFrequency = parseOptionalNullableEnum(
+    input.incomeFrequency,
+    'incomeFrequency',
+    INCOME_FREQUENCIES
+  );
+  if (!incomeFrequency.ok) return incomeFrequency;
+  assignIfDefined(data, 'incomeFrequency', incomeFrequency.data);
+
+  const incomeStartYear = parseOptionalNullableYear(
+    input.incomeStartYear,
+    'incomeStartYear'
+  );
+  if (!incomeStartYear.ok) return incomeStartYear;
+  assignIfDefined(data, 'incomeStartYear', incomeStartYear.data);
+
+  const incomeEndYear = parseOptionalNullableYear(
+    input.incomeEndYear,
+    'incomeEndYear'
+  );
+  if (!incomeEndYear.ok) return incomeEndYear;
+  assignIfDefined(data, 'incomeEndYear', incomeEndYear.data);
+
+  const capitalReturned = parseOptionalMoney(
+    input.capitalReturned,
+    'capitalReturned'
+  );
+  if (!capitalReturned.ok) return capitalReturned;
+  assignIfDefined(data, 'capitalReturned', capitalReturned.data);
+
+  const capitalReturnYear = parseOptionalNullableYear(
+    input.capitalReturnYear,
+    'capitalReturnYear'
+  );
+  if (!capitalReturnYear.ok) return capitalReturnYear;
+  assignIfDefined(data, 'capitalReturnYear', capitalReturnYear.data);
 
   const sortOrder = parseOptionalSortOrder(input.sortOrder, 'sortOrder');
   if (!sortOrder.ok) return sortOrder;
@@ -571,6 +900,14 @@ function parseStrategyExpenseFields(
   if (!endTimelineLabel.ok) return endTimelineLabel;
   assignIfDefined(data, 'endTimelineLabel', endTimelineLabel.data);
 
+  const startYear = parseOptionalNullableYear(input.startYear, 'startYear');
+  if (!startYear.ok) return startYear;
+  assignIfDefined(data, 'startYear', startYear.data);
+
+  const endYear = parseOptionalNullableYear(input.endYear, 'endYear');
+  if (!endYear.ok) return endYear;
+  assignIfDefined(data, 'endYear', endYear.data);
+
   const priority = parseOptionalEnum(
     input.priority,
     'priority',
@@ -629,5 +966,198 @@ export const updateStrategyExpenseSchema: StrategySchema<UpdateStrategyExpenseIn
       }
 
       return result as ValidationResult<UpdateStrategyExpenseInput>;
+    },
+  };
+
+function parseStrategyProjectionMilestoneFields(
+  input: Record<string, unknown>,
+  options: { requireCreateFields: boolean }
+): ValidationResult<
+  CreateStrategyProjectionMilestoneInput | UpdateStrategyProjectionMilestoneInput
+> {
+  const data: UpdateStrategyProjectionMilestoneInput = {};
+
+  if (options.requireCreateFields) {
+    const year = parseRequiredYear(input.year, 'year');
+    if (!year.ok) return year;
+    data.year = year.data;
+
+    const title = parseRequiredString(input.title, 'title');
+    if (!title.ok) return title;
+    data.title = title.data;
+
+    const type = parseRequiredEnum(
+      input.type,
+      'type',
+      PROJECTION_MILESTONE_TYPES
+    );
+    if (!type.ok) return type;
+    data.type = type.data;
+  } else {
+    const year = parseOptionalYear(input.year, 'year');
+    if (!year.ok) return year;
+    assignIfDefined(data, 'year', year.data);
+
+    if (input.title !== undefined) {
+      const title = parseRequiredString(input.title, 'title');
+      if (!title.ok) return title;
+      data.title = title.data;
+    }
+
+    const type = parseOptionalEnum(
+      input.type,
+      'type',
+      PROJECTION_MILESTONE_TYPES
+    );
+    if (!type.ok) return type;
+    assignIfDefined(data, 'type', type.data);
+  }
+
+  const stepId = parseOptionalId(input.stepId, 'stepId');
+  if (!stepId.ok) return stepId;
+  assignIfDefined(data, 'stepId', stepId.data);
+
+  const monthlyIncome = parseOptionalMoney(input.monthlyIncome, 'monthlyIncome');
+  if (!monthlyIncome.ok) return monthlyIncome;
+  assignIfDefined(data, 'monthlyIncome', monthlyIncome.data);
+
+  const monthsOfIncome = parseOptionalNonNegativeInt(
+    input.monthsOfIncome,
+    'monthsOfIncome'
+  );
+  if (!monthsOfIncome.ok) return monthsOfIncome;
+  assignIfDefined(data, 'monthsOfIncome', monthsOfIncome.data);
+
+  const annualIncome = parseOptionalMoney(input.annualIncome, 'annualIncome');
+  if (!annualIncome.ok) return annualIncome;
+  assignIfDefined(data, 'annualIncome', annualIncome.data);
+
+  const capitalInvested = parseOptionalMoney(
+    input.capitalInvested,
+    'capitalInvested'
+  );
+  if (!capitalInvested.ok) return capitalInvested;
+  assignIfDefined(data, 'capitalInvested', capitalInvested.data);
+
+  const capitalRemaining = parseOptionalMoney(
+    input.capitalRemaining,
+    'capitalRemaining'
+  );
+  if (!capitalRemaining.ok) return capitalRemaining;
+  assignIfDefined(data, 'capitalRemaining', capitalRemaining.data);
+
+  const incomeThisPeriod = parseOptionalMoney(
+    input.incomeThisPeriod,
+    'incomeThisPeriod'
+  );
+  if (!incomeThisPeriod.ok) return incomeThisPeriod;
+  assignIfDefined(data, 'incomeThisPeriod', incomeThisPeriod.data);
+
+  const cumulativeIncome = parseOptionalMoney(
+    input.cumulativeIncome,
+    'cumulativeIncome'
+  );
+  if (!cumulativeIncome.ok) return cumulativeIncome;
+  assignIfDefined(data, 'cumulativeIncome', cumulativeIncome.data);
+
+  const totalAssetPosition = parseOptionalMoney(
+    input.totalAssetPosition,
+    'totalAssetPosition'
+  );
+  if (!totalAssetPosition.ok) return totalAssetPosition;
+  assignIfDefined(data, 'totalAssetPosition', totalAssetPosition.data);
+
+  const expensesThisYear = parseOptionalMoney(
+    input.expensesThisYear,
+    'expensesThisYear'
+  );
+  if (!expensesThisYear.ok) return expensesThisYear;
+  assignIfDefined(data, 'expensesThisYear', expensesThisYear.data);
+
+  const cumulativeExpenses = parseOptionalMoney(
+    input.cumulativeExpenses,
+    'cumulativeExpenses'
+  );
+  if (!cumulativeExpenses.ok) return cumulativeExpenses;
+  assignIfDefined(data, 'cumulativeExpenses', cumulativeExpenses.data);
+
+  const netCashflowThisYear = parseOptionalSignedMoney(
+    input.netCashflowThisYear,
+    'netCashflowThisYear'
+  );
+  if (!netCashflowThisYear.ok) return netCashflowThisYear;
+  assignIfDefined(data, 'netCashflowThisYear', netCashflowThisYear.data);
+
+  const capitalReturnedThisYear = parseOptionalMoney(
+    input.capitalReturnedThisYear,
+    'capitalReturnedThisYear'
+  );
+  if (!capitalReturnedThisYear.ok) return capitalReturnedThisYear;
+  assignIfDefined(data, 'capitalReturnedThisYear', capitalReturnedThisYear.data);
+
+  const capitalReturnedToDate = parseOptionalMoney(
+    input.capitalReturnedToDate,
+    'capitalReturnedToDate'
+  );
+  if (!capitalReturnedToDate.ok) return capitalReturnedToDate;
+  assignIfDefined(data, 'capitalReturnedToDate', capitalReturnedToDate.data);
+
+  const selectedStepIds = parseOptionalIdList(
+    input,
+    'selectedStepIds',
+    'sourceStepIds'
+  );
+  if (!selectedStepIds.ok) return selectedStepIds;
+  assignIfDefined(data, 'selectedStepIds', selectedStepIds.data);
+
+  const selectedExpenseIds = parseOptionalIdList(
+    input,
+    'selectedExpenseIds',
+    'sourceExpenseIds'
+  );
+  if (!selectedExpenseIds.ok) return selectedExpenseIds;
+  assignIfDefined(data, 'selectedExpenseIds', selectedExpenseIds.data);
+
+  const notes = parseOptionalString(input.notes, 'notes');
+  if (!notes.ok) return notes;
+  assignIfDefined(data, 'notes', notes.data);
+
+  const sortOrder = parseOptionalSortOrder(input.sortOrder, 'sortOrder');
+  if (!sortOrder.ok) return sortOrder;
+  assignIfDefined(data, 'sortOrder', sortOrder.data);
+
+  return { ok: true, data };
+}
+
+export const createStrategyProjectionMilestoneSchema: StrategySchema<CreateStrategyProjectionMilestoneInput> =
+  {
+    parse(input) {
+      if (!isPlainObject(input)) {
+        return fail('Request body must be an object');
+      }
+
+      return parseStrategyProjectionMilestoneFields(input, {
+        requireCreateFields: true,
+      }) as ValidationResult<CreateStrategyProjectionMilestoneInput>;
+    },
+  };
+
+export const updateStrategyProjectionMilestoneSchema: StrategySchema<UpdateStrategyProjectionMilestoneInput> =
+  {
+    parse(input) {
+      if (!isPlainObject(input)) {
+        return fail('Request body must be an object');
+      }
+
+      const result = parseStrategyProjectionMilestoneFields(input, {
+        requireCreateFields: false,
+      });
+      if (!result.ok) return result;
+
+      if (Object.keys(result.data).length === 0) {
+        return fail('At least one field is required to update');
+      }
+
+      return result as ValidationResult<UpdateStrategyProjectionMilestoneInput>;
     },
   };

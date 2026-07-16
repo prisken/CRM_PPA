@@ -1,7 +1,7 @@
 # Profit Pulse Ally CRM
 ## Super Admin Manual
 
-**Version:** 1.2 · **Audience:** Super administrators
+**Version:** 1.3 · **Audience:** Super administrators
 
 ---
 
@@ -260,8 +260,11 @@ Super admins have **full access** on every client.
 - Document upload and delete
 - All pipeline stages without role restrictions
 
+**Strategy Planner — Timeline Economics:** On Client 360 → **Strategy Planner**, strategy items support investment amount, start/end year, income amount/frequency and income years, plus capital returned / capital return year. Expenses support amount/frequency and start/end year. Board and List cards show compact illustrative totals (total income, total expense, capital back, illustrative position). Helpers use MONTHLY×12, YEARLY as-is, ONE_TIME in the start year, and inclusive year ranges — **no** growth, compounding, IRR, ROI, yield, or guaranteed returns.
 
-**Client Strategy Overview (read-only report):** Open Client 360 → **Strategy Planner** → open a plan → **View client overview**. Presents a client-facing strategy map, summary cards, perks, and disclaimer at `/clients/[id]/strategy-plans/[planId]/overview`. View permission only — editing stays in Board / List / Projection. Values are advisor-entered; no automatic year-by-year projection. Browser **Print** only (no built-in PDF or share link). **← Back to Strategy Planner** returns to the workspace tab.
+**Strategy Planner — Projection Journey:** Projection Journey is designed for manually selected milestone years and scenarios. It does not generate a full year-by-year projection. Use it to present important points in the client's investment journey, such as the initial investment, income checkpoints, exit scenarios, and total asset position. When editing a milestone, advisors can select contributing strategy items and expenses, review suggested values, and click **Use suggested values** to apply them (suggestions are not auto-applied). Saved values remain manually controlled. Open Client 360 → **Strategy Planner** → plan → **Projection**.
+
+**Client Strategy Overview (read-only report):** Open Client 360 → **Strategy Planner** → open a plan → **View client overview**. Presents a client-facing strategy map (yearly spending/earning/net, cumulatives, capital returned, illustrative total position, and contribution chips), summary cards, perks, and disclaimer at `/clients/[id]/strategy-plans/[planId]/overview`. View permission only — editing stays in Board / List / Projection. Values are illustrative and based on advisor-entered assumptions; no automatic year-by-year projection. Browser **Print** only (no built-in PDF or share link). **← Back to Strategy Planner** returns to the workspace tab.
 
 ### Client team management (Assigned Team widget)
 

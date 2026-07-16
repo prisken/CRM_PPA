@@ -1,4 +1,4 @@
-export type StrategyPlannerView = 'board' | 'list';
+export type StrategyPlannerView = 'board' | 'list' | 'projection';
 
 export const STRATEGY_PLANNER_VIEW_STORAGE_KEY =
   'crm-client-strategy-planner-view';
@@ -15,6 +15,10 @@ function emitStrategyPlannerViewChange() {
   }
 }
 
+function isStrategyPlannerView(value: string): value is StrategyPlannerView {
+  return value === 'board' || value === 'list' || value === 'projection';
+}
+
 export function readStoredStrategyPlannerView(): StrategyPlannerView | null {
   if (typeof window === 'undefined') {
     return null;
@@ -24,7 +28,7 @@ export function readStoredStrategyPlannerView(): StrategyPlannerView | null {
     const value = window.localStorage.getItem(
       STRATEGY_PLANNER_VIEW_STORAGE_KEY
     );
-    if (value === 'board' || value === 'list') {
+    if (value && isStrategyPlannerView(value)) {
       return value;
     }
   } catch {

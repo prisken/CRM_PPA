@@ -65,35 +65,65 @@ type ClientStrategyMapSummaryProps = {
 
 function ClientStrategyMapSummary({ summary }: ClientStrategyMapSummaryProps) {
   const milestonesSteps =
-    summary.milestoneCount === 0 && summary.stepCount === 0
+    summary.milestoneCount === 0 &&
+    summary.stepCount === 0 &&
+    summary.expenseCount === 0
       ? '—'
       : `${summary.milestoneCount} milestone${
           summary.milestoneCount === 1 ? '' : 's'
-        } · ${summary.stepCount} step${summary.stepCount === 1 ? '' : 's'}`;
+        } · ${summary.stepCount} step${summary.stepCount === 1 ? '' : 's'}${
+          summary.expenseCount > 0
+            ? ` · ${summary.expenseCount} expense${
+                summary.expenseCount === 1 ? '' : 's'
+              }`
+            : ''
+        }`;
+
+  const incomeThisYearHint =
+    summary.incomeThisYearSourceYear !== null
+      ? `Year ${summary.incomeThisYearSourceYear}`
+      : 'As entered';
 
   return (
     <div
       role="group"
       aria-label="Key strategy figures"
-      className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6"
+      className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4"
     >
       <SummaryCard
-        label="Initial capital"
-        value={displayMoney(summary.initialCapital)}
+        label="Total planned investment"
+        value={displayMoney(
+          summary.totalPlannedInvestment ?? summary.initialCapital
+        )}
         hint="As entered"
       />
       <SummaryCard
-        label="Monthly income"
-        value={displayMoney(summary.targetMonthlyIncome)}
-        hint="Latest entered"
+        label="Income this year"
+        value={displayMoney(summary.incomeThisYear)}
+        hint={incomeThisYearHint}
       />
       <SummaryCard
-        label="Cumulative income"
+        label="Target income"
+        value={displayMoney(summary.targetMonthlyIncome)}
+        hint="Monthly · latest entered"
+      />
+      <SummaryCard
+        label="Total projected income"
         value={displayMoney(summary.projectedCumulativeIncome)}
         hint="As entered"
       />
       <SummaryCard
-        label="Asset position"
+        label="Total planned expenses"
+        value={displayMoney(summary.totalPlannedExpenses)}
+        hint="As entered"
+      />
+      <SummaryCard
+        label="Capital expected back"
+        value={displayMoney(summary.capitalExpectedBack)}
+        hint="As entered"
+      />
+      <SummaryCard
+        label="Illustrative total position"
         value={displayMoney(summary.projectedAssetPosition)}
         hint="As entered"
       />
@@ -105,7 +135,11 @@ function ClientStrategyMapSummary({ summary }: ClientStrategyMapSummaryProps) {
         )}
         hint="Milestone years"
       />
-      <SummaryCard label="Milestones / steps" value={milestonesSteps} />
+      <SummaryCard
+        label="Milestones / items"
+        value={milestonesSteps}
+        hint="Selected plan items"
+      />
     </div>
   );
 }

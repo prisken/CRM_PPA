@@ -85,6 +85,10 @@ export async function PUT(
       ...(parsed.data.endTimelineLabel !== undefined && {
         endTimelineLabel: parsed.data.endTimelineLabel,
       }),
+      ...(parsed.data.startYear !== undefined && {
+        startYear: parsed.data.startYear,
+      }),
+      ...(parsed.data.endYear !== undefined && { endYear: parsed.data.endYear }),
       ...(parsed.data.priority !== undefined && {
         priority: parsed.data.priority,
       }),

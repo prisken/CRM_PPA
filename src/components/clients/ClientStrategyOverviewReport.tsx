@@ -137,8 +137,8 @@ function ClientStrategyOverviewReport({
           <p className="mt-3 max-w-3xl rounded-md border border-slate-200 bg-slate-50/80 px-3 py-2 text-xs leading-relaxed text-slate-600 print:border-gray-200 print:bg-transparent">
             <span className="font-medium text-slate-700">How to read this: </span>
             Start with the figures below, follow the journey map from goal to
-            outcome, then review perks and assumptions. Figures are advisor-entered
-            checkpoints—not an automatic forecast.
+            outcome, then review perks and assumptions. Values are illustrative
+            and based on advisor-entered assumptions—not an automatic forecast.
           </p>
         </div>
       </header>
@@ -147,9 +147,8 @@ function ClientStrategyOverviewReport({
       <ReportSection id="overview-summary" title="Key figures">
         <ClientStrategyMapSummary summary={summary} />
         <p className="text-[11px] leading-relaxed text-gray-500">
-          Saved milestone values only. A dash (—) means nothing was entered.
-          &ldquo;Entered&rdquo; labels reflect illustrative figures your advisor
-          chose to record.
+          Values are illustrative and based on advisor-entered assumptions. A
+          dash (—) means nothing was entered for that figure.
         </p>
       </ReportSection>
 
@@ -170,9 +169,9 @@ function ClientStrategyOverviewReport({
             For planning and presentation purposes only.
           </p>
           <p>
-            Projection milestones are illustrative and based on manually entered
-            assumptions. Actual results may vary. This view is for planning and
-            presentation purposes only.
+            Values are illustrative and based on advisor-entered assumptions.
+            Actual results may vary. This view is for planning and presentation
+            purposes only.
           </p>
           <ul className="list-disc space-y-1 pl-4 text-slate-600">
             <li>Values shown are manually entered by the advisor.</li>
