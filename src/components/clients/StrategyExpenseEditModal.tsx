@@ -12,6 +12,7 @@ import {
   getStrategyExpenseTotal,
   type StrategyTimelineExpenseInput,
 } from '@/lib/clientStrategyTimelineCalculations';
+import { displayMoney } from '@/lib/formatMoney';
 
 const EXPENSE_CATEGORIES = [
   { value: StrategyExpenseCategory.HOUSING, label: 'Housing' },
@@ -80,18 +81,6 @@ function numberToInput(value: number | null | undefined): string {
     return '';
   }
   return String(value);
-}
-
-function formatMoney(value: number | null): string {
-  if (value === null) {
-    return '—';
-  }
-
-  return new Intl.NumberFormat(undefined, {
-    style: 'currency',
-    currency: 'USD',
-    maximumFractionDigits: 2,
-  }).format(value);
 }
 
 function parseOptionalNumber(value: string): number | null {
@@ -506,11 +495,11 @@ function StrategyExpenseEditModalForm({
                         ? 'Expense in start year'
                         : 'Expense per year'
                     }
-                    value={formatMoney(expensePerYear)}
+                    value={displayMoney(expensePerYear)}
                   />
                   <PreviewRow
                     label="Total over timeline"
-                    value={formatMoney(totalExpense)}
+                    value={displayMoney(totalExpense)}
                   />
                   <PreviewRow
                     label="Timeline"

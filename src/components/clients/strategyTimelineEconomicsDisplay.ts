@@ -10,6 +10,7 @@ import {
   type StrategyTimelineExpenseInput,
   type StrategyTimelineStepInput,
 } from '@/lib/clientStrategyTimelineCalculations';
+import { displayMoney } from '@/lib/formatMoney';
 
 export type StepEconomicsSource = {
   plannedAmount?: number | null;
@@ -67,15 +68,7 @@ function humanizeEnum(value: string | null | undefined): string | null {
 }
 
 export function formatDisplayMoney(value: number | null | undefined): string {
-  if (value === null || value === undefined || Number.isNaN(value)) {
-    return '—';
-  }
-
-  return new Intl.NumberFormat(undefined, {
-    style: 'currency',
-    currency: 'USD',
-    maximumFractionDigits: 2,
-  }).format(value);
+  return displayMoney(value);
 }
 
 export function formatYearRange(

@@ -3,7 +3,7 @@
 > **Single source of truth** for schema, APIs, permissions, UI structure, and shipped feature status.  
 > Prefer this document over chat notes, old handoffs, or divergent markdown. User-facing PDFs (`USER_MANUAL_*.pdf`) and one-off migration guides under `docs/` are **supplements**, not replacements.
 
-**Last updated:** July 16, 2026 (Strategy Planner Timeline Economics; Client Strategy Overview report; Projection Journey; Board/List Outcome Summary; Important Dates + calendar; deal participants; Lead Command Center)  
+**Last updated:** July 16, 2026 (Currency-free money display via `lib/formatMoney`; Strategy Planner Timeline Economics; Client Strategy Overview; Projection Journey; Important Dates + calendar; deal participants; Lead Command Center)  
 **Repository:** [CRM_PPA](https://github.com/prisken/CRM_PPA)  
 **Deployment branch:** `deploy`  
 **Last deployed commit:** `40c5518`  
@@ -31,6 +31,7 @@ This document describes the PostgreSQL database schema, API surface, and fronten
 | Standard user lead creation | ✅ Add Lead on dashboard with auto-assignment |
 | RELATIONSHIP client details edit | ✅ API + Edit button on Client 360 |
 | Mobile-responsive UI | ✅ Dashboards, Client 360, pipeline, modals, workspace tabs |
+| **Money display (no currency label)** | ✅ Shared `lib/formatMoney.ts` — amounts show as plain locale numbers (e.g. `12,000.00`); no `$` / `US$` / `USD` in UI or PDF report text |
 | Auth UX | ✅ Stale-session sign-out; deactivated-account block on login + API |
 | Commission engine | ✅ Participant-backed splits (`DealParticipant`); legacy assignment-pool fallback; `totalCommission`, secured commission |
 | Team occupancy limits | ✅ Max 1 Relationship, 1 Follow-up per client; legacy max 2 Doctors (no new doctor client assignments) |
@@ -1285,13 +1286,13 @@ returnableAmount = max(0, baseLiability - userCredit)
 - `status` starts as `UNPAID`; doctors mark as `PAID` via statements page
 - Creation is idempotent (no duplicates per deal)
 
-**Worked examples** (sole doctor on client, `totalCommission = $100`):
+**Worked examples** (sole doctor on client, `totalCommission = 100`):
 
 | Doctor also holds | userCredit | returnableAmount |
 |-------------------|------------|------------------|
-| Relationship only | $10 (10% pool) | $30 (40% base − 10%) |
-| Relationship + Account Service | $20 (10% + 10%) | $20 (40% base − 20%) |
-| Neither | $0 | $40 (40% base) |
+| Relationship only | 10 (10% pool) | 30 (40% base − 10%) |
+| Relationship + Account Service | 20 (10% + 10%) | 20 (40% base − 20%) |
+| Neither | 0 | 40 (40% base) |
 
 **Recalculate (bulk):** Run `npm run test:deal-returnables` for unit tests; `npx tsx scripts/recalculate-commission-returnables.ts` recalculates all WON deals (participant explicit fields or legacy fallback per deal).
 
@@ -2220,6 +2221,9 @@ Deep links: `#strategy-planner` opens Strategy Planner (when allowed); `#activit
 | `SignUpPage` | `src/components/auth/SignUpPage.tsx` | Registration form |
 | `Providers` | `src/components/Providers.tsx` | App-level providers wrapper (legacy NextAuth `SessionProvider`; mounts `CommandPalette` with `ssr: false`) |
 | `CommandPalette` | `src/components/CommandPalette.tsx` | Global `⌘K`/`Ctrl+K` client search → `/clients/[id]` |
+| `formatMoney` helpers | `lib/formatMoney.ts` | Shared money display: `formatMoney` / `displayMoney` / `formatMoneyRequired` — **no currency symbol or code** (no `$` / `US$` / `USD`). Used by dashboards, admin KPIs/charts, Deal Info, Strategy Planner, Client Strategy Overview, and PDF report text |
+
+**Money display convention:** Persist amounts as numbers in the DB (unchanged). UI and exported report copy format with locale grouping/decimals only (e.g. `12,000.00`). Do not use `Intl.NumberFormat` `style: 'currency'` for product surfaces.
 
 **Hook:** `useUserProfile` (`src/hooks/useUserProfile.ts`) — loads current user from Supabase `User` table; signs out users with `status === DEACTIVATED`.
 
@@ -2777,7 +2781,7 @@ Related: `lib/pipelinePermissions.ts` exports `getNextPipelineStage`, `canUserAd
 │  ...                        │
 ├─────────────────────────────┤
 │  Client Details  [Edit]     │
-│  Deal Info (type, participants, committed/potential, secured $) │
+│  Deal Info (type, participants, committed/potential, secured amount) │
 │  Assigned Team              │
 │  Company Hierarchy          │
 └─────────────────────────────┘

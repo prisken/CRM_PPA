@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getCachedAdminRevenueTrackerData } from '@/lib/adminAnalyticsCache';
 import { requireSuperAdmin } from '@/lib/authHelpers';
 import { buildCsv, csvResponse, getReportFormat, pdfResponse } from '@/lib/reports';
+import { formatMoneyRequired } from '@/lib/formatMoney';
 
 export const dynamic = 'force-dynamic';
 
@@ -38,6 +39,9 @@ export async function GET(request: Request) {
   return pdfResponse(
     'revenue-tracker.pdf',
     `Revenue Tracker Report (${groupBy})`,
-    rows.map((row) => `${row.period}: Revenue $${row.revenue}, Profit $${row.profit}`)
+    rows.map(
+      (row) =>
+        `${row.period}: Revenue ${formatMoneyRequired(row.revenue)}, Profit ${formatMoneyRequired(row.profit)}`
+    )
   );
 }

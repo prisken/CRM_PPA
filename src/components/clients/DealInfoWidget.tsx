@@ -1,7 +1,7 @@
 'use client';
 
 import { DealParticipantRole } from '@prisma/client';
-import { memo, useMemo, useState } from 'react';
+import { memo, useEffect, useMemo, useState } from 'react';
 import DealEditModal from '@/components/clients/DealEditModal';
 import type {
   AssignedUser,
@@ -21,6 +21,16 @@ import {
   calculateParticipantReturnableAmount,
 } from '@/lib/dealParticipantCalculations';
 import { authenticatedFetch } from '@/lib/authenticatedFetch';
+import { formatMoneyRequired } from '@/lib/formatMoney';
+
+const DEAL_MONEY_OPTIONS = {
+  maximumFractionDigits: 0,
+  minimumFractionDigits: 0,
+} as const;
+
+function formatDealMoney(value: number) {
+  return formatMoneyRequired(value, DEAL_MONEY_OPTIONS);
+}
 
 export type ClientDeal = DealResponse;
 
@@ -45,15 +55,6 @@ function formatCommissionPercentage(share: number) {
 function formatPercentValue(percent: number) {
   const rounded = Math.round(percent * 100) / 100;
   return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(2);
-}
-
-function formatMoney(value: number) {
-  return value.toLocaleString(undefined, {
-    style: 'currency',
-    currency: 'USD',
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  });
 }
 
 function formatStatusLabel(status: string) {
@@ -170,7 +171,7 @@ function formatDoctorReturnableSummary(
     calculateParticipantCommissionAmount(totalCommission, participant);
 
   if (!participant.isReturnableRequired) {
-    return `No returnable required · ${formatMoney(commissionAmount)} commission`;
+    return `No returnable required · ${formatDealMoney(commissionAmount)} commission`;
   }
 
   const estimatedReturnable = calculateParticipantReturnableAmount(
@@ -179,14 +180,14 @@ function formatDoctorReturnableSummary(
   );
 
   if (participant.returnableAmount !== null) {
-    return `${formatMoney(commissionAmount)} commission · Returnable ${formatMoney(participant.returnableAmount)}`;
+    return `${formatDealMoney(commissionAmount)} commission · Returnable ${formatDealMoney(participant.returnableAmount)}`;
   }
 
   if (participant.returnablePercent !== null) {
-    return `${formatMoney(commissionAmount)} commission · Returnable ${formatPercentValue(participant.returnablePercent)}% (${formatMoney(estimatedReturnable ?? 0)})`;
+    return `${formatDealMoney(commissionAmount)} commission · Returnable ${formatPercentValue(participant.returnablePercent)}% (${formatDealMoney(estimatedReturnable ?? 0)})`;
   }
 
-  return `${formatMoney(commissionAmount)} commission · Returnable required`;
+  return `${formatDealMoney(commissionAmount)} commission · Returnable required`;
 }
 
 function buildParticipantSummaryLines(
@@ -352,7 +353,10 @@ function DealCard({
   const hasParticipants = participants.length > 0;
 
   return (
-    <article className="rounded-lg border border-gray-200 bg-gray-50/60 p-3">
+    <article
+      id={`deal-${deal.id}`}
+      className="scroll-mt-4 rounded-lg border border-gray-200 bg-gray-50/60 p-3"
+    >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           <h4 className="truncate text-sm font-semibold text-gray-900" title={deal.name}>
@@ -395,14 +399,14 @@ function DealCard({
       <dl className="mt-2 grid grid-cols-2 gap-2 text-xs sm:grid-cols-3">
         <div>
           <dt className="font-medium uppercase tracking-wide text-gray-500">Deal value</dt>
-          <dd className="mt-0.5 font-medium text-gray-900">{formatMoney(deal.dealValue)}</dd>
+          <dd className="mt-0.5 font-medium text-gray-900">{formatDealMoney(deal.dealValue)}</dd>
         </div>
         <div>
           <dt className="font-medium uppercase tracking-wide text-gray-500">
             Total commission
           </dt>
           <dd className="mt-0.5 font-medium text-gray-900">
-            {formatMoney(deal.totalCommission)}
+            {formatDealMoney(deal.totalCommission)}
           </dd>
         </div>
       </dl>
@@ -552,9 +556,57 @@ export default memo(function DealInfoWidget({
   const visibleDeals = showAllDeals ? deals : deals.slice(0, DEAL_PREVIEW_COUNT);
   const hiddenDealCount = Math.max(deals.length - DEAL_PREVIEW_COUNT, 0);
 
+  useEffect(() => {
+    function scrollToDealFromHash() {
+      if (typeof window === 'undefined') {
+        return;
+      }
+
+      const hash = window.location.hash;
+      if (hash === '#deal-info') {
+        document.getElementById('deal-info')?.scrollIntoView({
+          behavior: 'smooth',
+          block: 'start',
+        });
+        return;
+      }
+
+      const match = /^#deal-(.+)$/.exec(hash);
+      if (!match) {
+        return;
+      }
+
+      const dealId = match[1];
+      if (!deals.some((deal) => deal.id === dealId)) {
+        document.getElementById('deal-info')?.scrollIntoView({
+          behavior: 'smooth',
+          block: 'start',
+        });
+        return;
+      }
+
+      setShowAllDeals(true);
+      window.requestAnimationFrame(() => {
+        document.getElementById(`deal-${dealId}`)?.scrollIntoView({
+          behavior: 'smooth',
+          block: 'nearest',
+        });
+      });
+    }
+
+    scrollToDealFromHash();
+    window.addEventListener('hashchange', scrollToDealFromHash);
+    return () => {
+      window.removeEventListener('hashchange', scrollToDealFromHash);
+    };
+  }, [deals]);
+
   return (
     <>
-      <div className={`rounded-xl border border-gray-200 bg-white shadow-sm ${widgetPaddingClass}`}>
+      <div
+        id="deal-info"
+        className={`scroll-mt-4 rounded-xl border border-gray-200 bg-white shadow-sm ${widgetPaddingClass}`}
+      >
         <div className="mb-2.5 flex items-center justify-between gap-3">
           <h3 className="text-sm font-semibold text-gray-900">Deal Info</h3>
           {canCreateDeal && (
@@ -569,8 +621,8 @@ export default memo(function DealInfoWidget({
         </div>
 
         <dl className="grid grid-cols-1 gap-2 sm:grid-cols-3 sm:gap-3">
-          <MetricField label="Committed" value={formatMoney(committedValue)} />
-          <MetricField label="Potential" value={formatMoney(potentialValue)} />
+          <MetricField label="Committed" value={formatDealMoney(committedValue)} />
+          <MetricField label="Potential" value={formatDealMoney(potentialValue)} />
           <MetricField
             label="My share"
             value={myShare > 0 ? formatCommissionPercentage(myShare) : '—'}

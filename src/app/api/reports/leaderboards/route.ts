@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getCachedAdminLeaderboardsData } from '@/lib/adminAnalyticsCache';
 import { requireSuperAdmin } from '@/lib/authHelpers';
 import { buildCsv, csvResponse, getReportFormat, pdfResponse } from '@/lib/reports';
+import { formatMoneyRequired } from '@/lib/formatMoney';
 
 export const dynamic = 'force-dynamic';
 
@@ -49,13 +50,19 @@ export async function GET(request: Request) {
     'Commission Leaderboard',
     ...commissionLeaderboard.map(
       (row) =>
-        `${row.userName}: $${Math.round(row.totalCommission)} commission, ${row.dealsClosed} deals`
+        `${row.userName}: ${formatMoneyRequired(Math.round(row.totalCommission), {
+          maximumFractionDigits: 0,
+          minimumFractionDigits: 0,
+        })} commission, ${row.dealsClosed} deals`
     ),
     '',
     'Deals Closed Leaderboard',
     ...dealsClosedLeaderboard.map(
       (row) =>
-        `${row.userName}: ${row.dealsClosed} deals, avg $${row.averageDealValue}`
+        `${row.userName}: ${row.dealsClosed} deals, avg ${formatMoneyRequired(row.averageDealValue, {
+          maximumFractionDigits: 0,
+          minimumFractionDigits: 0,
+        })}`
     ),
   ];
 

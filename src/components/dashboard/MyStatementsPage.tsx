@@ -6,6 +6,7 @@ import AuthRequiredMessage from '@/components/auth/AuthRequiredMessage';
 import Logo from '@/components/Logo';
 import { useUserProfile } from '@/hooks/useUserProfile';
 import { formatCommissionReturnablePeriodLabel } from '@/lib/commissionReturnables';
+import { formatMoneyRequired } from '@/lib/formatMoney';
 import { supabase } from '@/lib/supabaseClient';
 
 type CommissionReturnableRecord = {
@@ -25,12 +26,7 @@ type CommissionReturnableRecord = {
 };
 
 function formatMoney(value: number) {
-  return value.toLocaleString(undefined, {
-    style: 'currency',
-    currency: 'USD',
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
+  return formatMoneyRequired(value);
 }
 
 function getClientName(record: CommissionReturnableRecord) {

@@ -10,6 +10,7 @@ import {
   sortProjectionMilestones,
   type StrategyProjectionMilestone,
 } from '@/lib/clientStrategyProjectionHelpers';
+import { displayMoney } from '@/lib/formatMoney';
 
 type StrategyProjectionJourneyViewProps = {
   milestones: StrategyProjectionMilestone[];
@@ -24,22 +25,6 @@ type StrategyProjectionJourneyViewProps = {
     direction: 'earlier' | 'later'
   ) => void;
 };
-
-function formatMoney(value: number | null | undefined) {
-  if (value === null || value === undefined || Number.isNaN(value)) {
-    return null;
-  }
-
-  return new Intl.NumberFormat(undefined, {
-    style: 'currency',
-    currency: 'USD',
-    maximumFractionDigits: 2,
-  }).format(value);
-}
-
-function displayMoney(value: number | null | undefined) {
-  return formatMoney(value) ?? '—';
-}
 
 function displayYear(value: number | null | undefined) {
   return value === null || value === undefined ? '—' : String(value);

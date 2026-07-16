@@ -9,6 +9,7 @@ import {
   type ColumnDef,
 } from '@tanstack/react-table';
 import WidgetDownloadMenu from '@/components/admin/WidgetDownloadMenu';
+import { formatMoneyRequired } from '@/lib/formatMoney';
 
 type CommissionRow = {
   userName: string;
@@ -35,11 +36,10 @@ const commissionColumns = [
   commissionHelper.accessor('totalCommission', {
     header: 'Total Commission',
     cell: (info) =>
-      new Intl.NumberFormat('en-US', {
-        style: 'currency',
-        currency: 'USD',
+      formatMoneyRequired(info.getValue(), {
         maximumFractionDigits: 0,
-      }).format(info.getValue()),
+        minimumFractionDigits: 0,
+      }),
   }),
   commissionHelper.accessor('dealsClosed', { header: 'Deals Closed' }),
 ] as ColumnDef<CommissionRow>[];
@@ -50,11 +50,10 @@ const dealsColumns = [
   dealsHelper.accessor('averageDealValue', {
     header: 'Avg Deal Value',
     cell: (info) =>
-      new Intl.NumberFormat('en-US', {
-        style: 'currency',
-        currency: 'USD',
+      formatMoneyRequired(info.getValue(), {
         maximumFractionDigits: 0,
-      }).format(info.getValue()),
+        minimumFractionDigits: 0,
+      }),
   }),
 ] as ColumnDef<DealsClosedRow>[];
 

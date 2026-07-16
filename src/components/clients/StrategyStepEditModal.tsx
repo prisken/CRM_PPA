@@ -12,6 +12,7 @@ import {
   getStrategyStepTotalIncome,
   type StrategyTimelineStepInput,
 } from '@/lib/clientStrategyTimelineCalculations';
+import { displayMoney, formatMoneyRequired } from '@/lib/formatMoney';
 
 const STEP_TYPES = [
   { value: StrategyStepType.EXISTING_DEAL, label: 'Existing deal' },
@@ -68,25 +69,12 @@ type StrategyStepEditModalProps = {
 };
 
 function formatDealOptionLabel(deal: ClientDealOption) {
-  const amount = new Intl.NumberFormat(undefined, {
-    style: 'currency',
-    currency: 'USD',
+  const amount = formatMoneyRequired(deal.dealValue, {
     maximumFractionDigits: 0,
-  }).format(deal.dealValue);
+    minimumFractionDigits: 0,
+  });
 
   return `${deal.name} · ${amount} · ${deal.status.replace(/_/g, ' ')}`;
-}
-
-function formatMoney(value: number | null): string {
-  if (value === null) {
-    return '—';
-  }
-
-  return new Intl.NumberFormat(undefined, {
-    style: 'currency',
-    currency: 'USD',
-    maximumFractionDigits: 2,
-  }).format(value);
 }
 
 function numberToInput(value: number | null | undefined): string {
@@ -808,19 +796,19 @@ function StrategyStepEditModalForm({
                 <div className="mt-3 space-y-1.5">
                   <PreviewRow
                     label="Annual income"
-                    value={formatMoney(annualIncome)}
+                    value={displayMoney(annualIncome)}
                   />
                   <PreviewRow
                     label="Total income over period"
-                    value={formatMoney(totalIncome)}
+                    value={displayMoney(totalIncome)}
                   />
                   <PreviewRow
                     label="Capital returned"
-                    value={formatMoney(previewCapitalReturned)}
+                    value={displayMoney(previewCapitalReturned)}
                   />
                   <PreviewRow
                     label="Illustrative total position"
-                    value={formatMoney(illustrativeTotal)}
+                    value={displayMoney(illustrativeTotal)}
                   />
                 </div>
               ) : (

@@ -2,22 +2,7 @@
 
 import { memo } from 'react';
 import type { ClientStrategyReportSummary } from '@/lib/clientStrategyReportHelpers';
-
-function formatMoney(value: number | null | undefined) {
-  if (value === null || value === undefined || Number.isNaN(value)) {
-    return null;
-  }
-
-  return new Intl.NumberFormat(undefined, {
-    style: 'currency',
-    currency: 'USD',
-    maximumFractionDigits: 2,
-  }).format(value);
-}
-
-function displayMoney(value: number | null | undefined) {
-  return formatMoney(value) ?? '—';
-}
+import { displayMoney } from '@/lib/formatMoney';
 
 function displayTimeline(
   startYear: number | null,

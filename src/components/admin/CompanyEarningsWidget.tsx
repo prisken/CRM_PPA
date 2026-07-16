@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { formatMoneyRequired } from '@/lib/formatMoney';
 
 type CompanyEarningsWidgetProps = {
   companyOverheadEarnings?: number | null;
@@ -9,11 +10,10 @@ type CompanyEarningsWidgetProps = {
 };
 
 function formatCurrency(value: number) {
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD',
+  return formatMoneyRequired(value, {
     maximumFractionDigits: 0,
-  }).format(value);
+    minimumFractionDigits: 0,
+  });
 }
 
 export default function CompanyEarningsWidget({

@@ -133,7 +133,7 @@ async function main() {
           deal.name,
           deal.status,
           DEAL_TYPE_LABELS[deal.dealType],
-          `commission $${formatMoney(deal.totalCommission)}`,
+          `commission ${formatMoney(deal.totalCommission)}`,
           `assignments: ${assignmentSummary}`,
         ].join(' | ')
       );

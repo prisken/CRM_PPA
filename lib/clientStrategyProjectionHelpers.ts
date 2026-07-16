@@ -11,6 +11,7 @@ import type {
   CreateStrategyProjectionMilestoneInput,
   UpdateStrategyProjectionMilestoneInput,
 } from '@/lib/clientStrategyValidation';
+import { formatMoneyRequired } from './formatMoney';
 
 export type { StrategyProjectionMilestoneType };
 export type {
@@ -378,11 +379,10 @@ export type StepProjectionBadge = {
 };
 
 function formatBadgeMoney(value: number): string {
-  return new Intl.NumberFormat(undefined, {
-    style: 'currency',
-    currency: 'USD',
+  return formatMoneyRequired(value, {
     maximumFractionDigits: 0,
-  }).format(value);
+    minimumFractionDigits: 0,
+  });
 }
 
 /**
@@ -390,9 +390,9 @@ function formatBadgeMoney(value: number): string {
  * At most `maxBadges` (default 3). Empty when nothing is linked.
  *
  * Preference order:
- * 1. Latest linked monthlyIncome → "Projected income: $X/mo"
+ * 1. Latest linked monthlyIncome → "Projected income: X/mo"
  * 2. Latest EXIT_SCENARIO year → "Exit Scenario: YYYY"
- * 3. Latest linked totalAssetPosition → "Total Asset Position: $X"
+ * 3. Latest linked totalAssetPosition → "Total Asset Position: X"
  */
 export function buildStepProjectionBadges(
   milestones: readonly StrategyProjectionMilestone[],

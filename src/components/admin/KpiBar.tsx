@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { formatMoneyRequired } from '@/lib/formatMoney';
 
 export type KpiData = {
   totalCommittedRevenue: number;
@@ -39,11 +40,10 @@ const KPI_CARDS = [
 
 function formatValue(value: number, format: string) {
   if (format === 'currency') {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
+    return formatMoneyRequired(value, {
       maximumFractionDigits: 0,
-    }).format(value);
+      minimumFractionDigits: 0,
+    });
   }
   if (format === 'days') {
     return `${value} days`;

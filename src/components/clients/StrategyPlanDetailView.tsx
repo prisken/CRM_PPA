@@ -28,6 +28,7 @@ import {
 } from '@/components/clients/strategyPlannerViewPreference';
 import type { StrategyProjectionMilestone } from '@/lib/clientStrategyProjectionHelpers';
 import { buildProjectionMilestoneReorderIds } from '@/lib/clientStrategyProjectionHelpers';
+import { formatMoney, formatMoneyRequired } from '@/lib/formatMoney';
 import {
   getExpenseEconomicsLabels,
   getStepEconomicsLabels,
@@ -179,18 +180,6 @@ function humanizeEnum(value: string | null | undefined) {
     .split('_')
     .map((part) => part.charAt(0) + part.slice(1).toLowerCase())
     .join(' ');
-}
-
-function formatMoney(value: number | null | undefined) {
-  if (value === null || value === undefined || Number.isNaN(value)) {
-    return null;
-  }
-
-  return new Intl.NumberFormat(undefined, {
-    style: 'currency',
-    currency: 'USD',
-    maximumFractionDigits: 2,
-  }).format(value);
 }
 
 type CoverageStatus =
@@ -1596,13 +1585,13 @@ function StrategyPlanDetailView({
             <div>
               <p className="text-xs text-gray-500">Expected Monthly Income</p>
               <p className="mt-0.5 text-sm font-semibold text-gray-900">
-                {formatMoney(outcomeSummary.expectedMonthlyIncome) ?? '$0.00'}
+                {formatMoneyRequired(outcomeSummary.expectedMonthlyIncome)}
               </p>
             </div>
             <div>
               <p className="text-xs text-gray-500">Planned Monthly Expenses</p>
               <p className="mt-0.5 text-sm font-semibold text-gray-900">
-                {formatMoney(outcomeSummary.plannedMonthlyExpenses) ?? '$0.00'}
+                {formatMoneyRequired(outcomeSummary.plannedMonthlyExpenses)}
               </p>
             </div>
             <div>
@@ -1610,7 +1599,7 @@ function StrategyPlanDetailView({
               <p
                 className={`mt-0.5 text-sm font-semibold ${coverageStyles.gapTone}`}
               >
-                {formatMoney(Math.abs(outcomeSummary.monthlyGap)) ?? '$0.00'}
+                {formatMoneyRequired(Math.abs(outcomeSummary.monthlyGap))}
                 {outcomeSummary.monthlyGap < 0
                   ? ' short'
                   : outcomeSummary.monthlyGap > 0
@@ -1646,13 +1635,13 @@ function StrategyPlanDetailView({
               <div>
                 <p className="text-xs text-gray-500">Expected Monthly Income</p>
                 <p className="mt-0.5 text-sm font-semibold text-gray-900">
-                  {formatMoney(outcomeSummary.expectedMonthlyIncome) ?? '$0.00'}
+                  {formatMoneyRequired(outcomeSummary.expectedMonthlyIncome)}
                 </p>
               </div>
               <div>
                 <p className="text-xs text-gray-500">Planned Monthly Expenses</p>
                 <p className="mt-0.5 text-sm font-semibold text-gray-900">
-                  {formatMoney(outcomeSummary.plannedMonthlyExpenses) ?? '$0.00'}
+                  {formatMoneyRequired(outcomeSummary.plannedMonthlyExpenses)}
                 </p>
               </div>
               <div>
@@ -1660,7 +1649,7 @@ function StrategyPlanDetailView({
                 <p
                   className={`mt-0.5 text-sm font-semibold ${coverageStyles.gapTone}`}
                 >
-                  {formatMoney(Math.abs(outcomeSummary.monthlyGap)) ?? '$0.00'}
+                  {formatMoneyRequired(Math.abs(outcomeSummary.monthlyGap))}
                   {outcomeSummary.monthlyGap < 0
                     ? ' short'
                     : outcomeSummary.monthlyGap > 0

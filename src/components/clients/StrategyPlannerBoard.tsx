@@ -13,6 +13,7 @@ import {
   getExpenseEconomicsLabels,
   getStepEconomicsLabels,
 } from '@/components/clients/strategyTimelineEconomicsDisplay';
+import { formatMoney } from '@/lib/formatMoney';
 
 /** Matches StrategyPlanDetailView / formatStrategyPlanDetail step payload. */
 export type StrategyBoardStep = {
@@ -143,18 +144,6 @@ function humanizeEnum(value: string | null | undefined) {
     .split('_')
     .map((part) => part.charAt(0) + part.slice(1).toLowerCase())
     .join(' ');
-}
-
-function formatMoney(value: number | null | undefined) {
-  if (value === null || value === undefined || Number.isNaN(value)) {
-    return null;
-  }
-
-  return new Intl.NumberFormat(undefined, {
-    style: 'currency',
-    currency: 'USD',
-    maximumFractionDigits: 2,
-  }).format(value);
 }
 
 function compareSortThenCreatedAt(

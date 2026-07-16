@@ -12,6 +12,7 @@ import {
   YAxis,
 } from 'recharts';
 import WidgetDownloadMenu from '@/components/admin/WidgetDownloadMenu';
+import { formatMoneyRequired } from '@/lib/formatMoney';
 
 type GroupBy = 'month' | 'quarter' | 'year';
 
@@ -26,12 +27,6 @@ const GROUP_OPTIONS: { label: string; value: GroupBy }[] = [
   { label: 'Quarter', value: 'quarter' },
   { label: 'Year', value: 'year' },
 ];
-
-const currencyFormatter = new Intl.NumberFormat('en-US', {
-  style: 'currency',
-  currency: 'USD',
-  maximumFractionDigits: 0,
-});
 
 function RevenueTrackerChart() {
   const [groupBy, setGroupBy] = useState<GroupBy>('month');
@@ -110,7 +105,10 @@ function RevenueTrackerChart() {
               <Tooltip
                 formatter={(value) => {
                   const amount = typeof value === 'number' ? value : 0;
-                  return currencyFormatter.format(amount);
+                  return formatMoneyRequired(amount, {
+                    maximumFractionDigits: 0,
+                    minimumFractionDigits: 0,
+                  });
                 }}
               />
               <Legend />

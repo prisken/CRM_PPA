@@ -3,7 +3,7 @@
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import ClientDetailsWidget from '@/components/clients/ClientDetailsWidget';
 import { classifyImportantDateRecordType } from '@/lib/importantDateRecordType';
 import AssignedTeamWidget from '@/components/clients/AssignedTeamWidget';
@@ -82,9 +82,11 @@ export default function Client360PageClient({
   const { profile } = useUserProfile();
   const { density } = useDisplayDensity();
   const asideSpacingClass = getStackSpacingClass(density);
-  const [client, setClient] = useState(initialClient);
-  const [deals, setDeals] = useState(initialDeals);
-  const [hierarchy, setHierarchy] = useState(initialHierarchy);
+  // Mirror server props directly — mutations refresh via router.refresh(), which
+  // re-renders with new initial* props (no local copies / sync effect).
+  const client = initialClient;
+  const deals = initialDeals;
+  const hierarchy = initialHierarchy;
   const [isUpdatingStage, setIsUpdatingStage] = useState(false);
   const [stageError, setStageError] = useState<string | null>(null);
   const [isAdvanceModalOpen, setIsAdvanceModalOpen] = useState(false);
@@ -93,12 +95,6 @@ export default function Client360PageClient({
   const [isMergeModalOpen, setIsMergeModalOpen] = useState(false);
   const [mergeClients, setMergeClients] = useState<DuplicateReviewClient[]>([]);
   const [refreshKey, setRefreshKey] = useState(0);
-
-  useEffect(() => {
-    setClient(initialClient);
-    setDeals(initialDeals);
-    setHierarchy(initialHierarchy);
-  }, [initialClient, initialDeals, initialHierarchy]);
 
   const triggerDataRefresh = useCallback(() => {
     setRefreshKey((prevKey) => prevKey + 1);

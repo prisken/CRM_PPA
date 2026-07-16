@@ -6,6 +6,7 @@ import type {
   ClientStrategyMapNode as ClientStrategyMapNodeModel,
   ClientStrategyMapNodeKind,
 } from '@/lib/clientStrategyReportHelpers';
+import { displayMoney } from '@/lib/formatMoney';
 
 const KIND_PILL_TONE: Record<
   ClientStrategyMapNodeKind,
@@ -29,22 +30,6 @@ const KIND_ACCENT: Record<ClientStrategyMapNodeKind, string> = {
   custom_review: 'border-l-gray-400',
   outcome: 'border-l-blue-500',
 };
-
-function formatMoney(value: number | null | undefined) {
-  if (value === null || value === undefined || Number.isNaN(value)) {
-    return null;
-  }
-
-  return new Intl.NumberFormat(undefined, {
-    style: 'currency',
-    currency: 'USD',
-    maximumFractionDigits: 2,
-  }).format(value);
-}
-
-function displayMoney(value: number | null | undefined) {
-  return formatMoney(value) ?? '—';
-}
 
 function MetricRow({
   label,

@@ -13,6 +13,7 @@ import {
 import Logo from '@/components/Logo';
 import { useUserProfile } from '@/hooks/useUserProfile';
 import { formatCommissionReturnablePeriodLabel } from '@/lib/commissionReturnables';
+import { formatMoneyRequired } from '@/lib/formatMoney';
 
 type CommissionReturnableRecord = {
   id: string;
@@ -52,11 +53,11 @@ const columns = [
   columnHelper.accessor('clientName', { header: 'Client Name' }),
   columnHelper.accessor('dealValue', {
     header: 'Deal Value',
-    cell: (info) => formatMoney(info.getValue()),
+    cell: (info) => formatMoneyRequired(info.getValue()),
   }),
   columnHelper.accessor('returnableAmount', {
     header: 'Returnable Amount',
-    cell: (info) => formatMoney(info.getValue()),
+    cell: (info) => formatMoneyRequired(info.getValue()),
   }),
   columnHelper.accessor('status', {
     header: 'Status',
@@ -76,15 +77,6 @@ const columns = [
     },
   }),
 ];
-
-function formatMoney(value: number) {
-  return value.toLocaleString(undefined, {
-    style: 'currency',
-    currency: 'USD',
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
-}
 
 function getClientName(record: CommissionReturnableRecord) {
   const client = record.deal?.client;

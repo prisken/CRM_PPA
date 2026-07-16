@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { getCurrentCommissionReturnablePeriodParam } from '@/lib/commissionReturnables';
+import { formatMoneyRequired } from '@/lib/formatMoney';
 
 type CommissionReturnableRecord = {
   id: string;
@@ -11,11 +12,9 @@ type CommissionReturnableRecord = {
 };
 
 function formatMoney(value: number) {
-  return value.toLocaleString(undefined, {
-    style: 'currency',
-    currency: 'USD',
-    minimumFractionDigits: 0,
+  return formatMoneyRequired(value, {
     maximumFractionDigits: 0,
+    minimumFractionDigits: 0,
   });
 }
 

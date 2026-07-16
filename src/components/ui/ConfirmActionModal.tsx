@@ -67,10 +67,9 @@ export default function ConfirmActionModal({
             <button
               type="button"
               onClick={onClose}
-              disabled={isSubmitting}
-              className="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-60"
+              className="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
             >
-              {cancelLabel}
+              {isSubmitting ? 'Cancel request' : cancelLabel}
             </button>
             <button
               type="button"

@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { formatMoneyRequired } from '@/lib/formatMoney';
 
 type MySecuredCommissionWidgetProps = {
   amount: number;
@@ -8,11 +9,9 @@ type MySecuredCommissionWidgetProps = {
 };
 
 function formatMoney(value: number) {
-  return value.toLocaleString(undefined, {
-    style: 'currency',
-    currency: 'USD',
-    minimumFractionDigits: 0,
+  return formatMoneyRequired(value, {
     maximumFractionDigits: 0,
+    minimumFractionDigits: 0,
   });
 }
 

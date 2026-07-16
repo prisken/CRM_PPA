@@ -18,6 +18,7 @@ import {
   STRATEGY_PROJECTION_YEAR_MAX,
   STRATEGY_PROJECTION_YEAR_MIN,
 } from '@/lib/clientStrategyValidation';
+import { displayMoney, formatMoney } from '@/lib/formatMoney';
 
 export type StrategyProjectionMilestoneStepOption = {
   id: string;
@@ -135,27 +136,14 @@ function moneyToInput(value: number | null | undefined): string {
 }
 
 function formatSuggestionMoney(value: number | null) {
-  if (value === null) {
-    return '—';
-  }
-
-  return new Intl.NumberFormat(undefined, {
-    style: 'currency',
-    currency: 'USD',
-    maximumFractionDigits: 2,
-  }).format(value);
+  return displayMoney(value);
 }
 
 function formatCompactMoney(value: number | null | undefined) {
-  if (value === null || value === undefined || Number.isNaN(value)) {
-    return null;
-  }
-
-  return new Intl.NumberFormat(undefined, {
-    style: 'currency',
-    currency: 'USD',
+  return formatMoney(value, {
     maximumFractionDigits: 0,
-  }).format(value);
+    minimumFractionDigits: 0,
+  });
 }
 
 function formatFrequencyLabel(frequency: string | null | undefined) {

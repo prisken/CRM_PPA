@@ -30,6 +30,7 @@ import ParticipantUserPicker, {
   type ParticipantUserOption,
 } from '@/components/clients/ParticipantUserPicker';
 import { authenticatedFetch } from '@/lib/authenticatedFetch';
+import { formatMoneyRequired } from '@/lib/formatMoney';
 
 const DEAL_STATUSES = [
   { value: DealStatus.PROPOSED, label: 'Proposed' },
@@ -103,12 +104,7 @@ function roundPercent(value: number) {
 }
 
 function formatMoney(value: number) {
-  return value.toLocaleString(undefined, {
-    style: 'currency',
-    currency: 'USD',
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
+  return formatMoneyRequired(value);
 }
 
 function isExternalDealParticipantRole(role: DealParticipantRole) {
