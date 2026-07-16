@@ -260,6 +260,9 @@ Super admins have **full access** on every client.
 - Document upload and delete
 - All pipeline stages without role restrictions
 
+
+**Client Strategy Overview (read-only report):** Open Client 360 → **Strategy Planner** → open a plan → **View client overview**. Presents a client-facing strategy map, summary cards, perks, and disclaimer at `/clients/[id]/strategy-plans/[planId]/overview`. View permission only — editing stays in Board / List / Projection. Values are advisor-entered; no automatic year-by-year projection. Browser **Print** only (no built-in PDF or share link). **← Back to Strategy Planner** returns to the workspace tab.
+
 ### Client team management (Assigned Team widget)
 
 Use **Assigned Team** on Client 360 to set the **client-level** team. These roles seed deal templates but commission splits are configured **per deal**.

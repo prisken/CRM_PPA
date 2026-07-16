@@ -1,6 +1,7 @@
 'use client';
 
 import dynamic from 'next/dynamic';
+import Link from 'next/link';
 import { memo, useMemo, useState, useSyncExternalStore } from 'react';
 import CompactPill from '@/components/ui/CompactPill';
 import ConfirmActionModal from '@/components/ui/ConfirmActionModal';
@@ -852,6 +853,13 @@ function StrategyPlanDetailView({
             List view
           </button>
         </div>
+
+        <Link
+          href={`/clients/${clientId}/strategy-plans/${plan.id}/overview`}
+          className="inline-flex w-full items-center justify-center rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-medium text-blue-800 hover:bg-blue-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-1 sm:w-auto"
+        >
+          View client overview
+        </Link>
 
         {canManage ? (
           <div className="flex w-full min-w-0 flex-wrap items-center gap-2 sm:w-auto sm:justify-end">

@@ -220,6 +220,19 @@ Every stage change is logged on the client activity timeline.
 - Edit strategy text.
 - Create, edit, complete, and delete tasks (title, description, due date, assignee).
 
+
+#### Client Strategy Overview *(when you have Strategy Planner access)*
+
+A **read-only** presentation page for clients — separate from Board, List, and Projection management.
+
+- Open a plan → **View client overview** (beside the Board / List / Projection toggle).
+- Route: `/clients/[id]/strategy-plans/[planId]/overview`.
+- Shows a strategy snapshot, summary cards, a **Client Strategy Map** (goal → milestones → outcome), plan perks, disclaimer, and suggested next steps.
+- Milestones and figures are **manually entered** by the advisor; the report does not auto-generate every year.
+- Use **Print** in the browser for a hard copy; use **← Back to Strategy Planner** to return to the workspace tab.
+
+> Projection milestones are illustrative and based on manually entered assumptions. Actual results may vary. This view is for planning and presentation purposes only.
+
 #### Activity & Notes *(all assignees)*
 
 - View manual interactions and system events.
