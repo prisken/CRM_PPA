@@ -15,10 +15,12 @@ import { authenticatedFetch } from '@/lib/authenticatedFetch';
 import type { StrategyConnectionEditValues } from '@/components/clients/StrategyConnectionEditModal';
 import type { StrategyExpenseEditValues } from '@/components/clients/StrategyExpenseEditModal';
 import type { StrategyStepEditValues } from '@/components/clients/StrategyStepEditModal';
+import type { StrategyProjectionMilestoneEditValues } from '@/components/clients/strategyProjectionMilestoneEditValues';
+import { toProjectionMilestoneEditValues } from '@/components/clients/strategyProjectionMilestoneEditValues';
 import {
-  toProjectionMilestoneEditValues,
-  type StrategyProjectionMilestoneEditValues,
-} from '@/components/clients/StrategyProjectionMilestoneEditModal';
+  StrategyPlannerBoardSkeleton,
+  StrategyPlannerProjectionSkeleton,
+} from '@/components/clients/strategyPlannerLoading';
 import {
   getStrategyPlannerViewServerSnapshot,
   getStrategyPlannerViewSnapshot,
@@ -36,12 +38,18 @@ import {
 
 const StrategyPlannerBoard = dynamic(
   () => import('@/components/clients/StrategyPlannerBoard'),
-  { ssr: false }
+  {
+    ssr: false,
+    loading: () => <StrategyPlannerBoardSkeleton />,
+  }
 );
 
 const StrategyProjectionJourneyView = dynamic(
   () => import('@/components/clients/StrategyProjectionJourneyView'),
-  { ssr: false }
+  {
+    ssr: false,
+    loading: () => <StrategyPlannerProjectionSkeleton />,
+  }
 );
 
 const StrategyStepEditModal = dynamic(

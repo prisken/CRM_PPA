@@ -223,8 +223,8 @@ GROUP BY client_id, role HAVING COUNT(*) > 1;
 
 ### Phase A — Bundle / render
 
-1. Dynamic-import `StrategyPlanDetailView`, large modals (`StrategyProjectionMilestoneEditModal`, step/expense modals).
-2. Lazy-load Board vs List vs Projection by active view preference (not all three heavy trees at once).
+1. Dynamic-import `StrategyPlanDetailView`, large modals (`StrategyProjectionMilestoneEditModal`, step/expense modals). ✅ (`WorkspacePanel` → Builder; Builder → DetailView; DetailView → Board/Projection + modals; milestone edit values extracted so modal chunk is not eagerly pulled)
+2. Lazy-load Board vs List vs Projection by active view preference (not all three heavy trees at once). ✅ (conditional mount + dynamic chunks + skeletons)
 3. Cap strategy refetch: only on strategy mutations and plan switch.
 
 ### Phase B — API DTOs

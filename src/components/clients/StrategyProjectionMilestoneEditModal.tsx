@@ -1,12 +1,15 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import {
+  toProjectionMilestoneEditValues,
+  type StrategyProjectionMilestoneEditValues,
+} from '@/components/clients/strategyProjectionMilestoneEditValues';
 import { authenticatedFetch } from '@/lib/authenticatedFetch';
 import {
   STRATEGY_PROJECTION_MILESTONE_TYPE_OPTIONS,
   calculateSuggestedCumulativeIncome,
   calculateSuggestedTotalAssetPosition,
-  type StrategyProjectionMilestone,
   type StrategyProjectionMilestoneType,
 } from '@/lib/clientStrategyProjectionHelpers';
 import {
@@ -19,6 +22,9 @@ import {
   STRATEGY_PROJECTION_YEAR_MIN,
 } from '@/lib/clientStrategyValidation';
 import { displayMoney, formatMoney } from '@/lib/formatMoney';
+
+export type { StrategyProjectionMilestoneEditValues };
+export { toProjectionMilestoneEditValues };
 
 export type StrategyProjectionMilestoneStepOption = {
   id: string;
@@ -44,31 +50,6 @@ export type StrategyProjectionMilestoneExpenseOption = {
   frequency?: string | null;
   startYear?: number | null;
   endYear?: number | null;
-};
-
-export type StrategyProjectionMilestoneEditValues = {
-  id: string;
-  year: number;
-  title: string;
-  type: string;
-  stepId: string | null;
-  monthlyIncome: number | null;
-  monthsOfIncome: number | null;
-  annualIncome: number | null;
-  capitalInvested: number | null;
-  capitalRemaining: number | null;
-  incomeThisPeriod: number | null;
-  cumulativeIncome: number | null;
-  totalAssetPosition: number | null;
-  expensesThisYear: number | null;
-  cumulativeExpenses: number | null;
-  netCashflowThisYear: number | null;
-  capitalReturnedThisYear: number | null;
-  capitalReturnedToDate: number | null;
-  selectedStepIds: string[];
-  selectedExpenseIds: string[];
-  notes: string | null;
-  sortOrder: number;
 };
 
 type StrategyProjectionMilestoneEditModalProps = {
@@ -216,35 +197,6 @@ function SuggestionRow({
       </span>
     </div>
   );
-}
-
-export function toProjectionMilestoneEditValues(
-  milestone: StrategyProjectionMilestone
-): StrategyProjectionMilestoneEditValues {
-  return {
-    id: milestone.id,
-    year: milestone.year,
-    title: milestone.title,
-    type: milestone.type,
-    stepId: milestone.stepId,
-    monthlyIncome: milestone.monthlyIncome,
-    monthsOfIncome: milestone.monthsOfIncome,
-    annualIncome: milestone.annualIncome,
-    capitalInvested: milestone.capitalInvested,
-    capitalRemaining: milestone.capitalRemaining,
-    incomeThisPeriod: milestone.incomeThisPeriod,
-    cumulativeIncome: milestone.cumulativeIncome,
-    totalAssetPosition: milestone.totalAssetPosition,
-    expensesThisYear: milestone.expensesThisYear ?? null,
-    cumulativeExpenses: milestone.cumulativeExpenses ?? null,
-    netCashflowThisYear: milestone.netCashflowThisYear ?? null,
-    capitalReturnedThisYear: milestone.capitalReturnedThisYear ?? null,
-    capitalReturnedToDate: milestone.capitalReturnedToDate ?? null,
-    selectedStepIds: milestone.selectedStepIds ?? [],
-    selectedExpenseIds: milestone.selectedExpenseIds ?? [],
-    notes: milestone.notes,
-    sortOrder: milestone.sortOrder,
-  };
 }
 
 export default function StrategyProjectionMilestoneEditModal({

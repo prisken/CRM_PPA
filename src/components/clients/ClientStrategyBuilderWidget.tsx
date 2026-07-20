@@ -11,9 +11,18 @@ import {
 import { SkeletonPulse } from '@/components/dashboard/skeletons/skeletonUtils';
 import { authenticatedFetch } from '@/lib/authenticatedFetch';
 import type { StrategyPlanEditValues } from '@/components/clients/StrategyPlanEditModal';
-import StrategyPlanDetailView, {
-  type StrategyPlanDetail,
-} from '@/components/clients/StrategyPlanDetailView';
+import type { StrategyPlanDetail } from '@/components/clients/StrategyPlanDetailView';
+import { StrategyPlannerPanelSkeleton } from '@/components/clients/strategyPlannerLoading';
+
+const StrategyPlanDetailView = dynamic(
+  () => import('@/components/clients/StrategyPlanDetailView'),
+  {
+    ssr: false,
+    loading: () => (
+      <StrategyPlannerPanelSkeleton label="Loading strategy plan…" />
+    ),
+  }
+);
 
 const StrategyPlanEditModal = dynamic(
   () => import('@/components/clients/StrategyPlanEditModal'),

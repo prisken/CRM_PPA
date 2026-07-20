@@ -2,19 +2,30 @@
 
 import { Menu, MenuButton, MenuItem, MenuItems } from '@headlessui/react';
 import { ChevronDown } from 'lucide-react';
+import dynamic from 'next/dynamic';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import ActivityLog, { type ActivityLogEntry } from '@/components/clients/ActivityLog';
-import ClientStrategyBuilderWidget from '@/components/clients/ClientStrategyBuilderWidget';
 import StrategyAndTasks, {
   type StrategyCurrentUser,
   type StrategyTask,
 } from '@/components/clients/StrategyAndTasks';
+import { StrategyPlannerPanelSkeleton } from '@/components/clients/strategyPlannerLoading';
 import { authenticatedFetch } from '@/lib/authenticatedFetch';
 import { useDisplayDensity } from '@/components/ui/DisplayDensityProvider';
 import {
   getSectionCardHeaderPaddingClass,
   getWidgetPaddingClass,
 } from '@/components/ui/displayDensity';
+
+const ClientStrategyBuilderWidget = dynamic(
+  () => import('@/components/clients/ClientStrategyBuilderWidget'),
+  {
+    ssr: false,
+    loading: () => (
+      <StrategyPlannerPanelSkeleton label="Loading Strategy Planner…" />
+    ),
+  }
+);
 
 type WorkspacePanelProps = {
   clientId: string;
