@@ -440,6 +440,7 @@ export async function mergeContactsOntoCanonical(
 }
 
 export function buildContactSearchOr(search: string): Prisma.ClientWhereInput[] {
+  const emailNormalized = normalizeEmail(search);
   const phoneNormalized = normalizePhone(search);
   const clauses: Prisma.ClientWhereInput[] = [
     { email: { contains: search, mode: 'insensitive' } },
@@ -452,6 +453,17 @@ export function buildContactSearchOr(search: string): Prisma.ClientWhereInput[] 
       },
     },
   ];
+
+  if (emailNormalized) {
+    clauses.push({
+      contacts: {
+        some: {
+          kind: ClientContactKind.EMAIL,
+          normalizedValue: { contains: emailNormalized },
+        },
+      },
+    });
+  }
 
   if (phoneNormalized) {
     clauses.push({

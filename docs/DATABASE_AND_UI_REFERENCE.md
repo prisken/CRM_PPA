@@ -1500,7 +1500,7 @@ Super-admin inbox at `/admin/leads`. Entry point: `fetchLeadCommandCenterRows(fi
 
 **Inbox UI:** 300ms debounce on filter/search query string; `AbortController` cancels stale list requests; soft refresh keeps existing rows visible; **Load more** appends the next offset page.
 
-**Global search** (`searchClients()`): used by `GET /api/search/clients?q=` — name/company/email/phone `ILIKE`; super admin searches all clients; standard users scoped to assignments; max 10 results with attention score.
+**Global search** (`searchClients()`): used by `GET /api/search/clients?q=` — name/company/`Client.email`/`Client.phone`/`client_contacts.value` (+ normalized contact values) via `ILIKE` / trigram GINs; ranked exact contact → name prefix → company prefix → contains; super admin searches all clients; standard users scoped to assignments; max 10 results; slim select (no full duplicate/activity scan).
 
 ### Duplicate detection (`lib/leadDuplicates.ts`)
 
@@ -1568,7 +1568,7 @@ Per merge (pairwise step or full `mergeClients` call), in a **single Prisma tran
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
-| GET | `/api/search/clients` | Any authenticated user (Bearer or session) | Client search for command palette. Query: `?q=` (required). Super admin: all clients; standard user: assigned only. Max 10 results with `attentionScore` |
+| GET | `/api/search/clients` | Any authenticated user (Bearer or session) | Command palette search (`?q=`). Super admin: all; standard: assigned only. Contacts + scalar email/phone; ranked matches; max 10; slim select |
 
 ### Commission returnables
 

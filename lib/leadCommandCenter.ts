@@ -1153,7 +1153,52 @@ export async function fetchLeadCommandCenterPreview(
   return mapPreviewClientToDetail(client, duplicateClientIds, latestActivity);
 }
 
-const SEARCH_CANDIDATE_LIMIT = 100;
+const SEARCH_CANDIDATE_LIMIT = 40;
+
+/** Slim select for command-palette / global client search (not LCC inbox). */
+const clientSearchSelect = {
+  id: true,
+  name: true,
+  company: true,
+  email: true,
+  phone: true,
+  status: true,
+  leadSource: true,
+  createdAt: true,
+  lastModified: true,
+  priority: true,
+  nextAction: true,
+  nextFollowUpAt: true,
+  clientAssignments: {
+    select: {
+      assignmentId: true,
+    },
+  },
+  sourceRecords: {
+    orderBy: { receivedAt: 'desc' as const },
+    take: INBOX_SOURCE_SAMPLE_LIMIT,
+    select: {
+      source: true,
+      receivedAt: true,
+    },
+  },
+  contacts: {
+    select: {
+      kind: true,
+      value: true,
+      normalizedValue: true,
+    },
+  },
+  _count: {
+    select: {
+      sourceRecords: true,
+    },
+  },
+} satisfies Prisma.ClientSelect;
+
+type SearchClientRow = Prisma.ClientGetPayload<{
+  select: typeof clientSearchSelect;
+}>;
 
 export type ClientSearchResult = {
   clientId: string;
@@ -1167,17 +1212,82 @@ export type ClientSearchResult = {
   attentionReasons: string[];
 };
 
-function mapRowToSearchResult(row: LeadCommandCenterRow): ClientSearchResult {
+/** Higher = better match. Exact contact → name prefix → company prefix → contains. */
+function rankClientSearchMatch(client: SearchClientRow, query: string): number {
+  const trimmed = query.trim();
+  const lower = trimmed.toLowerCase();
+  const emailNorm = normalizeEmail(trimmed);
+  const phoneNorm = normalizePhone(trimmed);
+
+  const scalarEmail = normalizeEmail(client.email);
+  const scalarPhone = normalizePhone(client.phone);
+
+  if (
+    (emailNorm && scalarEmail === emailNorm) ||
+    (phoneNorm && scalarPhone === phoneNorm)
+  ) {
+    return 400;
+  }
+
+  for (const contact of client.contacts) {
+    if (emailNorm && contact.kind === 'EMAIL' && contact.normalizedValue === emailNorm) {
+      return 400;
+    }
+    if (phoneNorm && contact.kind === 'PHONE' && contact.normalizedValue === phoneNorm) {
+      return 400;
+    }
+  }
+
+  if (client.name.toLowerCase().startsWith(lower)) {
+    return 300;
+  }
+
+  if (client.company?.toLowerCase().startsWith(lower)) {
+    return 200;
+  }
+
+  return 100;
+}
+
+function mapSearchClientToResult(
+  client: SearchClientRow,
+  query: string
+): ClientSearchResult & { matchRank: number; lastModifiedMs: number } {
+  const sourcePresentation = buildSourcePresentation(
+    client.sourceRecords,
+    client.leadSource,
+    client._count.sourceRecords
+  );
+
+  // Skip full-table duplicate scan + activity union for search; use lastModified
+  // as activity stand-in so "no activity" rules do not inflate scores falsely.
+  const lastModifiedIso = client.lastModified.toISOString();
+  const { attentionScore, attentionReasons } = computeAttention({
+    status: client.status,
+    email: client.email,
+    phone: client.phone,
+    assignedUserCount: client.clientAssignments.length,
+    sourceRecordCount: sourcePresentation.sourceRecordCount,
+    latestSourceReceivedAt: sourcePresentation.latestSourceReceivedAt,
+    lastActivityAt: lastModifiedIso,
+    lastModified: lastModifiedIso,
+    duplicateWarnings: [],
+    nextAction: client.nextAction,
+    nextFollowUpAt: client.nextFollowUpAt?.toISOString() ?? null,
+  });
+
   return {
-    clientId: row.clientId,
-    name: row.name,
-    company: row.company,
-    email: row.email,
-    phone: row.phone,
-    status: row.status,
-    sourceLabels: row.sourceLabels,
-    attentionScore: row.attentionScore,
-    attentionReasons: row.attentionReasons,
+    clientId: client.id,
+    name: client.name,
+    company: client.company,
+    email: client.email,
+    phone: client.phone,
+    status: client.status,
+    sourceLabels: sourcePresentation.sourceLabels,
+    attentionScore,
+    attentionReasons,
+    matchRank: rankClientSearchMatch(client, query),
+    lastModifiedMs: client.lastModified.getTime(),
   };
 }
 
@@ -1192,39 +1302,45 @@ export async function searchClients(options: {
   }
 
   const limit = Math.min(Math.max(options.limit ?? 10, 1), 10);
+  // Same scoping as LCC filters: archived excluded; assignedUserId restricts to
+  // that user's clients (standard users). Super admin omits assignedUserId.
   const where = buildClientWhere({
     search: query,
     assignedUserId: options.assignedUserId,
   });
 
-  const [clients, duplicateClientIds] = await Promise.all([
-    prisma.client.findMany({
-      where,
-      take: SEARCH_CANDIDATE_LIMIT,
-      orderBy: { lastModified: 'desc' },
-      select: leadCommandCenterInboxSelect,
-    }),
-    loadDuplicateClientIds(),
-  ]);
+  const clients = await prisma.client.findMany({
+    where,
+    take: SEARCH_CANDIDATE_LIMIT,
+    orderBy: { lastModified: 'desc' },
+    select: clientSearchSelect,
+  });
 
   if (clients.length === 0) {
     return [];
   }
 
-  const latestActivityTimestamps = await loadLatestActivityTimestampsByClientId(
-    clients.map((client) => client.id)
-  );
-
-  const rows = clients.map((client) => {
-    const activityDate = latestActivityTimestamps.get(client.id);
-    return mapInboxClientToRow(
-      client,
-      duplicateClientIds,
-      activityDate?.toISOString() ?? null
-    );
-  });
-
-  sortRows(rows);
-
-  return rows.slice(0, limit).map(mapRowToSearchResult);
+  return clients
+    .map((client) => mapSearchClientToResult(client, query))
+    .sort((left, right) => {
+      if (right.matchRank !== left.matchRank) {
+        return right.matchRank - left.matchRank;
+      }
+      if (right.attentionScore !== left.attentionScore) {
+        return right.attentionScore - left.attentionScore;
+      }
+      return right.lastModifiedMs - left.lastModifiedMs;
+    })
+    .slice(0, limit)
+    .map((row) => ({
+      clientId: row.clientId,
+      name: row.name,
+      company: row.company,
+      email: row.email,
+      phone: row.phone,
+      status: row.status,
+      sourceLabels: row.sourceLabels,
+      attentionScore: row.attentionScore,
+      attentionReasons: row.attentionReasons,
+    }));
 }
