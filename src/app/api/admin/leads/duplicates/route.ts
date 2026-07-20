@@ -42,11 +42,14 @@ export async function GET(request: Request) {
         includeArchived,
         limit,
       }),
-    (result) => ({
-      groupCount: result.groups.length,
-      limit: result.meta.limit,
-      includeArchived,
-    })
+    {
+      payloadCategory: 'lead-command-center',
+      getMeta: (result) => ({
+        groupCount: result.groups.length,
+        limit: result.meta.limit,
+        includeArchived,
+      }),
+    }
   );
 
   return NextResponse.json(payload);

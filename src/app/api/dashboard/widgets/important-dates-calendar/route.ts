@@ -39,7 +39,8 @@ export async function GET(request: Request) {
       fetchImportantDatesCalendarEvents(
         { id: auth.user.id, role: auth.user.role },
         parsed.data
-      )
+      ),
+    { payloadCategory: 'dashboard-widget' }
   );
 
   if (!result.ok) {

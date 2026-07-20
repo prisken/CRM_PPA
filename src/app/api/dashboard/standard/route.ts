@@ -11,8 +11,10 @@ export async function GET(request: Request) {
     return auth.error;
   }
 
-  const dashboard = await timeRouteHandler('GET /api/dashboard/standard', () =>
-    buildStandardDashboard(auth.user.id)
+  const dashboard = await timeRouteHandler(
+    'GET /api/dashboard/standard',
+    () => buildStandardDashboard(auth.user.id),
+    { payloadCategory: 'dashboard-widget' }
   );
   return NextResponse.json(dashboard);
 }

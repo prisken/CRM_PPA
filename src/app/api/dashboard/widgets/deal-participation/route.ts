@@ -13,7 +13,8 @@ export async function GET(request: Request) {
 
   const data = await timeRouteHandler(
     'GET /api/dashboard/widgets/deal-participation',
-    () => buildDealParticipationWidget(auth.user.id)
+    () => buildDealParticipationWidget(auth.user.id),
+    { payloadCategory: 'dashboard-widget' }
   );
 
   return NextResponse.json(data);

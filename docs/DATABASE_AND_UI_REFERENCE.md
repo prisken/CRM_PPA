@@ -140,7 +140,7 @@ docs/             # Documentation (this file, user manuals, google-forms-integra
 - **Client 360** — server component loads core client data, deals, and company hierarchy in parallel via `loadClient360PageData()`; workspace tabs still lazy-load on demand. Mutations call `router.refresh()` to re-fetch server data.
 - **Admin analytics** — super-admin org-wide aggregates (funnel, KPIs, revenue tracker, leaderboards) use `unstable_cache` with 600s revalidation in `lib/adminAnalyticsCache.ts`. Auth (`requireSuperAdminFromRequest`) runs on every request before cache lookup. Routes export `dynamic = 'force-dynamic'` so session-scoped responses are not globally cached. User-specific dashboard, Client 360, and `/api/me/*` routes are also `force-dynamic`.
 - **Activity feed** — single PostgreSQL query via `UNION ALL` (Interactions + activity logs), sorted and limited in the database.
-- **Route timing** — set `PERF_LOGGING_ENABLED=true` to emit `[perf]` lines in the dev server terminal. See [Route performance timings](#route-performance-timings) below.
+- **Route timing** — set `PERF_LOGGING_ENABLED=true` to emit structured `[perf]` lines in the dev server terminal (`lib/performance.ts`). Includes method, route/op, status, durationMs, optional payloadBytes / cache, and payload size warnings by surface. Prisma logs queries ≥200ms in development or when `PERF_LOGGING_ENABLED=true` (SQL only — no bound params). See [Route performance timings](#route-performance-timings) below.
 
 ### Route performance timings
 
@@ -149,10 +149,21 @@ Measured locally (June 24, 2026) against Supabase PostgreSQL with `PERF_LOGGING_
 **How to reproduce:**
 
 ```bash
+# Enable structured route + payload + slow Prisma logs
 PERF_LOGGING_ENABLED=true npm run dev
 npx tsx scripts/profile-api-routes.ts   # client round-trip summary
 ```
 
+**Example `[perf]` lines:**
+
+```text
+[perf] method=GET route=/api/admin/leads status=ok durationMs=412 payloadBytes=182340 payloadCategory=lead-command-center leadCount=17
+[perf:warn] payloadBytes=62000 threshold=51200 category=dashboard-widget route=/api/dashboard/widgets/open-tasks
+[perf] method=- op=cache:admin-dashboard-kpis status=ok durationMs=241 cache=miss
+[perf] method=- op=prisma:query status=slow durationMs=240 query="SELECT ..."
+```
+
+**Payload warn thresholds:** dashboard widgets 50KB · Client 360 core 100KB · deals 150KB · Strategy Planner 200KB · Lead Command Center 250KB.
 **Typical server timings (after performance pass 2, warm runs):**
 
 | Route / operation | Server time | Notes |
@@ -178,11 +189,15 @@ npx tsx scripts/profile-api-routes.ts   # client round-trip summary
 
 Client round-trip on cache hit is still ~220 ms (auth + network); server DB work is skipped.
 
-**Instrumented `[perf]` prefixes:**
+**Instrumented `[perf]` prefixes / fields:**
 
-| Prefix | Location |
-|--------|----------|
-| `route:GET /api/...` | API route handlers (`timeRouteHandler`) |
+| Prefix / field | Location |
+|----------------|----------|
+| `method=` + `route=` | API route handlers (`timeRouteHandler`) |
+| `op=` | Builders / loaders (`timeAsync`) |
+| `payloadBytes=` / `payloadCategory=` | Optional JSON size + warn category |
+| `cache=hit\|miss` | Caller-provided (admin analytics loaders log `miss`) |
+| `op=prisma:query status=slow` | Prisma queries ≥200ms (dev or `PERF_LOGGING_ENABLED`) |
 | `cache:admin-*` | Admin analytics cache loaders on miss |
 | `widget:build*` | Standard dashboard widget builders |
 | `dashboard:loadContext` / `dashboard:buildStandard` | Shared dashboard context + legacy monolith compose |
@@ -2575,7 +2590,7 @@ npm run find:duplicate-clients
 | `NEXTAUTH_SECRET` | JWT signing secret (`lib/jwt.ts`) |
 | `SUPABASE_CLIENT_DOCUMENTS_BUCKET` | Supabase Storage bucket for client uploads (default: `client-documents`) |
 | `TEST_BASE_URL` | Optional override for integration test scripts (default: `http://localhost:3000`) |
-| `PERF_LOGGING_ENABLED` | Set to `true` to log `[perf]` route/builder timings to the server console (dev/staging only) |
+| `PERF_LOGGING_ENABLED` | Set to `true` to log structured `[perf]` route/builder timings, payload size warnings, and (with Prisma) slow queries ≥200ms to the server console. Slow Prisma queries also log in `NODE_ENV=development` without this flag. Dev/staging only. |
 | `GOOGLE_FORMS_WEBHOOK_SECRET` | Shared secret for `POST /api/integrations/google-forms/leads` (`x-webhook-secret` header). **Required** for Google Forms webhook |
 | `GOOGLE_FORMS_DEFAULT_RELATIONSHIP_USER_ID` | Optional CRM user `id` — auto-assign new Google Form leads as `RELATIONSHIP` |
 | `PROFIT_PULSE_ALLY_WEBHOOK_SECRET` | Shared secret for `POST /api/integrations/profit-pulse-ally/members` (`x-webhook-secret` header). **Required** for PPA member webhook |

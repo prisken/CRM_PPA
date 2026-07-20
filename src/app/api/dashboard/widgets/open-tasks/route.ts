@@ -11,8 +11,10 @@ export async function GET(request: Request) {
     return auth.error;
   }
 
-  const data = await timeRouteHandler('GET /api/dashboard/widgets/open-tasks', () =>
-    buildOpenTasksWidget(auth.user.id)
+  const data = await timeRouteHandler(
+    'GET /api/dashboard/widgets/open-tasks',
+    () => buildOpenTasksWidget(auth.user.id),
+    { payloadCategory: 'dashboard-widget' }
   );
   return NextResponse.json(data);
 }

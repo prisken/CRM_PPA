@@ -1,5 +1,10 @@
 // lib/prisma.ts
-import { PrismaClient } from '@prisma/client';
+import { Prisma, PrismaClient } from '@prisma/client';
+import {
+  getSlowPrismaQueryThresholdMs,
+  logSlowPrismaQuery,
+  shouldLogSlowPrismaQueries,
+} from '@/lib/performance';
 
 declare global {
   // eslint-disable-next-line no-var
@@ -7,9 +12,30 @@ declare global {
 }
 
 function createPrismaClient() {
-  const client = new PrismaClient({
-    log: ['query'], // Log queries to the console for debugging
-  });
+  // Prefer event-based query logs so we can filter slow queries and avoid
+  // printing bound parameter values (emails, phones, tokens).
+  const enableSlowQueryEvents = shouldLogSlowPrismaQueries();
+
+  const log: Prisma.LogDefinition[] = [
+    { emit: 'stdout', level: 'warn' },
+    { emit: 'stdout', level: 'error' },
+  ];
+
+  if (enableSlowQueryEvents) {
+    log.push({ emit: 'event', level: 'query' });
+  }
+
+  const client = new PrismaClient({ log });
+
+  if (enableSlowQueryEvents) {
+    const thresholdMs = getSlowPrismaQueryThresholdMs();
+    client.$on('query', (event: Prisma.QueryEvent) => {
+      if (event.duration >= thresholdMs) {
+        // Intentionally omit `event.params` — may contain PII/secrets.
+        logSlowPrismaQuery(event.duration, event.query);
+      }
+    });
+  }
 
   // Warm the query engine so the first SSR request after recreate
   // does not hit "Engine is not yet connected".

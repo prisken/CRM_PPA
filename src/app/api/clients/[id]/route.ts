@@ -13,6 +13,7 @@ import {
   requireSuperAdminFromRequest,
   verifyAdminPassword,
 } from '@/lib/authHelpers';
+import { timeRouteHandler } from '@/lib/performance';
 
 export const dynamic = 'force-dynamic';
 
@@ -42,16 +43,31 @@ export async function GET(
     return auth.error;
   }
 
-  const client = await prisma.client.findUnique({
-    where: { id },
-    include: client360CoreInclude,
-  });
+  const payload = await timeRouteHandler(
+    `GET /api/clients/${id}`,
+    async () => {
+      const client = await prisma.client.findUnique({
+        where: { id },
+        include: client360CoreInclude,
+      });
 
-  if (!client) {
+      if (!client) {
+        return null;
+      }
+
+      return buildClient360CoreResponse(client);
+    },
+    {
+      payloadCategory: 'client360-core',
+      getMeta: (result) => ({ found: result !== null }),
+    }
+  );
+
+  if (!payload) {
     return NextResponse.json({ error: 'Client not found' }, { status: 404 });
   }
 
-  return NextResponse.json(buildClient360CoreResponse(client));
+  return NextResponse.json(payload);
 }
 
 export async function PATCH(

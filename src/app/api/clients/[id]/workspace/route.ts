@@ -42,7 +42,8 @@ export async function GET(
         }
 
         return buildStrategyTasksWorkspace(client);
-      }
+      },
+      { payloadCategory: 'client360-core' }
     );
 
     if (!payload) {
@@ -65,7 +66,8 @@ export async function GET(
       }
 
       return buildActivityNotesWorkspace(client);
-    }
+    },
+    { payloadCategory: 'client360-core' }
   );
 
   if (!payload) {

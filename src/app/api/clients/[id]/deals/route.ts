@@ -25,6 +25,7 @@ import {
   toParticipantCreateInput,
   type NormalizedDealParticipant,
 } from '@/lib/dealParticipants';
+import { timeRouteHandler } from '@/lib/performance';
 import { prisma } from '@/lib/prisma';
 
 async function resolveDealParticipants({
@@ -94,16 +95,27 @@ export async function GET(
     return clientCheck.error;
   }
 
-  const deals = await prisma.deal.findMany({
-    where: { clientId },
-    orderBy: { createdAt: 'asc' },
-    select: dealResponseSelect,
-  });
+  const payload = await timeRouteHandler(
+    `GET /api/clients/${clientId}/deals`,
+    async () => {
+      const deals = await prisma.deal.findMany({
+        where: { clientId },
+        orderBy: { createdAt: 'asc' },
+        select: dealResponseSelect,
+      });
 
-  return NextResponse.json({
-    client_id: clientId,
-    deals: deals.map(formatDealResponse),
-  });
+      return {
+        client_id: clientId,
+        deals: deals.map(formatDealResponse),
+      };
+    },
+    {
+      payloadCategory: 'deals',
+      getMeta: (result) => ({ dealCount: result.deals.length }),
+    }
+  );
+
+  return NextResponse.json(payload);
 }
 
 export async function POST(

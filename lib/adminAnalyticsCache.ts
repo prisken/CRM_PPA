@@ -91,6 +91,7 @@ function formatRevenuePeriod(year: number, month: number, groupBy: RevenueGroupB
 }
 
 async function loadAdminFunnelData(): Promise<AdminFunnelStage[]> {
+  // Only runs on unstable_cache miss — log cache=miss for PERF_LOGGING.
   return timeAsync('cache:admin-funnel-data', async () => {
   const statusCounts = await prisma.client.groupBy({
     by: ['status'],
@@ -115,7 +116,7 @@ async function loadAdminFunnelData(): Promise<AdminFunnelStage[]> {
 
     return { stage, count, conversionRate };
   });
-  });
+  }, { cache: 'miss' });
 }
 
 async function loadAdminDashboardKpis(): Promise<AdminDashboardKpis> {
@@ -189,7 +190,7 @@ async function loadAdminDashboardKpis(): Promise<AdminDashboardKpis> {
     pipelineVelocity: Math.round(pipelineVelocity * 10) / 10,
     activeDeals,
   };
-  });
+  }, { cache: 'miss' });
 }
 
 async function loadAdminLeaderboardsData(): Promise<AdminLeaderboardsData> {
@@ -240,7 +241,7 @@ async function loadAdminLeaderboardsData(): Promise<AdminLeaderboardsData> {
     })),
     LEADERBOARD_COMMISSION_RATES
   );
-  });
+  }, { cache: 'miss' });
 }
 
 type RevenueAggregateRow = {
@@ -319,7 +320,7 @@ async function loadAdminRevenueTrackerData(
     const bKey = Number(bYear) * 10 + Number(bQuarter.replace('Q', ''));
     return aKey - bKey;
   });
-  });
+  }, { cache: 'miss' });
 }
 
 const getCachedAdminFunnelDataInternal = unstable_cache(

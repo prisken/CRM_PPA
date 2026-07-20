@@ -14,6 +14,7 @@ import {
   strategyPlanListSelect,
 } from '@/lib/clientStrategyPlans';
 import { updateStrategyPlanSchema } from '@/lib/clientStrategyValidation';
+import { timeRouteHandler } from '@/lib/performance';
 import { prisma } from '@/lib/prisma';
 
 export const dynamic = 'force-dynamic';
@@ -28,14 +29,30 @@ export async function GET(
     return auth.error;
   }
 
-  const planLoad = await loadStrategyPlanDetail(clientId, planId);
-  if (planLoad.error) {
-    return planLoad.error;
+  const result = await timeRouteHandler(
+    `GET /api/clients/${clientId}/strategy-plans/${planId}`,
+    async () => {
+      const planLoad = await loadStrategyPlanDetail(clientId, planId);
+      if (planLoad.error) {
+        return { ok: false as const, error: planLoad.error };
+      }
+
+      return {
+        ok: true as const,
+        body: { plan: formatStrategyPlanDetail(planLoad.plan) },
+      };
+    },
+    {
+      payloadCategory: 'strategy-planner',
+      getMeta: (value) => ({ found: value.ok }),
+    }
+  );
+
+  if (!result.ok) {
+    return result.error;
   }
 
-  return NextResponse.json({
-    plan: formatStrategyPlanDetail(planLoad.plan),
-  });
+  return NextResponse.json(result.body);
 }
 
 export async function PUT(

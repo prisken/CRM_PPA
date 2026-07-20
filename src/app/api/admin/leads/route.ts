@@ -162,11 +162,14 @@ export async function GET(request: Request) {
           },
         };
       },
-      (result) => ({
-        leadCount: result.leads.length,
-        limit: result.meta.limit,
-        offset: result.meta.offset,
-      })
+      {
+        payloadCategory: 'lead-command-center',
+        getMeta: (result) => ({
+          leadCount: result.leads.length,
+          limit: result.meta.limit,
+          offset: result.meta.offset,
+        }),
+      }
     );
 
     return NextResponse.json(payload);

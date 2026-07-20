@@ -1,6 +1,13 @@
 /**
  * Hit major API routes and print client-side timings.
- * Server-side `[perf]` logs appear in the dev server terminal when PERF_LOGGING_ENABLED=true.
+ *
+ * Server-side structured `[perf]` logs appear in the dev server terminal when:
+ *   PERF_LOGGING_ENABLED=true npm run dev
+ *
+ * Example server log:
+ *   [perf] method=GET route=/api/admin/leads status=ok durationMs=412 payloadBytes=182340 payloadCategory=lead-command-center leadCount=17
+ *   [perf:warn] payloadBytes=182340 threshold=51200 category=dashboard-widget route=/api/dashboard/widgets/open-tasks
+ *   [perf] method=- op=prisma:query status=slow durationMs=240 query="SELECT ..."
  *
  * Run: PERF_LOGGING_ENABLED=true npm run dev
  * Then: npx tsx scripts/profile-api-routes.ts

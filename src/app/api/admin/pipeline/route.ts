@@ -46,9 +46,11 @@ export async function GET(request: Request) {
         })),
       };
     },
-    (result) => ({
-      clientCount: result.clients.length,
-    })
+    {
+      getMeta: (result) => ({
+        clientCount: result.clients.length,
+      }),
+    }
   );
 
   return NextResponse.json(payload);

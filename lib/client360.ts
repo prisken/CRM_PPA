@@ -544,10 +544,13 @@ export async function getClient360CoreData(
 
       return buildClient360CoreResponse(client);
     },
-    (result) => ({
-      clientId,
-      found: result !== null,
-    })
+    {
+      payloadCategory: 'client360-core',
+      getMeta: (result) => ({
+        clientId,
+        found: result !== null,
+      }),
+    }
   );
 }
 
@@ -565,10 +568,13 @@ export async function getClient360DealsData(
 
       return deals.map(formatDealResponse);
     },
-    (result) => ({
-      clientId,
-      dealCount: result.length,
-    })
+    {
+      payloadCategory: 'deals',
+      getMeta: (result) => ({
+        clientId,
+        dealCount: result.length,
+      }),
+    }
   );
 }
 
