@@ -164,7 +164,7 @@ npx tsx scripts/profile-api-routes.ts   # client round-trip summary
 [perf] method=- op=prisma:query status=slow durationMs=240 query="SELECT ..."
 ```
 
-**Payload warn thresholds:** dashboard widgets 50KB · Client 360 core 100KB · deals 150KB · Strategy Planner 200KB · Lead Command Center 250KB.
+**Payload warn thresholds:** dashboard widgets 50KB · Client 360 core 100KB · deals 150KB · Strategy Planner 200KB · Lead Command Center 250KB · Admin master pipeline 150KB.
 **Typical server timings (after performance pass 2, warm runs):**
 
 | Route / operation | Server time | Notes |
@@ -1655,7 +1655,7 @@ Per merge (pairwise step or full `mergeClients` call), in a **single Prisma tran
 | GET | `/api/admin/funnel-data` | Super admin (Bearer or session) | Conversion funnel chart data. **Cached:** org-wide `unstable_cache` 600s (auth every request) |
 | GET | `/api/admin/revenue-tracker` | Super admin (Bearer or session) | Revenue over time; requires `?groupBy=month\|quarter\|year`. **Cached:** org-wide `unstable_cache` 600s |
 | GET | `/api/admin/leaderboards` | Super admin (Bearer or session) | Commission & deals leaderboards. **Cached:** org-wide `unstable_cache` 600s |
-| GET | `/api/admin/pipeline` | Super admin (Bearer or session) | All clients for master pipeline |
+| GET | `/api/admin/pipeline` | Super admin (Bearer or session) | All clients for master pipeline. Slim card DTO via `lib/adminPipeline.ts` (`client_id`, `name`, `company`, `status`, `assignedUsers[{ user_id, userName }]`). Payload category `admin-pipeline` (150KB warn). |
 
 ### Lead Command Center (super admin)
 
@@ -2367,6 +2367,7 @@ Mounted via `src/components/Providers.tsx` (wraps app with `DisplayDensityProvid
 | `authHelpers.ts` | Auth guards, `verifyAdminPassword()` (Supabase re-auth for destructive actions), `ACTIVE` status checks, client access checks, system event logging |
 | `client360.ts` | Client 360 includes, response builders, server loaders (`getClient360CoreData`, `getClient360DealsData`, `getClient360CompanyHierarchyData`, `loadClient360PageData`) |
 | `pipelinePermissions.ts` | Pipeline stage advance rules + advance checklists (shared by API + UI) |
+| `adminPipeline.ts` | Super-admin master pipeline slim DTO + Prisma select for `GET /api/admin/pipeline` |
 | `standardDashboard.ts` | Composes legacy monolithic dashboard from widget builders (shared context) |
 | `standardDashboardWidgets.ts` | Per-widget data builders (assigned clients, tasks, activity, performance metrics) |
 | `standardDashboardContext.ts` | One-shot assignment + deal aggregate + occupancy load for dashboard widgets |

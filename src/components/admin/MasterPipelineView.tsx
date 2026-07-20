@@ -2,19 +2,10 @@
 
 import Link from 'next/link';
 import { memo, useEffect, useMemo, useState } from 'react';
+import type { AdminPipelineClient } from '@/lib/adminPipeline';
 import { CLIENT_STAGES } from '@/lib/clientStages';
 
-type PipelineClient = {
-  client_id: string;
-  name: string;
-  company: string | null;
-  status: string;
-  assignedUsers: {
-    user_id: string;
-    userName: string;
-    role: string;
-  }[];
-};
+type PipelineClient = AdminPipelineClient;
 
 const STATUS_COLUMNS = CLIENT_STAGES.map((stage) => ({
   key: stage.value,

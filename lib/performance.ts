@@ -22,7 +22,8 @@ export type PayloadCategory =
   | 'client360-core'
   | 'deals'
   | 'lead-command-center'
-  | 'strategy-planner';
+  | 'strategy-planner'
+  | 'admin-pipeline';
 
 export const PAYLOAD_WARN_THRESHOLDS: Record<PayloadCategory, number> = {
   'dashboard-widget': 50 * 1024,
@@ -30,6 +31,8 @@ export const PAYLOAD_WARN_THRESHOLDS: Record<PayloadCategory, number> = {
   deals: 150 * 1024,
   'lead-command-center': 250 * 1024,
   'strategy-planner': 200 * 1024,
+  /** Unbounded master pipeline list — warn early as client volume grows. */
+  'admin-pipeline': 150 * 1024,
 };
 
 const SLOW_PRISMA_QUERY_MS = 200;
