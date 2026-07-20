@@ -36,13 +36,13 @@ export type ClientDeal = DealResponse;
 
 type DealInfoWidgetProps = {
   clientId: string;
-  deals: ClientDeal[];
+  /** Server-hydrated deals; widget owns subsequent refetches. */
+  initialDeals: ClientDeal[];
   myClientCommissionPercentage?: number;
   canCreateDeal?: boolean;
   canManageDeal?: (dealId: string) => boolean;
   assignedUsers?: AssignedUser[];
   currentUser?: CurrentUserInfo | null;
-  onMutationSuccess?: () => void;
 };
 
 const DEAL_PREVIEW_COUNT = 3;
@@ -460,16 +460,17 @@ function DealCard({
 
 export default memo(function DealInfoWidget({
   clientId,
-  deals,
+  initialDeals,
   myClientCommissionPercentage = 0,
   canCreateDeal = false,
   canManageDeal = () => false,
   assignedUsers = [],
   currentUser = null,
-  onMutationSuccess,
 }: DealInfoWidgetProps) {
   const { density } = useDisplayDensity();
   const widgetPaddingClass = getWidgetPaddingClass(density);
+  const [deals, setDeals] = useState<ClientDeal[]>(initialDeals);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [editingDeal, setEditingDeal] = useState<ClientDeal | null>(null);
@@ -478,6 +479,10 @@ export default memo(function DealInfoWidget({
   const [expandedParticipantDeals, setExpandedParticipantDeals] = useState<
     Record<string, boolean>
   >({});
+
+  useEffect(() => {
+    setDeals(initialDeals);
+  }, [initialDeals]);
 
   const committedValue = useMemo(
     () => calculateCommittedValue(deals),
@@ -496,6 +501,30 @@ export default memo(function DealInfoWidget({
 
     return myClientCommissionPercentage;
   }, [currentUser?.id, deals, myClientCommissionPercentage]);
+
+  async function refreshDeals() {
+    setIsRefreshing(true);
+    setError(null);
+
+    try {
+      const res = await authenticatedFetch(`/api/clients/${clientId}/deals`);
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(
+          typeof data.error === 'string' ? data.error : 'Failed to refresh deals'
+        );
+      }
+
+      const data = (await res.json()) as { deals?: ClientDeal[] };
+      setDeals(Array.isArray(data.deals) ? data.deals : []);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to refresh deals');
+      throw err;
+    } finally {
+      setIsRefreshing(false);
+    }
+  }
 
   function openCreateModal() {
     setEditingDeal(null);
@@ -539,7 +568,7 @@ export default memo(function DealInfoWidget({
         );
       }
 
-      onMutationSuccess?.();
+      await refreshDeals();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete deal');
     } finally {
@@ -547,10 +576,15 @@ export default memo(function DealInfoWidget({
     }
   }
 
-  function handleDealSaved() {
+  async function handleDealSaved() {
     setModalOpen(false);
     setEditingDeal(null);
-    onMutationSuccess?.();
+
+    try {
+      await refreshDeals();
+    } catch {
+      // Error already surfaced via refreshDeals → setError
+    }
   }
 
   const visibleDeals = showAllDeals ? deals : deals.slice(0, DEAL_PREVIEW_COUNT);
@@ -613,7 +647,8 @@ export default memo(function DealInfoWidget({
             <button
               type="button"
               onClick={openCreateModal}
-              className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700"
+              disabled={isRefreshing}
+              className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
             >
               + Add Deal
             </button>
@@ -631,10 +666,21 @@ export default memo(function DealInfoWidget({
 
         {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
 
-        {deals.length === 0 ? (
+        {isRefreshing && deals.length === 0 ? (
+          <div className="mt-3 space-y-3" aria-busy="true" aria-label="Loading deals">
+            <div className="h-24 animate-pulse rounded-lg bg-gray-100" />
+            <div className="h-24 animate-pulse rounded-lg bg-gray-100" />
+          </div>
+        ) : deals.length === 0 ? (
           <p className="mt-3 text-sm text-gray-500">No deals yet.</p>
         ) : (
-          <div className="mt-3 space-y-3">
+          <div
+            className={`mt-3 space-y-3 ${isRefreshing ? 'opacity-60' : ''}`}
+            aria-busy={isRefreshing}
+          >
+            {isRefreshing ? (
+              <p className="text-xs text-gray-500">Refreshing deals…</p>
+            ) : null}
             {visibleDeals.map((deal) => (
               <DealCard
                 key={deal.id}

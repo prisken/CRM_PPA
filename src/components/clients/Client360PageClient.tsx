@@ -403,13 +403,12 @@ export default function Client360PageClient({
           {dealAccess.canView && (
             <DealInfoWidget
               clientId={clientId}
-              deals={deals}
+              initialDeals={deals}
               myClientCommissionPercentage={myClientCommissionPercentage}
               canCreateDeal={dealAccess.canCreate}
               canManageDeal={canManageDeal}
               assignedUsers={client.assignedUsers}
               currentUser={teamCurrentUser}
-              onMutationSuccess={triggerDataRefresh}
             />
           )}
           <AssignedTeamWidget
