@@ -1,43 +1,92 @@
 'use client';
 
 import Link from 'next/link';
-import { memo, useMemo, useState } from 'react';
+import { memo, useEffect, useMemo, useState } from 'react';
 import SectionCard from '@/components/ui/SectionCard';
 import StatusPill from '@/components/ui/StatusPill';
+import { authenticatedFetch } from '@/lib/authenticatedFetch';
 import type { Client360CompanyHierarchyData } from '@/lib/client360';
 
 type CompanyHierarchyWidgetProps = {
   clientId: string;
   hierarchy: Client360CompanyHierarchyData;
   canManageEmployees?: boolean;
-  onMutationSuccess?: () => void;
 };
+
+function parseHierarchyPayload(
+  body: unknown,
+  fallback: Client360CompanyHierarchyData
+): Client360CompanyHierarchyData {
+  if (!body || typeof body !== 'object') {
+    return fallback;
+  }
+
+  const data = body as {
+    company?: string | null;
+    employeeCount?: number | null;
+    colleagues?: Array<{
+      client_id?: string;
+      name?: string;
+      roleInCompany?: string | null;
+      status?: string;
+    }>;
+  };
+
+  return {
+    company: data.company ?? fallback.company,
+    employeeCount:
+      data.employeeCount !== undefined
+        ? data.employeeCount
+        : fallback.employeeCount,
+    colleagues: Array.isArray(data.colleagues)
+      ? data.colleagues
+          .filter(
+            (colleague) =>
+              typeof colleague.client_id === 'string' &&
+              typeof colleague.name === 'string' &&
+              typeof colleague.status === 'string'
+          )
+          .map((colleague) => ({
+            client_id: colleague.client_id as string,
+            name: colleague.name as string,
+            roleInCompany: colleague.roleInCompany ?? null,
+            status: colleague.status as string,
+          }))
+      : fallback.colleagues,
+  };
+}
 
 export default memo(function CompanyHierarchyWidget({
   clientId,
   hierarchy,
   canManageEmployees = true,
-  onMutationSuccess,
 }: CompanyHierarchyWidgetProps) {
+  const [hierarchyState, setHierarchyState] =
+    useState<Client360CompanyHierarchyData>(hierarchy);
   const [fullName, setFullName] = useState('');
   const [roleInCompany, setRoleInCompany] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [showAddForm, setShowAddForm] = useState(false);
   const [showAllColleagues, setShowAllColleagues] = useState(false);
 
-  const hasColleagues = hierarchy.colleagues.length > 0;
-  const companyLabel = hierarchy.company?.trim() || 'No company set';
+  useEffect(() => {
+    setHierarchyState(hierarchy);
+  }, [hierarchy]);
+
+  const hasColleagues = hierarchyState.colleagues.length > 0;
+  const companyLabel = hierarchyState.company?.trim() || 'No company set';
   const visibleColleagues = showAllColleagues
-    ? hierarchy.colleagues
-    : hierarchy.colleagues.slice(0, 3);
+    ? hierarchyState.colleagues
+    : hierarchyState.colleagues.slice(0, 3);
   const hiddenColleagueCount = Math.max(
-    hierarchy.colleagues.length - visibleColleagues.length,
+    hierarchyState.colleagues.length - visibleColleagues.length,
     0
   );
 
   const description = useMemo(() => {
-    if (!hierarchy.company?.trim()) {
+    if (!hierarchyState.company?.trim()) {
       return 'Set a company to see related contacts.';
     }
 
@@ -45,10 +94,38 @@ export default memo(function CompanyHierarchyWidget({
       return `${companyLabel} · No colleagues yet`;
     }
 
-    return `${companyLabel} · ${hierarchy.colleagues.length} colleague${
-      hierarchy.colleagues.length === 1 ? '' : 's'
+    return `${companyLabel} · ${hierarchyState.colleagues.length} colleague${
+      hierarchyState.colleagues.length === 1 ? '' : 's'
     }`;
-  }, [companyLabel, hasColleagues, hierarchy.company, hierarchy.colleagues.length]);
+  }, [
+    companyLabel,
+    hasColleagues,
+    hierarchyState.company,
+    hierarchyState.colleagues.length,
+  ]);
+
+  async function refreshHierarchy() {
+    setIsRefreshing(true);
+    try {
+      const res = await authenticatedFetch(
+        `/api/clients/${clientId}/employees`
+      );
+
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(
+          typeof body.error === 'string'
+            ? body.error
+            : 'Failed to refresh company hierarchy'
+        );
+      }
+
+      const body = await res.json();
+      setHierarchyState((current) => parseHierarchyPayload(body, current));
+    } finally {
+      setIsRefreshing(false);
+    }
+  }
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -62,19 +139,19 @@ export default memo(function CompanyHierarchyWidget({
     setIsSubmitting(true);
 
     try {
-      const token = localStorage.getItem('token');
-      const res = await fetch(`/api/clients/${clientId}/employees`, {
-        method: 'POST',
-        credentials: 'same-origin',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify({
-          fullName: fullName.trim(),
-          roleInCompany: roleInCompany.trim(),
-        }),
-      });
+      const res = await authenticatedFetch(
+        `/api/clients/${clientId}/employees`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            fullName: fullName.trim(),
+            roleInCompany: roleInCompany.trim(),
+          }),
+        }
+      );
 
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
@@ -88,7 +165,16 @@ export default memo(function CompanyHierarchyWidget({
       setFullName('');
       setRoleInCompany('');
       setShowAddForm(false);
-      onMutationSuccess?.();
+
+      try {
+        await refreshHierarchy();
+      } catch (refreshErr) {
+        setFormError(
+          refreshErr instanceof Error
+            ? refreshErr.message
+            : 'Employee lead added, but hierarchy refresh failed. Reload the page to see colleagues.'
+        );
+      }
     } catch (err) {
       setFormError(err instanceof Error ? err.message : 'Failed to add employee lead');
     } finally {
@@ -110,7 +196,7 @@ export default memo(function CompanyHierarchyWidget({
             Company
           </dt>
           <dd className="mt-0.5 font-medium text-gray-900">
-            {hierarchy.company?.trim() ? hierarchy.company : '—'}
+            {hierarchyState.company?.trim() ? hierarchyState.company : '—'}
           </dd>
         </div>
         <div>
@@ -118,8 +204,9 @@ export default memo(function CompanyHierarchyWidget({
             Employee Count
           </dt>
           <dd className="mt-0.5 font-medium text-gray-900">
-            {hierarchy.employeeCount !== null && hierarchy.employeeCount !== undefined
-              ? hierarchy.employeeCount
+            {hierarchyState.employeeCount !== null &&
+            hierarchyState.employeeCount !== undefined
+              ? hierarchyState.employeeCount
               : '—'}
           </dd>
         </div>
@@ -129,11 +216,13 @@ export default memo(function CompanyHierarchyWidget({
         <h4 className="text-xs font-semibold uppercase tracking-wide text-gray-500">
           Others at this company
         </h4>
-        {!hierarchy.company?.trim() ? (
+        {isRefreshing ? (
+          <p className="mt-1.5 text-sm text-gray-500">Refreshing colleagues…</p>
+        ) : !hierarchyState.company?.trim() ? (
           <p className="mt-1.5 text-sm text-gray-500">
             Set a company name on this client to see related contacts.
           </p>
-        ) : hierarchy.colleagues.length === 0 ? (
+        ) : hierarchyState.colleagues.length === 0 ? (
           <p className="mt-1.5 text-sm text-gray-500">
             No other clients share this company yet.
           </p>
@@ -153,7 +242,10 @@ export default memo(function CompanyHierarchyWidget({
                 </Link>
                 <div className="mt-0.5 flex min-w-0 items-center gap-1.5">
                   <StatusPill status={colleague.status} className="shrink-0" />
-                  <span className="truncate text-xs text-gray-600" title={colleague.roleInCompany ?? undefined}>
+                  <span
+                    className="truncate text-xs text-gray-600"
+                    title={colleague.roleInCompany ?? undefined}
+                  >
                     {colleague.roleInCompany?.trim() || '—'}
                   </span>
                 </div>
@@ -228,10 +320,14 @@ export default memo(function CompanyHierarchyWidget({
               <div className="flex flex-wrap gap-2">
                 <button
                   type="submit"
-                  disabled={isSubmitting}
+                  disabled={isSubmitting || isRefreshing}
                   className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  {isSubmitting ? 'Adding...' : 'Add Employee Lead'}
+                  {isSubmitting
+                    ? 'Adding...'
+                    : isRefreshing
+                      ? 'Refreshing...'
+                      : 'Add Employee Lead'}
                 </button>
                 <button
                   type="button"

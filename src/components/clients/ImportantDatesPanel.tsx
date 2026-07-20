@@ -173,7 +173,7 @@ export default function ImportantDatesPanel({
   className = '',
   showHeading = true,
 }: ImportantDatesPanelProps) {
-  const [fetchedDates, setFetchedDates] = useState<ImportantDate[]>([]);
+  const [dates, setDates] = useState<ImportantDate[]>(() => initialDates ?? []);
   const [isLoading, setIsLoading] = useState(initialDates === undefined);
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -183,13 +183,14 @@ export default function ImportantDatesPanel({
   const [draft, setDraft] = useState<DraftFields>(EMPTY_DRAFT);
   const [fieldErrors, setFieldErrors] = useState<ImportantDateFieldErrors>({});
 
-  const dates = initialDates !== undefined ? initialDates : fetchedDates;
+  // Keep in sync when parent reloads (e.g. Client 360 router.refresh on other mutations).
+  useEffect(() => {
+    if (initialDates !== undefined) {
+      setDates(initialDates);
+    }
+  }, [initialDates]);
 
   const loadDates = useCallback(async () => {
-    if (initialDates !== undefined) {
-      return;
-    }
-
     setIsLoading(true);
     setError(null);
     try {
@@ -203,7 +204,7 @@ export default function ImportantDatesPanel({
         );
       }
       const data = await response.json();
-      setFetchedDates(
+      setDates(
         Array.isArray(data.importantDates) ? data.importantDates : []
       );
     } catch (err) {
@@ -215,7 +216,7 @@ export default function ImportantDatesPanel({
     } finally {
       setIsLoading(false);
     }
-  }, [initialDates, ownerId, ownerKind]);
+  }, [ownerId, ownerKind]);
 
   useEffect(() => {
     if (initialDates !== undefined) {
@@ -225,11 +226,6 @@ export default function ImportantDatesPanel({
     let cancelled = false;
 
     void (async () => {
-      await Promise.resolve();
-      if (cancelled) {
-        return;
-      }
-
       setIsLoading(true);
       setError(null);
       try {
@@ -244,7 +240,7 @@ export default function ImportantDatesPanel({
         }
         const data = await response.json();
         if (!cancelled) {
-          setFetchedDates(
+          setDates(
             Array.isArray(data.importantDates) ? data.importantDates : []
           );
         }

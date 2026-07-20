@@ -158,7 +158,6 @@ export default memo(function ClientDetailsWidget({
             ownerKind={isLead ? 'lead' : 'client'}
             canEdit={canEditDetails}
             initialDates={importantDates}
-            onChanged={onMutationSuccess}
           />
         </div>
 

@@ -422,7 +422,6 @@ export default function Client360PageClient({
             clientId={clientId}
             hierarchy={hierarchy}
             canManageEmployees={canManageHierarchy}
-            onMutationSuccess={triggerDataRefresh}
           />
           <ClientSourceRecordsWidget clientId={clientId} />
         </aside>
