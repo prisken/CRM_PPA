@@ -41,7 +41,7 @@ This document describes the PostgreSQL database schema, API surface, and fronten
 | Role-based dashboard widgets | ✅ Secured commission + returnables by assignment role (all users) |
 | Performance — standard dashboard | ✅ Per-widget API endpoints; shared `loadStandardDashboardContext` for legacy monolith; SQL deal aggregates; skeleton loaders |
 | Performance — dashboard pass 2 | ✅ `lib/standardDashboardContext.ts` + `lib/dashboardDealAggregates.ts`; fewer duplicate DB round-trips; open tasks `clientId IN` filter |
-| Performance — Client 360 | ✅ Server `Promise.all` for core + deals + hierarchy; lazy workspace tabs only |
+| Performance — Client 360 | ✅ Core loader first, then parallel deals + hierarchy; lazy workspace tabs; slice refresh (`loadClient360PageData` unused by live page) |
 | Performance — admin analytics cache | ✅ `unstable_cache` (600s) for org-wide aggregates after `requireSuperAdminFromRequest`; routes `force-dynamic` |
 | Performance — frontend render | ✅ `memo`/`useMemo`/`useCallback`; `next/dynamic` for charts, pipeline, modals |
 | Performance — route timing logs | ✅ Opt-in `[perf]` logs via `PERF_LOGGING_ENABLED=true` (`lib/performance.ts`) |
@@ -138,22 +138,88 @@ docs/             # Documentation (this file, user manuals, google-forms-integra
 **Performance architecture:**
 
 - **Standard dashboard** — each widget has its own API route; the page fetches in parallel and shows dimension-matched skeleton loaders. The **legacy** `GET /api/dashboard/standard` loads shared context once (`loadStandardDashboardContext`) then builds all widgets in parallel (no duplicate assignment/deal queries per widget).
-- **Client 360** — server component loads core client data, deals, and company hierarchy in parallel via `loadClient360PageData()`; workspace tabs still lazy-load on demand. Mutations call `router.refresh()` to re-fetch server data.
+- **Client 360** — server page loads **core first** via `getClient360CoreData()`, then **deals + company hierarchy in parallel** via `Promise.all([getClient360DealsData, getClient360CompanyHierarchyData])` (permission-gated). Workspace tabs lazy-load on demand. `loadClient360PageData()` still exists in `lib/client360.ts` but is **not** used by the live page. Slice refreshes use `refreshClient360Slices` (only `all` calls `router.refresh()`).
+- **Lead Command Center** — slim inbox via `GET /api/admin/leads` (default DB `skip`/`take` when filters allow; **fallback** load-all → filter/sort/slice for `needsAttention` / duplicate / latest-source date filters). Preview is **lazy** via `GET /api/admin/leads/[id]/preview` when the drawer opens.
+- **Admin master pipeline** — default **bounded** per-status pages (50/stage) + `meta`; temporary unbounded via `mode=legacy` / `ADMIN_PIPELINE_LEGACY=true`.
+- **Global search** — `GET /api/search/clients?q=` uses slim ranked `searchClients()`; `pg_trgm` GIN indexes ship in `20260721020000_add_performance_indexes_phase_3`.
+- **Important Dates calendar** — `GET /api/dashboard/widgets/important-dates-calendar` with required date-range validation and event `take` cap (`MAX_CALENDAR_EVENTS`, currently 1000).
+- **Background jobs** — durable `BackgroundJob` enqueue is shipped; **staging/production must** run `npm run jobs:process` / cron / protected `POST /api/tasks/process-background-jobs` or PENDING rows sit — see [`BACKGROUND_JOBS_OPS.md`](./BACKGROUND_JOBS_OPS.md).
 - **Admin analytics** — super-admin org-wide aggregates (funnel, KPIs, revenue tracker, leaderboards) use `unstable_cache` with 600s revalidation in `lib/adminAnalyticsCache.ts`. Auth (`requireSuperAdminFromRequest`) runs on every request before cache lookup. Routes export `dynamic = 'force-dynamic'` so session-scoped responses are not globally cached. User-specific dashboard, Client 360, and `/api/me/*` routes are also `force-dynamic`.
 - **Activity feed** — single PostgreSQL query via `UNION ALL` (Interactions + activity logs), sorted and limited in the database.
 - **Route timing** — set `PERF_LOGGING_ENABLED=true` to emit structured `[perf]` lines in the dev server terminal (`lib/performance.ts`). Includes method, route/op, status, durationMs, optional payloadBytes / cache, and payload size warnings by surface. Prisma logs queries ≥200ms in development or when `PERF_LOGGING_ENABLED=true` (SQL only — no bound params). See [Route performance timings](#route-performance-timings) below.
 
 ### Route performance timings
 
-Measured locally (June 24, 2026) against Supabase PostgreSQL with `PERF_LOGGING_ENABLED=true`. Times are **server handler** durations from `[perf]` logs unless noted. Cold starts and pool warmup can add latency on first request.
+#### Historical baseline (June 24, 2026) — superseded for hot-path planning
 
-**How to reproduce:**
+Measured locally against Supabase PostgreSQL with `PERF_LOGGING_ENABLED=true`. Times below are **server handler** durations from `[perf]` logs unless noted. Kept for trend comparison only; prefer the **July 21, 2026** table for current hot paths.
+
+**Typical server timings (historical, after performance pass 2, warm runs):**
+
+| Route / operation | Server time | Notes |
+|-------------------|------------|-------|
+| `GET /api/dashboard/standard` | **~540–880 ms** | Legacy monolith; shared context + parallel widgets. Live UI uses per-widget routes instead. |
+| `widget:buildPerformanceMetricsWidget` | **~1 ms** (with context) / **~250–670 ms** (standalone) | Secured commission via shared deal aggregates + role occupancy |
+| `widget:buildAssignedClientsWidget` | **~1 ms** (with context) / **~500–600 ms** (standalone) | Single SQL aggregate per client deal values |
+| `GET /api/admin/pipeline` | **~410–450 ms** | Then: unbounded all-clients path (pre–per-status cap) |
+| `widget:buildActivityFeedWidget` | **~246–470 ms** | Includes `activityFeed:fetchRawActivities` ~207–260 ms |
+| `widget:buildOpenTasksWidget` | **~222–515 ms** | `assigneeId` + `clientId IN` assigned clients |
+| `GET /api/dashboard/superadmin` | **~234–297 ms** | All-client activity feed (`limit=100`) |
+| `GET /api/admin/all-commission-returnable` | **~220–250 ms** | Full reconciliation list |
+| `GET /api/admin/users` | **~220–253 ms** | All users |
+
+**Admin analytics cache (org-wide, 600s TTL) — historical June 24:**
+
+| Route | Cache miss (DB) | Cache hit (handler) |
+|-------|-----------------|---------------------|
+| `GET /api/admin/dashboard-kpis` | ~241 ms | **~0 ms** |
+| `GET /api/admin/funnel-data` | ~233 ms | **~0 ms** |
+| `GET /api/admin/revenue-tracker` | ~226 ms | **~0 ms** |
+| `GET /api/admin/leaderboards` | ~240 ms | **~0 ms** |
+
+Client round-trip on cache hit is still network + auth bound; server DB work is skipped.
+
+#### Current baseline (July 21, 2026)
+
+**Environment:** local Next.js dev · `PERF_LOGGING_ENABLED=true` · port **3001** · Postgres via project `DATABASE_URL` (Supabase pooler used in this workspace) · warm process after prior requests · auth via local Bearer JWT (`scripts/profile-api-routes.ts`).
+
+**Measurement sources for this run:**
+- **Client ms / status / payloadBytes** — `BASE_URL=http://localhost:3001 npx tsx scripts/profile-api-routes.ts` (single sequential pass; client round-trip includes network + Next overhead).
+- **Server ms** — matching `[perf] … durationMs=` / `payloadBytes=` lines from the same pass (when logged).
+
+| Route / surface | Method | Scenario / query | Status | Client ms | Server ms | payloadBytes | Notes |
+|-----------------|--------|------------------|--------|-----------|-----------|--------------|-------|
+| LCC list | GET | `/api/admin/leads?limit=50` | 200 | 1898 | 1566 | 23632 | `dbPaginated=true`, `sortMode=lastModified`, leadCount=33 |
+| LCC list | GET | `…?limit=50&needsAttention=true` | 200 | 1704 | 1437 | 23697 | `dbPaginated=false`, `fallbackReason=needsAttention…`, `sortMode=attention` |
+| LCC list | GET | `…?limit=50&duplicateEmail=true` | 200 | 1787 | 1440 | 3108 | `dbPaginated=false`, `fallbackReason=duplicateEmail…`, leadCount=4 |
+| LCC preview | GET | `/api/admin/leads/{id}/preview` | 200 | 2124 | 1313 | 1241 | Lazy drawer preview; discovered lead id |
+| LCC duplicates | GET | `/api/admin/leads/duplicates` | 200 | 1530 | 1241 | 16417 | groupCount=5 |
+| Admin pipeline | GET | `/api/admin/pipeline` | 200 | 1464 | 1217 | 6280 | `dbBounded=true`, `perStatusLimit=50`, returned=41/total=41, `hasMore=false` |
+| Client 360 RSC / core+deals+hierarchy loaders | — | `/clients/[id]` server render | — | — | — | — | **not measured** (profiler hits workspace APIs, not the RSC page) |
+| Client 360 workspace | GET | `…/workspace?tab=strategy-tasks` | 200 | 1246 | 477 | 53 | Lazy tab; not a substitute for full RSC timing |
+| Client 360 workspace | GET | `…/workspace?tab=activity-notes` | 200 | 1058 | 695 | 10751 | Lazy tab |
+| Strategy plan GET | GET | `/api/clients/{id}/strategy-plans/{planId}` | 200 | 2060 | 1027 | 2284 | Fat plan include; discovered plan id |
+| Search | GET | `/api/search/clients?q=TES` | 200 | 974 | 671 | 3245 | Admin unscoped; resultCount=10 |
+| Important Dates calendar | GET | `…/important-dates-calendar?startDate=2026-07-01&endDate=2026-07-31&recordType=ALL` | 200 | 573 | 262 | 80–99 | Widget API; client bytes 80, `[perf]` payloadBytes 99 |
+| Dashboard open-tasks | GET | `/api/dashboard/widgets/open-tasks` | 200 | 505 | 222 | 16 | `take=20`; empty for sample standard user |
+| Dashboard deal-participation | GET | `/api/dashboard/widgets/deal-participation` | 200 | 612 | 247 | 12 | `take=20`; empty for sample standard user |
+| Dashboard performance-metrics | GET | `/api/dashboard/widgets/performance-metrics` | 200 | 619 | 266 | 119 | Standalone widget path |
+| Admin all-commission-returnable | GET | `/api/admin/all-commission-returnable` | 200 | 607 | 255 | 18 | Empty list in this dataset (`returnableCount=0`) |
+| Admin KPIs (warm / cache hit) | GET | `/api/admin/dashboard-kpis` | 200 | 304 | 5 | 141 | Warm handler after prior admin analytics hits |
+| Admin KPIs (cold / cache miss) | GET | `/api/admin/dashboard-kpis` | — | — | — | — | **not measured** this run |
+
+**Caveats:** Single-run timings (no min/median/max). Client ms ≫ server ms when Next compile/auth/network dominate. Sample standard user had **0** assignments — several widgets returned empty payloads quickly after auth/context work. Do not treat empty-widget durations as production load with full assignment graphs.
+
+#### How to re-run this baseline
 
 ```bash
-# Enable structured route + payload + slow Prisma logs
-PERF_LOGGING_ENABLED=true npm run dev
-npx tsx scripts/profile-api-routes.ts   # client round-trip summary
+PERF_LOGGING_ENABLED=true npm run dev -- -p 3001
+# other terminal:
+BASE_URL=http://localhost:3001 npx tsx scripts/profile-api-routes.ts
+# or: npm run profile:api
 ```
+
+Auth: local ACTIVE `SUPER_ADMIN` / `STANDARD_USER` JWTs via `DATABASE_URL` (see `scripts/profile-api-routes.ts` header). Optional sample overrides: `PROFILE_LEAD_ID`, `PROFILE_CLIENT_ID`, `PROFILE_STRATEGY_PLAN_ID`, `PROFILE_SEARCH_Q`.
 
 **Example `[perf]` lines:**
 
@@ -165,30 +231,6 @@ npx tsx scripts/profile-api-routes.ts   # client round-trip summary
 ```
 
 **Payload warn thresholds:** dashboard widgets 50KB · Client 360 core 100KB · deals 150KB · Strategy Planner 200KB · Lead Command Center 250KB · Admin master pipeline 150KB.
-**Typical server timings (after performance pass 2, warm runs):**
-
-| Route / operation | Server time | Notes |
-|-------------------|------------|-------|
-| `GET /api/dashboard/standard` | **~540–880 ms** | Legacy monolith; shared context + parallel widgets. Live UI uses per-widget routes instead. |
-| `widget:buildPerformanceMetricsWidget` | **~1 ms** (with context) / **~250–670 ms** (standalone) | Secured commission via shared deal aggregates + role occupancy |
-| `widget:buildAssignedClientsWidget` | **~1 ms** (with context) / **~500–600 ms** (standalone) | Single SQL aggregate per client deal values |
-| `GET /api/admin/pipeline` | **~410–450 ms** (legacy unbounded) | Default: bounded per-status pages (50/stage) + `groupBy` counts; live, not cached. `mode=legacy` / `ADMIN_PIPELINE_LEGACY=true` = prior all-clients path |
-| `widget:buildActivityFeedWidget` | **~246–470 ms** | Includes `activityFeed:fetchRawActivities` ~207–260 ms |
-| `widget:buildOpenTasksWidget` | **~222–515 ms** | `assigneeId` + `clientId IN` assigned clients |
-| `GET /api/dashboard/superadmin` | **~234–297 ms** | All-client activity feed (`limit=100`) |
-| `GET /api/admin/all-commission-returnable` | **~220–250 ms** | Full reconciliation list |
-| `GET /api/admin/users` | **~220–253 ms** | All users |
-
-**Admin analytics cache (org-wide, 600s TTL):**
-
-| Route | Cache miss (DB) | Cache hit (handler) |
-|-------|-----------------|---------------------|
-| `GET /api/admin/dashboard-kpis` | ~241 ms | **~0 ms** |
-| `GET /api/admin/funnel-data` | ~233 ms | **~0 ms** |
-| `GET /api/admin/revenue-tracker` | ~226 ms | **~0 ms** |
-| `GET /api/admin/leaderboards` | ~240 ms | **~0 ms** |
-
-Client round-trip on cache hit is still ~220 ms (auth + network); server DB work is skipped.
 
 **Instrumented `[perf]` prefixes / fields:**
 
@@ -206,7 +248,7 @@ Client round-trip on cache hit is still ~220 ms (auth + network); server DB work
 | `builder:buildSuperAdminDashboard` | Super admin activity feed builder |
 | `client360:*` | Client 360 server loaders |
 
-**Not instrumented (still dynamic):** Client 360 page server render (RSC), static assets, auth middleware edge time.
+**Not instrumented (still dynamic):** Client 360 page server render (RSC) wall time as a single `[perf]` line, static assets, auth middleware edge time.
 
 ---
 
@@ -2211,10 +2253,11 @@ Responsive header — stacks on mobile (`flex-col`), horizontal from `sm` up; ac
 **Route:** `src/app/clients/[id]/page.tsx` → `Client360Page` (server) → `Client360PageClient` (client)  
 **Route config:** `dynamic = 'force-dynamic'`
 
-**Initial load (server):** `loadClient360PageData(clientId)` runs `Promise.all` for:
-- `getClient360CoreData()` — client details, team, documents, strategy text
-- `getClient360DealsData()` — all deals with participants (visible per deal access rules)
-- `getClient360CompanyHierarchyData()` — company, employee count, colleagues
+**Initial load (server):** `Client360Page` awaits `getClient360CoreData(clientId)`, then runs `Promise.all` for:
+- `getClient360DealsData()` — when deal view is allowed (slim list DTO)
+- `getClient360CompanyHierarchyData()` — when hierarchy access is allowed (else empty hierarchy from core company fields)
+
+(`loadClient360PageData()` remains in `lib/client360.ts` as a combined helper but is **not** called by this page.)
 
 Unauthenticated users are redirected to `/login`. Missing client → `notFound()`.
 
@@ -2689,6 +2732,12 @@ npx tsx scripts/test-user-management.ts
 npx tsx scripts/find-duplicate-clients.ts
 npm run manuals:pdf
 npx tsx scripts/profile-api-routes.ts
+# or: npm run profile:api
+# Default BASE_URL http://localhost:3001 (override: BASE_URL or TEST_BASE_URL)
+# Auth: Bearer JWT from local ACTIVE SUPER_ADMIN / STANDARD_USER (DATABASE_URL)
+# Optional sample ids: PROFILE_LEAD_ID, PROFILE_CLIENT_ID, PROFILE_STRATEGY_PLAN_ID, PROFILE_SEARCH_Q
+# Hot paths: LCC (+ filters/preview/duplicates), pipeline, search, strategy plan,
+# open-tasks, deal-participation, important-dates-calendar, all-commission-returnable
 npx tsx scripts/recalculate-commission-returnables.ts
 npm run jobs:process
 npm run jobs:process:once
