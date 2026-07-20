@@ -2209,9 +2209,9 @@ Responsive header — stacks on mobile (`flex-col`), horizontal from `sm` up; ac
 
 Unauthenticated users are redirected to `/login`. Missing client → `notFound()`.
 
-**Refresh after mutations:** `refreshClient360Slices([...])` bumps per-slice keys; `core` / `team` / `all` also call `router.refresh()` for RSC props. Workspace tabs reload when the `workspace` slice key changes.
+**Refresh after mutations:** `refreshClient360Slices([...])` bumps per-slice keys. Only `all` still calls `router.refresh()`. `core` client-fetches `GET /api/clients/[id]`; `importantDates` client-fetches dates; `hierarchy` / `deals` / `sourceRecords` widgets refetch on their keys. Workspace tabs reload on the `workspace` key.
 
-**Refresh coordination:** `Client360RefreshProvider` + `refreshClient360Slices`. Legacy full fan-out: `refreshClient360Slices(['all'])` (stage, merge, archive, team). Details save uses `['core', 'importantDates', 'hierarchy']` (skips workspace).
+**Refresh coordination:** `Client360RefreshProvider` + `refreshClient360Slices`. Details save → `['core','importantDates']` (+ `hierarchy` if company/employeeCount changed). Important Dates panel CRUD → `['importantDates']` only. Stage / merge / archive / team still `['all']`.
 
 **Header:** Logo, back to pipeline link, **More actions** menu (super admin: **Merge clients**, **Archive client**), client name, `LeadSourceBadges`, pipeline stage control:
 

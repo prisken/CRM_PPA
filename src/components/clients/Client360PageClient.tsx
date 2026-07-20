@@ -3,7 +3,7 @@
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import ClientDetailsWidget from '@/components/clients/ClientDetailsWidget';
 import { classifyImportantDateRecordType } from '@/lib/importantDateRecordType';
 import AssignedTeamWidget from '@/components/clients/AssignedTeamWidget';
@@ -22,6 +22,7 @@ import { useDisplayDensity } from '@/components/ui/DisplayDensityProvider';
 import { getStackSpacingClass } from '@/components/ui/displayDensity';
 import type { MergeModalResult } from '@/components/admin/MergeClientsModal';
 import { useUserProfile } from '@/hooks/useUserProfile';
+import { authenticatedFetch } from '@/lib/authenticatedFetch';
 import { getStatusBadgeStyles, CLIENT_STAGES } from '@/lib/clientStages';
 import { calculateUserClientCommissionShare } from '@/lib/commissionCalculations';
 import type {
@@ -95,9 +96,8 @@ function Client360PageClientInner({
   const { density } = useDisplayDensity();
   const { sliceKeys, refreshClient360Slices } = useClient360Refresh();
   const asideSpacingClass = getStackSpacingClass(density);
-  // Mirror server props directly — core/team/`all` slices call router.refresh(),
-  // which re-renders with new initial* props (no local copies / sync effect).
-  const client = initialClient;
+  // Local core mirror: updated by RSC `initialClient` (full refresh) or client GET on `core` slice.
+  const [client, setClient] = useState(initialClient);
   const deals = initialDeals;
   const hierarchy = initialHierarchy;
   const [isUpdatingStage, setIsUpdatingStage] = useState(false);
@@ -107,6 +107,79 @@ function Client360PageClientInner({
   const [isMergePickerOpen, setIsMergePickerOpen] = useState(false);
   const [isMergeModalOpen, setIsMergeModalOpen] = useState(false);
   const [mergeClients, setMergeClients] = useState<DuplicateReviewClient[]>([]);
+  const skipCoreSliceFetchRef = useRef(true);
+  const skipImportantDatesSliceFetchRef = useRef(true);
+
+  useEffect(() => {
+    setClient(initialClient);
+  }, [initialClient]);
+
+  useEffect(() => {
+    if (skipCoreSliceFetchRef.current) {
+      skipCoreSliceFetchRef.current = false;
+      return;
+    }
+
+    let cancelled = false;
+
+    async function loadCore() {
+      try {
+        const res = await authenticatedFetch(`/api/clients/${clientId}`);
+        if (!res.ok) {
+          return;
+        }
+        const data = (await res.json()) as Client360CoreData;
+        if (!cancelled && data?.client_id) {
+          setClient(data);
+        }
+      } catch {
+        // Keep last known core; risky mutations still use full refresh.
+      }
+    }
+
+    void loadCore();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [clientId, sliceKeys.core]);
+
+  useEffect(() => {
+    if (skipImportantDatesSliceFetchRef.current) {
+      skipImportantDatesSliceFetchRef.current = false;
+      return;
+    }
+
+    let cancelled = false;
+
+    async function loadImportantDates() {
+      try {
+        const res = await authenticatedFetch(
+          `/api/clients/${clientId}/important-dates`
+        );
+        if (!res.ok) {
+          return;
+        }
+        const data = (await res.json()) as {
+          importantDates?: Client360CoreData['importantDates'];
+        };
+        if (!cancelled && Array.isArray(data.importantDates)) {
+          setClient((current) => ({
+            ...current,
+            importantDates: data.importantDates!,
+          }));
+        }
+      } catch {
+        // Panel keeps its own list via loadDates.
+      }
+    }
+
+    void loadImportantDates();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [clientId, sliceKeys.importantDates]);
 
   /** Legacy full refresh — every slice key + router.refresh(). */
   const triggerDataRefresh = useCallback(() => {

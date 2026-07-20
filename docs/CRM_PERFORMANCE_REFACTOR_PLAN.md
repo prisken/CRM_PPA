@@ -183,11 +183,11 @@ GROUP BY client_id, role HAVING COUNT(*) > 1;
 
 ### Phase A — Refresh narrowing (high impact, medium risk) — **PARTIAL**
 
-1. ✅ Typed `refreshClient360Slices` + per-slice keys via `Client360RefreshProvider` (`core` | `deals` | `team` | `hierarchy` | `sourceRecords` | `workspace` | `importantDates` | `all`).
-2. ✅ Details save uses `['core', 'importantDates', 'hierarchy']` (no workspace fan-out). Stage / merge / archive / team still `['all']`.
-3. Keep `router.refresh()` for stage change, merge, archive, and true server-prop dependencies (`core`/`team`/`all`).
-4. Strategy widget: still independent of workspace slice; further: only refetch on strategy mutations — **OPEN**.
-5. Still open: migrate team → `['core','team']` (no workspace); deals mutations → `['deals']` only; hierarchy add → `['hierarchy']` only.
+1. ✅ Typed `refreshClient360Slices` + per-slice keys via `Client360RefreshProvider`.
+2. ✅ Details save → `['core','importantDates']` (+ `hierarchy` when company/employeeCount change); **no** `router.refresh`. Important Dates CRUD → `['importantDates']` only.
+3. ✅ `router.refresh()` only for `all` (stage, merge, archive, team still use `all`).
+4. Strategy widget: still independent of workspace slice — **OPEN** for further isolation.
+5. Still open: migrate team → `['core','team']` (client-fetch assignments, no workspace); stage → `['core','workspace']`.
 
 ### Phase B — Payload slimming — **OPEN**
 

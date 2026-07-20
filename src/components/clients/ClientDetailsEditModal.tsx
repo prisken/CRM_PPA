@@ -13,6 +13,21 @@ import MultiValueTextField from '@/components/ui/MultiValueTextField';
 import { LEAD_SOURCE_SUGGESTIONS } from '@/lib/leadSources';
 import { parseImportantDatesArray } from '@/lib/importantDateValidation';
 
+/** Subset returned by `PUT /api/clients/[id]/details` (used for slice refresh decisions). */
+export type ClientDetailsSavedPayload = {
+  name: string;
+  company: string | null;
+  email: string | null;
+  phone: string | null;
+  emails: string[];
+  phones: string[];
+  lead_source: string | null;
+  roleInCompany: string | null;
+  employeeCount: number | null;
+  expectations: string | null;
+  importantDates: ImportantDate[];
+};
+
 type ClientDetailsEditModalProps = {
   clientId: string;
   /** When true, copy refers to Lead (same Client row underneath). */
@@ -30,7 +45,7 @@ type ClientDetailsEditModalProps = {
   initialImportantDates: ImportantDate[];
   isOpen: boolean;
   onClose: () => void;
-  onSaved: () => void;
+  onSaved: (payload: ClientDetailsSavedPayload) => void;
 };
 
 function normalizeImportantDates(dates: ImportantDate[]) {
@@ -251,7 +266,50 @@ function ClientDetailsEditModalForm({
         );
       }
 
-      onSaved();
+      const payload: ClientDetailsSavedPayload = {
+        name: typeof data.name === 'string' ? data.name : name.trim(),
+        company:
+          data.company === null || typeof data.company === 'string'
+            ? data.company
+            : company.trim() || null,
+        email:
+          data.email === null || typeof data.email === 'string'
+            ? data.email
+            : null,
+        phone:
+          data.phone === null || typeof data.phone === 'string'
+            ? data.phone
+            : null,
+        emails: Array.isArray(data.emails)
+          ? data.emails.filter((value: unknown): value is string => typeof value === 'string')
+          : emails.map((value) => value.trim()).filter(Boolean),
+        phones: Array.isArray(data.phones)
+          ? data.phones.filter((value: unknown): value is string => typeof value === 'string')
+          : phones.map((value) => value.trim()).filter(Boolean),
+        lead_source:
+          data.lead_source === null || typeof data.lead_source === 'string'
+            ? data.lead_source
+            : leadSourceQuery.trim() || null,
+        roleInCompany:
+          data.roleInCompany === null || typeof data.roleInCompany === 'string'
+            ? data.roleInCompany
+            : roleInCompany.trim() || null,
+        employeeCount:
+          data.employeeCount === null || typeof data.employeeCount === 'number'
+            ? data.employeeCount
+            : employeeCount.trim()
+              ? Number(employeeCount)
+              : null,
+        expectations:
+          data.expectations === null || typeof data.expectations === 'string'
+            ? data.expectations
+            : expectations.trim() || null,
+        importantDates: Array.isArray(data.importantDates)
+          ? data.importantDates
+          : parsedDates.data,
+      };
+
+      onSaved(payload);
       onClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : `Failed to update ${entityLabel.toLowerCase()} details`);

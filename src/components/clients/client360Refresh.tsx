@@ -40,9 +40,12 @@ const INITIAL_SLICE_KEYS: Client360SliceKeys = {
   importantDates: 0,
 };
 
-/** Slices whose visible data still comes from RSC server props today. */
-const SLICES_REQUIRING_ROUTER_REFRESH: ReadonlySet<Client360RefreshSlice> =
-  new Set(['core', 'team']);
+/** Slices that still require a full RSC `router.refresh()` (legacy / high-risk). */
+function requestIncludesFullRouterRefresh(
+  requests: readonly Client360RefreshRequest[]
+): boolean {
+  return requests.includes('all');
+}
 
 function expandRefreshRequests(
   requests: readonly Client360RefreshRequest[]
@@ -68,8 +71,9 @@ export type Client360RefreshContextValue = {
   /**
    * Request refresh for one or more slices.
    * - `all`: bump every slice key + `router.refresh()` (legacy full refresh).
-   * - `core` / `team`: bump key(s) + `router.refresh()` (server props).
-   * - other slices: bump key only (widgets refetch via `sliceKeys`).
+   * - `core`: bump key only — page client-fetches `GET /api/clients/[id]` (no RSC refresh).
+   * - `team`: bump key only unless paired with `all` (team mutations still use `all` today).
+   * - other slices: bump key only (widgets / page refetch via `sliceKeys`).
    */
   refreshClient360Slices: (slices: readonly Client360RefreshRequest[]) => void;
 };
@@ -101,16 +105,8 @@ export function Client360RefreshProvider({ children }: { children: ReactNode }) 
         return next;
       });
 
-      let needsRouterRefresh = false;
-      for (const slice of expanded) {
-        if (SLICES_REQUIRING_ROUTER_REFRESH.has(slice)) {
-          needsRouterRefresh = true;
-          break;
-        }
-      }
-
-      // `all` always includes core/team via expand, so this covers legacy full refresh.
-      if (needsRouterRefresh) {
+      // Only legacy `all` still forces a full RSC reload.
+      if (requestIncludesFullRouterRefresh(slices)) {
         router.refresh();
       }
     },

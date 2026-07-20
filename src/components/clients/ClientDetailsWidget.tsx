@@ -1,10 +1,15 @@
 'use client';
 
 import { memo, useState } from 'react';
-import ClientDetailsEditModal from '@/components/clients/ClientDetailsEditModal';
+import ClientDetailsEditModal, {
+  type ClientDetailsSavedPayload,
+} from '@/components/clients/ClientDetailsEditModal';
 import ImportantDatesPanel from '@/components/clients/ImportantDatesPanel';
 import LeadSourceBadges from '@/components/clients/LeadSourceBadges';
-import { useClient360Refresh } from '@/components/clients/client360Refresh';
+import {
+  useClient360Refresh,
+  type Client360RefreshRequest,
+} from '@/components/clients/client360Refresh';
 import EmptyMuted from '@/components/ui/EmptyMuted';
 import { useDisplayDensity } from '@/components/ui/DisplayDensityProvider';
 import { getWidgetPaddingClass } from '@/components/ui/displayDensity';
@@ -158,6 +163,10 @@ export default memo(function ClientDetailsWidget({
             ownerKind={isLead ? 'lead' : 'client'}
             canEdit={canEditDetails}
             initialDates={importantDates}
+            onChanged={() => {
+              // Local panel list already reloaded; bump slice for page core dates sync only.
+              refreshClient360Slices(['importantDates']);
+            }}
           />
         </div>
 
@@ -206,9 +215,19 @@ export default memo(function ClientDetailsWidget({
           initialImportantDates={importantDates}
           isOpen
           onClose={() => setIsEditModalOpen(false)}
-          onSaved={() => {
-            // Details + dates (+ company/count may affect hierarchy). Skip workspace.
-            refreshClient360Slices(['core', 'importantDates', 'hierarchy']);
+          onSaved={(payload: ClientDetailsSavedPayload) => {
+            const companyChanged = (payload.company ?? null) !== (company ?? null);
+            const employeeCountChanged =
+              payload.employeeCount !== employeeCount;
+            const slices: Client360RefreshRequest[] = [
+              'core',
+              'importantDates',
+            ];
+            if (companyChanged || employeeCountChanged) {
+              slices.push('hierarchy');
+            }
+            // No router.refresh — page client-fetches core; hierarchy widget refetches on key.
+            refreshClient360Slices(slices);
           }}
         />
       )}
