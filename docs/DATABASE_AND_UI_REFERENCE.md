@@ -2676,6 +2676,8 @@ npm run backfill:deal-participants
 npm run verify:deal-participants
 ```
 
+> **Browser E2E:** Playwright is **not** installed yet. Planned flows (login, dashboards, Client 360, Important Dates, deals, Strategy Planner, LCC, merge, WebKit form color) are documented in [`docs/CRM_E2E_TEST_PLAN.md`](./CRM_E2E_TEST_PLAN.md). Do not add Playwright until that plan is approved for implementation.
+
 > **`test:all` vs HTTP:** `npm run test:all` does **not** start or require `npm run dev`. Only `test:http` / `test:all:with-http` need a listening Next.js server. Integration tests need a reachable Postgres via `DATABASE_URL`.
 
 > **Source of truth:** Prefer this document (`docs/DATABASE_AND_UI_REFERENCE.md`) for schema, APIs, permissions, and UI. User manuals under `docs/USER_MANUAL_*` are end-user guides. One-off migration notes (e.g. `deal-participant-migration.md`) are operational supplements — do not treat them as replacing this reference.
