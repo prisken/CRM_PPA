@@ -1,12 +1,14 @@
 /**
- * Smoke test for fetchLeadCommandCenterRows / preview (direct lib call, no HTTP auth).
+ * Smoke test for fetchLeadCommandCenterRows / page / preview (direct lib call, no HTTP auth).
  * Read-only — does not modify the database.
  *
  * Run: npx tsx scripts/test-lead-command-center.ts
  */
 import {
+  fetchLeadCommandCenterPage,
   fetchLeadCommandCenterPreview,
   fetchLeadCommandCenterRows,
+  LEAD_COMMAND_CENTER_DEFAULT_LIMIT,
   type LeadCommandCenterRow,
 } from '../lib/leadCommandCenter';
 import { prisma } from '../lib/prisma';
@@ -37,10 +39,12 @@ function printSection(title: string, rows: LeadCommandCenterRow[]) {
 async function main() {
   console.log('Lead Command Center smoke test\n');
 
-  const defaultRows = await fetchLeadCommandCenterRows({ limit: 10 });
+  const defaultRows = await fetchLeadCommandCenterRows({
+    limit: LEAD_COMMAND_CENTER_DEFAULT_LIMIT,
+  });
 
   console.log(`${'='.repeat(72)}`);
-  console.log('Default fetch (limit 10)');
+  console.log(`Default fetch (limit ${LEAD_COMMAND_CENTER_DEFAULT_LIMIT})`);
   console.log('='.repeat(72));
   console.log(`Total rows returned: ${defaultRows.length}`);
   console.log('\nFirst 5 rows:');
@@ -50,6 +54,36 @@ async function main() {
       throw new Error(
         `Inbox row ${row.clientId} unexpectedly includes preview-only fields`
       );
+    }
+  }
+
+  const page = await fetchLeadCommandCenterPage({
+    limit: 10,
+    offset: 0,
+  });
+  console.log(`\n${'='.repeat(72)}`);
+  console.log('Page meta (limit 10, offset 0)');
+  console.log('='.repeat(72));
+  console.log(page.meta);
+  if (page.meta.count !== page.leads.length) {
+    throw new Error('meta.count does not match leads.length');
+  }
+  if (page.meta.hasMore !== page.meta.offset + page.meta.count < page.meta.total) {
+    throw new Error('meta.hasMore is inconsistent with total/offset/count');
+  }
+
+  if (page.meta.hasMore) {
+    const page2 = await fetchLeadCommandCenterPage({
+      limit: 10,
+      offset: 10,
+    });
+    console.log('Page 2 meta:', page2.meta);
+    if (
+      page2.leads[0] &&
+      page.leads[0] &&
+      page2.leads[0].clientId === page.leads[0].clientId
+    ) {
+      throw new Error('Offset pagination returned overlapping first rows');
     }
   }
 

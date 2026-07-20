@@ -3,7 +3,7 @@
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { memo, useCallback, useEffect, useMemo, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import AuthRequiredMessage from '@/components/auth/AuthRequiredMessage';
 import LeadPreviewDrawer from '@/components/admin/LeadPreviewDrawer';
 import LeadDuplicatesPanel from '@/components/admin/LeadDuplicatesPanel';
@@ -22,8 +22,13 @@ import { authenticatedFetch } from '@/lib/authenticatedFetch';
 import { CLIENT_STAGES } from '@/lib/clientStages';
 import type { MergeModalResult } from '@/components/admin/MergeClientsModal';
 import type {
+  LeadCommandCenterPageMeta,
   LeadCommandCenterPreview,
   LeadCommandCenterRow,
+} from '@/lib/leadCommandCenter';
+import {
+  LEAD_COMMAND_CENTER_DEFAULT_LIMIT,
+  LEAD_COMMAND_CENTER_MAX_LIMIT,
 } from '@/lib/leadCommandCenter';
 import type { DuplicateReviewClient } from '@/lib/leadDuplicates';
 import { supabase } from '@/lib/supabaseClient';
@@ -54,6 +59,8 @@ const MergeClientsModal = dynamic(() => import('@/components/admin/MergeClientsM
 });
 
 const MAX_MERGE_SELECTED = 10;
+const FILTER_DEBOUNCE_MS = 300;
+const PAGE_SIZE = LEAD_COMMAND_CENTER_DEFAULT_LIMIT;
 
 type AdminTagOption = {
   id: string;
@@ -65,12 +72,15 @@ type LeadCommandCenterTab = 'inbox' | 'duplicates';
 
 type LeadsApiResponse = {
   leads: LeadCommandCenterRow[];
-  meta: {
-    count: number;
-    limit: number;
-    offset: number;
-  };
+  meta: LeadCommandCenterPageMeta;
 };
+
+function isAbortError(error: unknown) {
+  return (
+    (error instanceof DOMException && error.name === 'AbortError') ||
+    (error instanceof Error && error.name === 'AbortError')
+  );
+}
 
 type FilterChipKey =
   | 'needsAttention'
@@ -735,7 +745,10 @@ export default function LeadCommandCenterPage() {
   const [statusFilter, setStatusFilter] = useState('ALL_ACTIVE');
   const [activeChips, setActiveChips] = useState<Set<FilterChipKey>>(new Set());
   const [leads, setLeads] = useState<LeadCommandCenterRow[]>([]);
+  const [leadsMeta, setLeadsMeta] = useState<LeadCommandCenterPageMeta | null>(null);
   const [leadsLoading, setLeadsLoading] = useState(true);
+  const [leadsRefreshing, setLeadsRefreshing] = useState(false);
+  const [leadsLoadingMore, setLeadsLoadingMore] = useState(false);
   const [leadsError, setLeadsError] = useState<string | null>(null);
   const [copyMessage, setCopyMessage] = useState<string | null>(null);
   const [previewClientId, setPreviewClientId] = useState<string | null>(null);
@@ -764,7 +777,10 @@ export default function LeadCommandCenterPage() {
   const [activeTagFilter, setActiveTagFilter] = useState<string | null>(null);
   const [filtersPanelOpen, setFiltersPanelOpen] = useState(false);
 
-  const queryString = useMemo(
+  const leadsRef = useRef(leads);
+  leadsRef.current = leads;
+
+  const liveFilterQuery = useMemo(
     () =>
       buildLeadsQueryString({
         search,
@@ -774,6 +790,16 @@ export default function LeadCommandCenterPage() {
       }),
     [search, statusFilter, activeChips, activeTagFilter]
   );
+
+  const [debouncedFilterQuery, setDebouncedFilterQuery] = useState(liveFilterQuery);
+
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      setDebouncedFilterQuery(liveFilterQuery);
+    }, FILTER_DEBOUNCE_MS);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [liveFilterQuery]);
 
   const loadAvailableTags = useCallback(async () => {
     try {
@@ -789,34 +815,85 @@ export default function LeadCommandCenterPage() {
     }
   }, []);
 
-  const loadLeads = useCallback(async (options?: { silent?: boolean }) => {
-    if (!options?.silent) {
-      setLeadsLoading(true);
-    }
-    setLeadsError(null);
+  const loadLeads = useCallback(
+    async (options?: {
+      silent?: boolean;
+      append?: boolean;
+      signal?: AbortSignal;
+    }) => {
+      const append = options?.append === true;
+      const silent = options?.silent === true;
+      const ownsController = !options?.signal;
+      const controller = ownsController ? new AbortController() : null;
+      const signal = options?.signal ?? controller!.signal;
 
-    try {
-      const suffix = queryString ? `?${queryString}` : '';
-      const response = await authenticatedFetch(`/api/admin/leads${suffix}`);
+      const currentCount = leadsRef.current.length;
+      const offset = append ? currentCount : 0;
+      const limit = append
+        ? PAGE_SIZE
+        : silent && currentCount > 0
+          ? Math.min(Math.max(currentCount, PAGE_SIZE), LEAD_COMMAND_CENTER_MAX_LIMIT)
+          : PAGE_SIZE;
 
-      if (!response.ok) {
-        const data = await response.json().catch(() => ({}));
-        const apiError =
-          typeof data.error === 'string' ? data.error : 'Failed to load leads';
-        throw new Error(`${apiError} (${response.status})`);
+      if (append) {
+        setLeadsLoadingMore(true);
+      } else if (silent) {
+        setLeadsRefreshing(true);
+      } else if (currentCount === 0) {
+        setLeadsLoading(true);
+      } else {
+        setLeadsRefreshing(true);
       }
 
-      const data = (await response.json()) as LeadsApiResponse;
-      setLeads(Array.isArray(data.leads) ? data.leads : []);
-    } catch (error) {
-      setLeadsError(error instanceof Error ? error.message : 'Failed to load leads');
-      setLeads([]);
-    } finally {
-      if (!options?.silent) {
-        setLeadsLoading(false);
+      setLeadsError(null);
+
+      try {
+        const params = new URLSearchParams(debouncedFilterQuery);
+        params.set('limit', String(limit));
+        params.set('offset', String(offset));
+        const response = await authenticatedFetch(
+          `/api/admin/leads?${params.toString()}`,
+          { signal }
+        );
+
+        if (!response.ok) {
+          const data = await response.json().catch(() => ({}));
+          const apiError =
+            typeof data.error === 'string' ? data.error : 'Failed to load leads';
+          throw new Error(`${apiError} (${response.status})`);
+        }
+
+        const data = (await response.json()) as LeadsApiResponse;
+        if (signal.aborted) {
+          return;
+        }
+
+        const nextLeads = Array.isArray(data.leads) ? data.leads : [];
+        setLeads((current) => (append ? [...current, ...nextLeads] : nextLeads));
+        setLeadsMeta(data.meta ?? null);
+      } catch (error) {
+        if (signal.aborted || isAbortError(error)) {
+          return;
+        }
+
+        setLeadsError(error instanceof Error ? error.message : 'Failed to load leads');
+        if (!append && leadsRef.current.length === 0) {
+          setLeads([]);
+          setLeadsMeta(null);
+        }
+      } finally {
+        if (!signal.aborted) {
+          if (append) {
+            setLeadsLoadingMore(false);
+          } else {
+            setLeadsLoading(false);
+            setLeadsRefreshing(false);
+          }
+        }
       }
-    }
-  }, [queryString]);
+    },
+    [debouncedFilterQuery]
+  );
 
   useEffect(() => {
     if (!profileLoading && profile && profile.role !== 'SUPER_ADMIN') {
@@ -829,7 +906,12 @@ export default function LeadCommandCenterPage() {
       return;
     }
 
-    loadLeads();
+    const controller = new AbortController();
+    void loadLeads({ signal: controller.signal });
+
+    return () => {
+      controller.abort();
+    };
   }, [profile, profileLoading, loadLeads]);
 
   useEffect(() => {
@@ -892,6 +974,23 @@ export default function LeadCommandCenterPage() {
       : selectedCount > MAX_MERGE_SELECTED
         ? 'Merge supports up to 10 records at a time.'
         : undefined;
+
+  const hasMoreLeads = leadsMeta?.hasMore === true;
+  const totalMatchingLeads = leadsMeta?.total;
+
+  const loadMoreLeads = useCallback(() => {
+    if (leadsLoadingMore || leadsRefreshing || leadsLoading || !hasMoreLeads) {
+      return;
+    }
+
+    void loadLeads({ append: true });
+  }, [
+    hasMoreLeads,
+    leadsLoading,
+    leadsLoadingMore,
+    leadsRefreshing,
+    loadLeads,
+  ]);
 
   const toggleChip = useCallback((chip: FilterChipKey) => {
     setActiveChips((current) => {
@@ -1537,11 +1636,11 @@ export default function LeadCommandCenterPage() {
         </div>
 
         <div className="mt-4">
-          {leadsError ? (
+          {leadsError && leads.length === 0 ? (
             <section className="rounded-xl border border-red-200 bg-red-50 p-6 text-sm text-red-700">
               {leadsError}
             </section>
-          ) : leadsLoading ? (
+          ) : leadsLoading && leads.length === 0 ? (
             <LeadsLoadingState />
           ) : leads.length === 0 ? (
             <section className="rounded-xl border border-gray-200 bg-white p-8 text-center text-sm text-gray-500 shadow-sm">
@@ -1549,11 +1648,27 @@ export default function LeadCommandCenterPage() {
             </section>
           ) : (
             <>
-              <p className="mb-4 text-sm text-gray-500">
-                Showing {leads.length} lead{leads.length === 1 ? '' : 's'}
-              </p>
+              <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+                <p className="text-sm text-gray-500">
+                  Showing {leads.length}
+                  {typeof totalMatchingLeads === 'number'
+                    ? ` of ${totalMatchingLeads}`
+                    : ''}{' '}
+                  lead{totalMatchingLeads === 1 || leads.length === 1 ? '' : 's'}
+                  {leadsRefreshing ? ' · Updating…' : ''}
+                </p>
+                {leadsError && (
+                  <p className="text-xs text-red-600" role="alert">
+                    {leadsError}
+                  </p>
+                )}
+              </div>
 
-              <section className="hidden overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm lg:block">
+              <section
+                className={`hidden overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm lg:block ${
+                  leadsRefreshing ? 'opacity-70 transition-opacity' : ''
+                }`}
+              >
                 <table className="w-full table-fixed divide-y divide-gray-200 text-sm">
                   <thead className="bg-gray-50">
                     <tr>
@@ -1609,7 +1724,11 @@ export default function LeadCommandCenterPage() {
                 </table>
               </section>
 
-              <div className="space-y-3 lg:hidden">
+              <div
+                className={`space-y-3 lg:hidden ${
+                  leadsRefreshing ? 'opacity-70 transition-opacity' : ''
+                }`}
+              >
                 {leads.map((lead) => (
                   <LeadMobileCard
                     key={lead.clientId}
@@ -1620,6 +1739,19 @@ export default function LeadCommandCenterPage() {
                   />
                 ))}
               </div>
+
+              {hasMoreLeads && (
+                <div className="mt-4 flex justify-center">
+                  <button
+                    type="button"
+                    onClick={loadMoreLeads}
+                    disabled={leadsLoadingMore || leadsRefreshing}
+                    className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {leadsLoadingMore ? 'Loading more…' : 'Load more'}
+                  </button>
+                </div>
+              )}
             </>
           )}
         </div>

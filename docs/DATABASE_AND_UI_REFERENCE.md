@@ -1494,7 +1494,11 @@ Super-admin inbox at `/admin/leads`. Entry point: `fetchLeadCommandCenterRows(fi
 
 **Attention scoring** (higher = more urgent): overdue follow-up (+30), due today (+20), no next action on active lead (+15), unassigned (+25), missing email/phone (+10 each), duplicate email/phone (+20/+30), high priority (+30), recent ingest with no contact (+15–30), no relationship assignee (+10), etc. Rows sorted by `attentionScore` desc, then `lastModified` desc.
 
-**Filters** (query params on `GET /api/admin/leads`): `search`, `status`, `source`, `assignedUserId`, `missingEmail`, `missingPhone`, `unassigned`, `duplicateEmail`, `duplicatePhone`, `needsAttention`, `overdueFollowUp`, `dueToday`, `noNextAction`, `createdFrom`/`createdTo`, `latestSourceFrom`/`latestSourceTo`, `tagIds`, `tagNames`, `limit` (default 200, max 500), `offset`.
+**Filters** (query params on `GET /api/admin/leads`): `search`, `status`, `source`, `assignedUserId`, `missingEmail`, `missingPhone`, `unassigned`, `duplicateEmail`, `duplicatePhone`, `needsAttention`, `overdueFollowUp`, `dueToday`, `noNextAction`, `createdFrom`/`createdTo`, `latestSourceFrom`/`latestSourceTo`, `tagIds`, `tagNames`, `limit` (default **50**, max 500), `offset`.
+
+**Pagination meta** (`{ leads, meta }`): `count` (page size returned), `limit`, `offset`, `total` (filtered match count after in-memory attention/dup/latest-source filters), `hasMore`. Offset pagination only — **cursor pagination deferred** until attention/dup filters can run in SQL (load-all-then-slice still applies server-side for correctness).
+
+**Inbox UI:** 300ms debounce on filter/search query string; `AbortController` cancels stale list requests; soft refresh keeps existing rows visible; **Load more** appends the next offset page.
 
 **Global search** (`searchClients()`): used by `GET /api/search/clients?q=` — name/company/email/phone `ILIKE`; super admin searches all clients; standard users scoped to assignments; max 10 results with attention score.
 
@@ -1657,7 +1661,7 @@ Per merge (pairwise step or full `mergeClients` call), in a **single Prisma tran
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
-| GET | `/api/admin/leads` | Super admin (Bearer or session) | Slim inbox rows with attention scoring. Rich query filters (see [Lead Command Center](#lead-command-center-libleadcommandcenterts)). Default `limit=200`, max 500. Returns `{ leads, meta }` |
+| GET | `/api/admin/leads` | Super admin (Bearer or session) | Slim inbox rows with attention scoring. Rich query filters (see [Lead Command Center](#lead-command-center-libleadcommandcenterts)). Default `limit=50`, max 500. Returns `{ leads, meta: { count, limit, offset, total, hasMore } }` |
 | GET | `/api/admin/leads/[id]/preview` | Super admin (Bearer or session) | Full lead preview detail for the drawer / merge mapping. Returns `{ lead }` (`LeadCommandCenterPreview`) or 404 |
 | GET | `/api/admin/leads/duplicates` | Super admin (Bearer or session) | Duplicate groups by email/phone. Query: `?type=email\|phone\|all` |
 | POST | `/api/admin/leads/merge` | Super admin (Bearer or session) | Pairwise manual merge via `mergeClients()`. Body: `canonicalClientId`, `duplicateClientId`, optional `fieldChoices`, `fieldOverrides`, `reason` |
@@ -2085,9 +2089,10 @@ Responsive header — stacks on mobile (`flex-col`), horizontal from `sm` up; ac
 | Duplicates | `LeadDuplicatesPanel` | `GET /api/admin/leads/duplicates` |
 
 **Toolbar (inbox):**
-- Search + quick filter chips (needs attention, overdue follow-up, etc.)
+- Search + quick filter chips (needs attention, overdue follow-up, etc.) — filter/search query debounced 300ms; in-flight list requests aborted on change
 - **Display density** toggle (Comfortable / Compact) — `DisplayDensityToggle` in toolbar; preference also in Account Settings
 - **Filters** panel — collapsed by default; advanced filters (status, source, assignee, tags, date ranges, missing contact, duplicate flags, follow-up states)
+- Default page size **50** with **Load more** (`offset` pagination); soft refresh keeps rows visible while updating
 
 **Inbox layout (compact):**
 - Desktop: dense table rows — `StatusPill`, `LeadSourceBadges` (max 2 visible + `+N`), truncated contact/next-step text, `EmptyMuted` (`—`) for blanks

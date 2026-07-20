@@ -2,15 +2,17 @@ import { ClientStatus, LeadSourceType } from '@prisma/client';
 import { NextResponse } from 'next/server';
 import { requireSuperAdminFromRequest } from '@/lib/authHelpers';
 import {
-  fetchLeadCommandCenterRows,
+  fetchLeadCommandCenterPage,
+  LEAD_COMMAND_CENTER_DEFAULT_LIMIT,
+  LEAD_COMMAND_CENTER_MAX_LIMIT,
   type LeadCommandCenterFilters,
 } from '@/lib/leadCommandCenter';
 import { timeRouteHandler } from '@/lib/performance';
 
 export const dynamic = 'force-dynamic';
 
-const DEFAULT_LIMIT = 200;
-const MAX_LIMIT = 500;
+const DEFAULT_LIMIT = LEAD_COMMAND_CENTER_DEFAULT_LIMIT;
+const MAX_LIMIT = LEAD_COMMAND_CENTER_MAX_LIMIT;
 
 const LEAD_SOURCE_LABEL_TO_ENUM: Record<string, LeadSourceType> = {
   'google forms': LeadSourceType.GOOGLE_FORMS,
@@ -143,23 +145,23 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const filters = parseLeadCommandCenterFilters(searchParams);
     const offset = filters.offset ?? 0;
-    const limit = Math.min(filters.limit ?? DEFAULT_LIMIT, MAX_LIMIT);
+    const limit = Math.min(
+      Math.max(filters.limit ?? DEFAULT_LIMIT, 1),
+      MAX_LIMIT
+    );
 
     const payload = await timeRouteHandler(
       'GET /api/admin/leads',
       async () => {
-        const leads = await fetchLeadCommandCenterRows({
+        const page = await fetchLeadCommandCenterPage({
           ...filters,
           limit,
+          offset,
         });
 
         return {
-          leads,
-          meta: {
-            count: leads.length,
-            limit,
-            offset,
-          },
+          leads: page.leads,
+          meta: page.meta,
         };
       },
       {
@@ -168,6 +170,8 @@ export async function GET(request: Request) {
           leadCount: result.leads.length,
           limit: result.meta.limit,
           offset: result.meta.offset,
+          total: result.meta.total,
+          hasMore: result.meta.hasMore,
         }),
       }
     );

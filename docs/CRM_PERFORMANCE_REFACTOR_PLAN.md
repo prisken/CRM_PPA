@@ -196,6 +196,8 @@ GROUP BY client_id, role HAVING COUNT(*) > 1;
 2. Document which post-filters (`needsAttention`, dup flags, latest-source) break pure SQL pagination — migrate those filters to indexed columns or computed fields over time.
 3. Cap nested includes (e.g. sourceRecords: latest N only). ✅ (inbox sample + preview full history)
 
+**Partial (offset UX):** default `limit=50`, response `meta.total` / `hasMore`, UI Load more + debounce/abort. Cursor / true DB pagination still blocked by post-filters.
+
 ### Phase B — Duplicate detection
 
 1. Remove full-table `loadDuplicateClientIds` from every list/search request.

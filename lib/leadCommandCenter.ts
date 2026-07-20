@@ -105,6 +105,26 @@ export type LeadCommandCenterFilters = {
   offset?: number;
 };
 
+/** Default page size for GET /api/admin/leads (UI Load more uses the same). */
+export const LEAD_COMMAND_CENTER_DEFAULT_LIMIT = 50;
+/** Hard cap for limit query param. */
+export const LEAD_COMMAND_CENTER_MAX_LIMIT = 500;
+
+export type LeadCommandCenterPageMeta = {
+  /** Number of leads in this response page. */
+  count: number;
+  limit: number;
+  offset: number;
+  /** Total rows after filters/sort (available because list still hydrates the match set). */
+  total: number;
+  hasMore: boolean;
+};
+
+export type LeadCommandCenterPageResult = {
+  leads: LeadCommandCenterRow[];
+  meta: LeadCommandCenterPageMeta;
+};
+
 const leadCommandCenterAssignmentSelect = {
   assignmentId: true,
   role: true,
@@ -1039,9 +1059,9 @@ function applyPostFilters(
   });
 }
 
-export async function fetchLeadCommandCenterRows(
+export async function fetchLeadCommandCenterPage(
   filters: LeadCommandCenterFilters = {}
-): Promise<LeadCommandCenterRow[]> {
+): Promise<LeadCommandCenterPageResult> {
   const where = buildClientWhere(filters);
 
   const [clients, duplicateClientIds] = await Promise.all([
@@ -1069,13 +1089,44 @@ export async function fetchLeadCommandCenterRows(
   sortRows(filteredRows);
 
   const offset = Math.max(filters.offset ?? 0, 0);
-  const limit = filters.limit;
+  const requestedLimit = filters.limit;
+  const limit =
+    requestedLimit === undefined || requestedLimit <= 0
+      ? filteredRows.length
+      : requestedLimit;
 
-  if (limit === undefined || limit <= 0) {
-    return filteredRows.slice(offset);
-  }
+  const leads =
+    requestedLimit === undefined || requestedLimit <= 0
+      ? filteredRows.slice(offset)
+      : filteredRows.slice(offset, offset + limit);
 
-  return filteredRows.slice(offset, offset + limit);
+  const total = filteredRows.length;
+  const hasMore = offset + leads.length < total;
+
+  return {
+    leads,
+    meta: {
+      count: leads.length,
+      limit:
+        requestedLimit === undefined || requestedLimit <= 0
+          ? leads.length
+          : requestedLimit,
+      offset,
+      total,
+      hasMore,
+    },
+  };
+}
+
+/**
+ * Convenience wrapper used by smoke tests / callers that only need the page rows.
+ * Prefer {@link fetchLeadCommandCenterPage} when meta is needed.
+ */
+export async function fetchLeadCommandCenterRows(
+  filters: LeadCommandCenterFilters = {}
+): Promise<LeadCommandCenterRow[]> {
+  const page = await fetchLeadCommandCenterPage(filters);
+  return page.leads;
 }
 
 export async function fetchLeadCommandCenterPreview(
