@@ -1318,8 +1318,10 @@ returnableAmount = max(0, baseLiability - userCredit)
 
 1. `POST` / `DELETE` `/api/clients/[id]/assignments` (and bulk relationship assign) call `scheduleReturnableRecalculation(userId, clientId)` (fire-and-forget, no `await`)
 2. That helper **enqueues** a durable `BackgroundJob` (`RECALCULATE_RETURNABLES_FOR_USER_CLIENT`, payload `{ userId, clientId }`), deduping while `PENDING`, then best-effort runs `processBackgroundJobs` in-process
-3. If the process dies before running, the row stays `PENDING` until `npm run jobs:process` or `POST /api/tasks/process-background-jobs`
+3. If the process dies before running, the row stays `PENDING` until `npm run jobs:process` / `jobs:process:once` or `POST /api/tasks/process-background-jobs` (auth: `CRON_SECRET` or super admin)
 4. Sync compat: `POST /api/tasks/recalculate-returnables` still runs recalculation immediately (super admin)
+
+**Staging/production:** schedule a processor every 1–5 minutes. Full enqueue/process/monitor/replay runbook: [`BACKGROUND_JOBS_OPS.md`](./BACKGROUND_JOBS_OPS.md).
 
 If the user is no longer a doctor on the client, existing returnables for that user are set to **0** (record retained for audit). Assignment APIs respond immediately without waiting for recalculation.
 
@@ -1714,7 +1716,9 @@ No CRM login required. All webhook routes validate header `x-webhook-secret` aga
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
 | POST | `/api/tasks/recalculate-returnables` | Super admin (session or Bearer) | Body: `{ userId, clientId }`. Sync `recalculateReturnablesForUserOnClient` (compat). Assignment flows use durable jobs instead |
-| POST | `/api/tasks/process-background-jobs` | Super admin or `CRON_SECRET` | Claim/process due `BackgroundJob` rows. Optional body `{ limit }` |
+| POST | `/api/tasks/process-background-jobs` | **`CRON_SECRET`** (`Authorization: Bearer` or `x-cron-secret`) **or** super admin | Claim/process due `BackgroundJob` rows (reclaims stuck `RUNNING` >15m first). Optional body `{ limit }` (max 50). Returns `{ ok, claimed, succeeded, failed, jobIds, reclaimedStuck }`. **Staging/prod must schedule this** (or `npm run jobs:process`) — see [`BACKGROUND_JOBS_OPS.md`](./BACKGROUND_JOBS_OPS.md) |
+
+**Ops scripts:** `npm run jobs:process` / `jobs:process:once` (one batch), `npm run jobs:status` (PENDING/FAILED/stuck RUNNING). Env: `DATABASE_URL`; HTTP cron needs `CRON_SECRET`.
 
 ### Reports (alternate endpoints — require `?format=pdf|csv`)
 
@@ -2413,7 +2417,7 @@ Mounted via `src/components/Providers.tsx` (wraps app with `DisplayDensityProvid
 | `commissionCalculations.ts` | Shared-role commission share + legacy secured commission math |
 | `commissionRates.ts` | Role label formatting (`formatAssignmentRole`) |
 | `commissionReturnables.ts` | Returnable generation (participant + legacy), `recalculateReturnablesForUserOnClient`, `scheduleReturnableRecalculation` (durable enqueue) |
-| `backgroundJobs.ts` | `BackgroundJob` enqueue/claim/process; `RECALCULATE_RETURNABLES_FOR_USER_CLIENT` |
+| `backgroundJobs.ts` | `BackgroundJob` enqueue/claim/process/reclaim; `RECALCULATE_RETURNABLES_FOR_USER_CLIENT`; see [`BACKGROUND_JOBS_OPS.md`](./BACKGROUND_JOBS_OPS.md) |
 | `dealCommissionTemplates.ts` | `DealType` labels, default commission templates, percent validation |
 | `dealParticipants.ts` | Participant normalization, validation, `buildDefaultParticipantsForDeal`, API payload parsing |
 | `dealParticipantsBackfill.ts` | Backfill participant rows from client assignments |
@@ -2687,6 +2691,8 @@ npm run manuals:pdf
 npx tsx scripts/profile-api-routes.ts
 npx tsx scripts/recalculate-commission-returnables.ts
 npm run jobs:process
+npm run jobs:process:once
+npm run jobs:status
 npm run audit:legacy-commission
 npm run backfill:deal-participants:dry
 npm run backfill:deal-participants
@@ -2880,7 +2886,7 @@ Related: `lib/pipelinePermissions.ts` exports `getNextPipelineStage`, `canUserAd
 | Participant returnables v1 | Explicit per-doctor fields; create/update validates caps/`userId`/commissionable; backfill still does not infer returnables — business review after migration |
 | Deal participant API integration tests | `test:deal-participant-api` uses Prisma + route libraries (deal routes use session auth, not Bearer-only HTTP) |
 | Returnable backfill | Historical WON deals may need `npx tsx scripts/recalculate-commission-returnables.ts` after configuring doctor returnables |
-| Background returnable tasks | Durable `BackgroundJob` queue (`PENDING`/`RUNNING`/`SUCCEEDED`/`FAILED`); assignment enqueue + best-effort process; retry with backoff; `npm run jobs:process` / `POST /api/tasks/process-background-jobs`. Sync recalculate route kept for compat |
+| Background returnable tasks | Durable `BackgroundJob` queue (`PENDING`/`RUNNING`/`SUCCEEDED`/`FAILED`); assignment enqueue + best-effort process; retry with backoff; reclaim stuck `RUNNING` (>15m). **Ops must run** `npm run jobs:process` or `POST /api/tasks/process-background-jobs` on a schedule — see [`BACKGROUND_JOBS_OPS.md`](./BACKGROUND_JOBS_OPS.md). Sync recalculate route kept for compat |
 | Admin analytics cache | Funnel, revenue, leaderboards cached 10 min — new data may lag briefly after pipeline/deal changes |
 | Pipeline checklist in modal | Display-only reminders in `PipelineStageAdvanceModal`; not persisted or server-validated |
 | Admin route protection | `/admin/*` middleware checks session only; role enforced client-side + API 403 |

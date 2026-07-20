@@ -40,7 +40,7 @@
 | **Cheaper Client 360 mutations** | Aside/widget mutations do not always re-run full RSC refresh + strategy refetch |
 | **Bounded dashboard queries** | Widgets use `take` / shared context; no duplicate `/api/me/assignments` |
 | **Predictable mobile UX** | Tall modals use `dvh`; Safari autofill remains readable; Strategy Planner usable on iPad |
-| **Reliable side effects** | ✅ **Shipped (code):** durable `BackgroundJob` enqueue + retries/backoff. **Still open (ops):** reliable `jobs:process` / cron in each environment |
+| **Reliable side effects** | ✅ **Shipped (code):** durable `BackgroundJob` enqueue + retries/backoff + stuck-RUNNING reclaim. **Ops:** set `CRON_SECRET` + schedule processor — see [`BACKGROUND_JOBS_OPS.md`](./BACKGROUND_JOBS_OPS.md) |
 | **Simpler auth** | One authentication path (Bearer **or** session) for Client 360 mutation routes (partially progressed — see §12) |
 | **Maintainable Strategy Planner** | Split mega-components; thinner DTOs per view (Board / List / Projection / Overview) |
 | **Safe rollout** | Each phase measurable with `[perf]` logs; migrations reversible or additive indexes only |
@@ -85,7 +85,7 @@ Confirmed against `prisma/schema.prisma` + migrations (July 21, 2026):
 | **Admin / dashboard commission** | Hydrate WON deals + participants (cached 10 min for admin; per-request for standard context) | `adminAnalyticsCache`, `fetchWonDealsWithParticipants*`, `standardDashboardContext` |
 | **Dashboard widgets** | Open-tasks / deal-participation use DB `take` (20). Standard dashboard passes assignments into calendar (no duplicate `/api/me/assignments`) | `buildOpenTasksWidget`, `buildDealParticipationWidget`, `StandardUserDashboardPage` |
 | **Strategy Planner** | Full plan include for every view (fat DTO); mega-components remain | `strategyPlanDetailInclude`, `StrategyPlanDetailView`, `StrategyPlannerBoard` |
-| **Background jobs (ops)** | Durable queue exists, but **production/staging must run** `npm run jobs:process` or `POST /api/tasks/process-background-jobs` or PENDING rows sit | ops / cron / runbook |
+| **Background jobs (ops)** | ✅ Runbook shipped (`docs/BACKGROUND_JOBS_OPS.md`); each env must still enable cron/`jobs:process` | ops / cron / runbook |
 | **Legacy paths** | Old dashboard monolith routes; `Strategy`/`Document` models | Docs known limitations |
 
 ---
@@ -100,7 +100,7 @@ Ordered by leverage (final performance review). No new measurements invented —
 | **2** | **Client 360 scoped refresh + deal summary DTO** | ✅ Slice refresh controller + details save migration. Still open: team/stage stay on `all`; deal summary DTO; avoid RSC on pure client slices |
 | **3** | **Dashboard `take` + assignment dedupe** | ✅ DB `take` on open-tasks / deal-participation (20). ✅ Standard dashboard passes assignment bootstrap into Important Dates calendar / add-date modal |
 | **4** | **Admin pipeline bounded API** | ✅ Partial: per-status `take` (50) + `status`/`assignedUserId` server filters + `meta` (`total`, `returned`, `hasMore`, `perStatusCounts`). Still open: cursor / load-more |
-| **5** | **Jobs processing ops** | Ensure staging/prod cron or scheduled `jobs:process`; log/alert PENDING/FAILED; runbook for replay |
+| **5** | **Jobs processing ops** | ✅ Runbook + `jobs:status` / `jobs:process:once` + hardened `CRON_SECRET` auth + stuck RUNNING reclaim. **Still open:** enable cron in each deployed env |
 | **6** | **Re-baseline timings** | Re-run `PERF_LOGGING_ENABLED` + `profile-api-routes` (and extend coverage: LCC, preview, pipeline, Client 360 refresh, strategy GET, search, calendar); update UI reference June 24 table |
 
 ---
@@ -351,7 +351,7 @@ Reference modal pattern in DATABASE_AND_UI_REFERENCE §15 — update pattern tex
 
 ### Still open — ops / observability
 
-1. **Production/staging processor:** ensure a cron, Vercel scheduled function, or ops runbook actually calls `jobs:process` / process-background-jobs so PENDING jobs do not sit if the request process dies before best-effort process.
+1. **Production/staging processor:** follow [`docs/BACKGROUND_JOBS_OPS.md`](./BACKGROUND_JOBS_OPS.md) — set `CRON_SECRET`, schedule every 1–5 minutes (`POST /api/tasks/process-background-jobs` or `npm run jobs:process`). Monitor with `npm run jobs:status`.
 2. Structured log / admin visibility for FAILED jobs (optional counter).
 3. Bulk-assign: confirm one job per user-client pair remains bounded under load.
 4. Keep bulk recalc script for repairs: `npx tsx scripts/recalculate-commission-returnables.ts`.
@@ -502,10 +502,10 @@ Prefer **§3 Next Sprint Hot Paths** for the immediate sprint. Waves below remai
 
 - [x] Durable queue + enqueue + retries/backoff — **SHIPPED**
 - [x] Sync recalculate route retained for compat — **SHIPPED**
-- [ ] Logging + FAILED visibility (ops polish) — **OPEN**
-- [ ] Cron / scheduled `jobs:process` in staging + production — **OPEN (ops gap)**
+- [x] Logging + FAILED visibility (ops polish) — **PARTIAL** (`jobs:status` + runbook; alerting still env-specific)
+- [x] Cron / scheduled `jobs:process` runbook — **SHIPPED** (docs); enable schedule per env — **OPEN (ops)**
 - [ ] Bulk-assign job batching review under load — **OPEN**
-- [ ] Runbook: replay failed returnable jobs — **OPEN**
+- [x] Runbook: replay failed returnable jobs — **SHIPPED** (`BACKGROUND_JOBS_OPS.md`)
 
 ### Wave 9 — Legacy retirement (after deps cleared)
 
