@@ -193,11 +193,9 @@ function MyWorkSection({
 function PerformanceSection({
   commissionState,
   showReturnable,
-  widgetRefreshKey,
 }: {
   commissionState: CommissionWidgetState;
   showReturnable: boolean;
-  widgetRefreshKey: number;
 }) {
   const showSecuredCommission =
     commissionState.loading || commissionState.hasAnyAssignment;
@@ -219,9 +217,7 @@ function PerformanceSection({
         />
       ) : null}
 
-      {showReturnable && (
-        <MyCommissionReturnableWidget refreshKey={widgetRefreshKey} />
-      )}
+      {showReturnable && <MyCommissionReturnableWidget />}
     </div>
   );
 }
@@ -234,7 +230,6 @@ export default function StandardUserDashboardPage() {
   const [assignmentsLoading, setAssignmentsLoading] = useState(true);
   const [assignmentsError, setAssignmentsError] = useState<string | null>(null);
   const [showAddLead, setShowAddLead] = useState(false);
-  const [widgetRefreshKey, setWidgetRefreshKey] = useState(0);
   const [clientsState, setClientsState] =
     useState<
       WidgetRequestState<{
@@ -368,17 +363,59 @@ export default function StandardUserDashboardPage() {
     }
   }, []);
 
+  // Lead create auto-assigns RELATIONSHIP — only clients + activity change.
+  // Soft refresh: keep current rows visible (no full-dashboard skeleton flash).
+  const refreshAfterLeadCreated = useCallback(async () => {
+    const [clientsResult, activityResult] = await Promise.allSettled([
+      authenticatedFetch('/api/dashboard/widgets/assigned-clients'),
+      authenticatedFetch('/api/dashboard/widgets/activity-feed'),
+    ]);
+
+    if (clientsResult.status === 'fulfilled' && clientsResult.value.ok) {
+      const data = await clientsResult.value.json();
+      setClientsState({
+        loading: false,
+        error: null,
+        data: {
+          assignedClients: data.assignedClients ?? [],
+          legacyDoctorAssignments: data.legacyDoctorAssignments ?? [],
+        },
+      });
+    } else {
+      setClientsState((current) => ({
+        ...current,
+        loading: false,
+        error: 'Failed to load assigned clients',
+      }));
+    }
+
+    if (activityResult.status === 'fulfilled' && activityResult.value.ok) {
+      const data = await activityResult.value.json();
+      setActivityState({
+        loading: false,
+        error: null,
+        data: data.recentActivity ?? [],
+      });
+    } else {
+      setActivityState((current) => ({
+        ...current,
+        loading: false,
+        error: 'Failed to load recent activity',
+      }));
+    }
+  }, []);
+
   useEffect(() => {
     if (profileLoading || !profile) {
       return;
     }
 
     loadDashboardData();
-  }, [profile, profileLoading, widgetRefreshKey, loadDashboardData]);
+  }, [profile, profileLoading, loadDashboardData]);
 
   const handleLeadCreated = useCallback(() => {
-    setWidgetRefreshKey((key) => key + 1);
-  }, []);
+    void refreshAfterLeadCreated();
+  }, [refreshAfterLeadCreated]);
 
   const handleOpenAddLead = useCallback(() => setShowAddLead(true), []);
   const handleCloseAddLead = useCallback(() => setShowAddLead(false), []);
@@ -485,7 +522,7 @@ export default function StandardUserDashboardPage() {
           description="Important dates for your clients and leads this month"
           collapsible
         >
-          <ImportantDatesCalendarWidget refreshKey={widgetRefreshKey} />
+          <ImportantDatesCalendarWidget />
         </SectionCard>
 
         <SectionCard
@@ -497,7 +534,6 @@ export default function StandardUserDashboardPage() {
           <PerformanceSection
             commissionState={commissionState}
             showReturnable={showStatements}
-            widgetRefreshKey={widgetRefreshKey}
           />
         </SectionCard>
       </div>

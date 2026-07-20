@@ -2012,7 +2012,7 @@ See `docs/deal-participant-migration.md` for full migration runbook.
 
 **Data loading:** Page shell (header + widget grid) renders immediately once profile is ready. Each widget fetches its own endpoint **in parallel**; dimension-matched **skeleton loaders** display until data arrives. Also fetches `/api/me/assignments` for doctor-role visibility (non-blocking).
 
-**Refresh:** `AddLeadModal` `onCreated` increments a shared `widgetRefreshKey` to re-fetch all widget endpoints.
+**Refresh:** `AddLeadModal` `onCreated` soft-refetches only assigned clients + recent activity (lead create auto-assigns RELATIONSHIP; no deals/dates/returnables). Other widgets stay as loaded.
 
 **Modals:** `AddLeadModal` — full lead form (name, company, email, phone, lead source, role in company, employee count, expectations) → `POST /api/clients`
 
