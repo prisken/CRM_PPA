@@ -172,7 +172,7 @@ npx tsx scripts/profile-api-routes.ts   # client round-trip summary
 | `GET /api/dashboard/standard` | **~540–880 ms** | Legacy monolith; shared context + parallel widgets. Live UI uses per-widget routes instead. |
 | `widget:buildPerformanceMetricsWidget` | **~1 ms** (with context) / **~250–670 ms** (standalone) | Secured commission via shared deal aggregates + role occupancy |
 | `widget:buildAssignedClientsWidget` | **~1 ms** (with context) / **~500–600 ms** (standalone) | Single SQL aggregate per client deal values |
-| `GET /api/admin/pipeline` | **~410–450 ms** | All clients + assignments (live; not cached) |
+| `GET /api/admin/pipeline` | **~410–450 ms** (legacy unbounded) | Default: bounded per-status pages (50/stage) + `groupBy` counts; live, not cached. `mode=legacy` / `ADMIN_PIPELINE_LEGACY=true` = prior all-clients path |
 | `widget:buildActivityFeedWidget` | **~246–470 ms** | Includes `activityFeed:fetchRawActivities` ~207–260 ms |
 | `widget:buildOpenTasksWidget` | **~222–515 ms** | `assigneeId` + `clientId IN` assigned clients |
 | `GET /api/dashboard/superadmin` | **~234–297 ms** | All-client activity feed (`limit=100`) |
@@ -1678,7 +1678,7 @@ Per merge (pairwise step or full `mergeClients` call), in a **single Prisma tran
 | GET | `/api/admin/funnel-data` | Super admin (Bearer or session) | Conversion funnel chart data. **Cached:** org-wide `unstable_cache` 600s (auth every request) |
 | GET | `/api/admin/revenue-tracker` | Super admin (Bearer or session) | Revenue over time; requires `?groupBy=month\|quarter\|year`. **Cached:** org-wide `unstable_cache` 600s |
 | GET | `/api/admin/leaderboards` | Super admin (Bearer or session) | Commission & deals leaderboards. **Cached:** org-wide `unstable_cache` 600s |
-| GET | `/api/admin/pipeline` | Super admin (Bearer or session) | All clients for master pipeline. Slim card DTO via `lib/adminPipeline.ts` (`client_id`, `name`, `company`, `status`, `assignedUsers[{ user_id, userName }]`). Payload category `admin-pipeline` (150KB warn). |
+| GET | `/api/admin/pipeline` | Super admin (Bearer or session) | Master pipeline cards via `lib/adminPipeline.ts`. Slim DTO: `client_id`, `name`, `company`, `status`, `assignedUsers[{ user_id, userName }]`. **Default:** newest **50 per status** (`perStatusLimit`, max 200). Query: `status`, `assignedUserId`, `perStatusLimit`, `mode=legacy`. Response `{ clients, meta: { total, returned, hasMore, perStatusCounts, perStatusLimit, limitMode, dbBounded, fallbackReason?, statusFilter, assignedUserId } }`. Temporary unbounded: `mode=legacy` or `ADMIN_PIPELINE_LEGACY=true` (`dbBounded=false`, `fallbackReason` in `[perf]` logs). Payload category `admin-pipeline` (150KB warn). |
 
 ### Lead Command Center (super admin)
 
@@ -2097,7 +2097,7 @@ Responsive header — stacks on mobile (`flex-col`), horizontal from `sm` up; ac
 | Leaderboards | `Leaderboards` | `/api/admin/leaderboards` | 10 min |
 | Recent Activity (all clients) | `CollapsibleActivityWidget` | `/api/dashboard/superadmin` | — |
 | Important Dates Calendar | `ImportantDatesCalendarWidget` | `/api/dashboard/widgets/important-dates-calendar` | — |
-| Master pipeline | `MasterPipelineView` | `/api/admin/pipeline` — Kanban on `lg+`, grouped list on mobile | — |
+| Master pipeline | `MasterPipelineView` | `/api/admin/pipeline` — Kanban on `lg+`, grouped list on mobile; status/assignee filters sent as query params; column badges use `meta.perStatusCounts`; truncated columns show “Showing N of M” | — |
 
 **Modals:** `AddClientModal` — same fields as `AddLeadModal` plus pipeline stage selector; scroll-safe overlay (`max-h-[90vh]`)
 
@@ -2397,7 +2397,7 @@ Mounted via `src/components/Providers.tsx` (wraps app with `DisplayDensityProvid
 | `authHelpers.ts` | Auth guards, `verifyAdminPassword()` (Supabase re-auth for destructive actions), `ACTIVE` status checks, client access checks, system event logging |
 | `client360.ts` | Client 360 includes, response builders, server loaders (`getClient360CoreData`, `getClient360DealsData`, `getClient360CompanyHierarchyData`, `loadClient360PageData`) |
 | `pipelinePermissions.ts` | Pipeline stage advance rules + advance checklists (shared by API + UI) |
-| `adminPipeline.ts` | Super-admin master pipeline slim DTO + Prisma select for `GET /api/admin/pipeline` |
+| `adminPipeline.ts` | Super-admin master pipeline slim DTO, per-status cap, filters, meta, and legacy unbounded fallback for `GET /api/admin/pipeline` |
 | `standardDashboard.ts` | Composes legacy monolithic dashboard from widget builders (shared context) |
 | `standardDashboardWidgets.ts` | Per-widget data builders (assigned clients, tasks, activity, performance metrics) |
 | `standardDashboardContext.ts` | One-shot assignment + deal aggregate + occupancy load for dashboard widgets |

@@ -2,7 +2,10 @@
 
 import Link from 'next/link';
 import { memo, useEffect, useMemo, useState } from 'react';
-import type { AdminPipelineClient } from '@/lib/adminPipeline';
+import type {
+  AdminPipelineClient,
+  AdminPipelineMeta,
+} from '@/lib/adminPipeline';
 import { CLIENT_STAGES } from '@/lib/clientStages';
 
 type PipelineClient = AdminPipelineClient;
@@ -40,21 +43,31 @@ const PipelineClientCard = memo(function PipelineClientCard({
 const PipelineColumn = memo(function PipelineColumn({
   label,
   clients,
+  totalCount,
   variant,
 }: {
   label: string;
   clients: PipelineClient[];
+  totalCount: number;
   variant: 'desktop' | 'mobile';
 }) {
+  const shown = clients.length;
+  const truncated = totalCount > shown;
+
   if (variant === 'desktop') {
     return (
       <div className="min-w-[220px] flex-1 rounded-lg bg-gray-50 p-3">
-        <div className="mb-3 flex items-center justify-between">
+        <div className="mb-3 flex items-center justify-between gap-2">
           <h3 className="text-sm font-semibold text-gray-800">{label}</h3>
           <span className="rounded-full bg-gray-200 px-2 py-0.5 text-xs text-gray-600">
-            {clients.length}
+            {totalCount}
           </span>
         </div>
+        {truncated && (
+          <p className="mb-2 text-[11px] text-gray-400">
+            Showing {shown} of {totalCount}
+          </p>
+        )}
         <div className="space-y-2">
           {clients.map((client) => (
             <PipelineClientCard key={client.client_id} client={client} />
@@ -69,12 +82,17 @@ const PipelineColumn = memo(function PipelineColumn({
 
   return (
     <section>
-      <div className="mb-3 flex items-center justify-between border-b border-gray-200 pb-2">
+      <div className="mb-3 flex items-center justify-between gap-2 border-b border-gray-200 pb-2">
         <h3 className="text-sm font-semibold text-gray-800">{label}</h3>
         <span className="rounded-full bg-gray-200 px-2 py-0.5 text-xs text-gray-600">
-          {clients.length}
+          {totalCount}
         </span>
       </div>
+      {truncated && (
+        <p className="mb-2 text-[11px] text-gray-400">
+          Showing {shown} of {totalCount}
+        </p>
+      )}
       <ul className="space-y-2">
         {clients.map((client) => (
           <li key={client.client_id}>
@@ -97,10 +115,14 @@ export default function MasterPipelineView({
   onAddClick?: () => void;
 }) {
   const [clients, setClients] = useState<PipelineClient[]>([]);
+  const [meta, setMeta] = useState<AdminPipelineMeta | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [assignedUserFilter, setAssignedUserFilter] = useState('ALL');
   const [statusFilter, setStatusFilter] = useState('ALL');
+  const [assignedUserOptions, setAssignedUserOptions] = useState<
+    { id: string; name: string }[]
+  >([]);
 
   useEffect(() => {
     let cancelled = false;
@@ -108,13 +130,36 @@ export default function MasterPipelineView({
     async function fetchPipeline() {
       setLoading(true);
       try {
-        const res = await fetch('/api/admin/pipeline');
+        const params = new URLSearchParams();
+        if (statusFilter !== 'ALL') {
+          params.set('status', statusFilter);
+        }
+        if (assignedUserFilter !== 'ALL') {
+          params.set('assignedUserId', assignedUserFilter);
+        }
+        const query = params.toString();
+        const res = await fetch(
+          query ? `/api/admin/pipeline?${query}` : '/api/admin/pipeline'
+        );
         if (!res.ok) {
           throw new Error('Failed to load pipeline data');
         }
         const json = await res.json();
         if (!cancelled) {
-          setClients(json.clients ?? []);
+          const nextClients: PipelineClient[] = json.clients ?? [];
+          setClients(nextClients);
+          setMeta(json.meta ?? null);
+          setAssignedUserOptions((prev) => {
+            const users = new Map(prev.map((user) => [user.id, user.name]));
+            for (const client of nextClients) {
+              for (const user of client.assignedUsers) {
+                users.set(user.user_id, user.userName);
+              }
+            }
+            return Array.from(users.entries())
+              .map(([id, name]) => ({ id, name }))
+              .sort((a, b) => a.name.localeCompare(b.name));
+          });
         }
       } catch (err) {
         if (!cancelled) {
@@ -132,28 +177,7 @@ export default function MasterPipelineView({
     return () => {
       cancelled = true;
     };
-  }, [refreshKey]);
-
-  const assignedUserOptions = useMemo(() => {
-    const users = new Map<string, string>();
-    for (const client of clients) {
-      for (const user of client.assignedUsers) {
-        users.set(user.user_id, user.userName);
-      }
-    }
-    return Array.from(users.entries()).map(([id, name]) => ({ id, name }));
-  }, [clients]);
-
-  const filteredClients = useMemo(() => {
-    return clients.filter((client) => {
-      const statusMatch =
-        statusFilter === 'ALL' || client.status === statusFilter;
-      const userMatch =
-        assignedUserFilter === 'ALL' ||
-        client.assignedUsers.some((user) => user.user_id === assignedUserFilter);
-      return statusMatch && userMatch;
-    });
-  }, [clients, assignedUserFilter, statusFilter]);
+  }, [refreshKey, statusFilter, assignedUserFilter]);
 
   const clientsByStatus = useMemo(() => {
     const grouped = new Map<string, PipelineClient[]>();
@@ -162,7 +186,7 @@ export default function MasterPipelineView({
       grouped.set(column.key, []);
     }
 
-    for (const client of filteredClients) {
+    for (const client of clients) {
       const bucket = grouped.get(client.status);
       if (bucket) {
         bucket.push(client);
@@ -170,7 +194,9 @@ export default function MasterPipelineView({
     }
 
     return grouped;
-  }, [filteredClients]);
+  }, [clients]);
+
+  const perStatusCounts = meta?.perStatusCounts;
 
   if (loading) {
     return <p className="text-sm text-gray-500">Loading pipeline...</p>;
@@ -183,7 +209,17 @@ export default function MasterPipelineView({
   return (
     <div id="master-pipeline" className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-lg font-semibold text-gray-900">Master Pipeline</h2>
+        <div>
+          <h2 className="text-lg font-semibold text-gray-900">Master Pipeline</h2>
+          {meta?.hasMore && (
+            <p className="mt-1 text-xs text-gray-500">
+              Showing newest {meta.returned} of {meta.total} matching clients
+              {meta.perStatusLimit != null
+                ? ` (up to ${meta.perStatusLimit} per stage)`
+                : ''}
+            </p>
+          )}
+        </div>
         <div className="flex flex-wrap gap-3">
           <button
             type="button"
@@ -220,26 +256,38 @@ export default function MasterPipelineView({
 
       <div className="hidden lg:block">
         <div className="flex gap-4 overflow-x-auto pb-2">
-          {STATUS_COLUMNS.map((column) => (
-            <PipelineColumn
-              key={column.key}
-              label={column.label}
-              clients={clientsByStatus.get(column.key) ?? []}
-              variant="desktop"
-            />
-          ))}
+          {STATUS_COLUMNS.map((column) => {
+            const columnClients = clientsByStatus.get(column.key) ?? [];
+            const totalCount =
+              perStatusCounts?.[column.key] ?? columnClients.length;
+            return (
+              <PipelineColumn
+                key={column.key}
+                label={column.label}
+                clients={columnClients}
+                totalCount={totalCount}
+                variant="desktop"
+              />
+            );
+          })}
         </div>
       </div>
 
       <div className="block space-y-6 lg:hidden">
-        {STATUS_COLUMNS.map((column) => (
-          <PipelineColumn
-            key={column.key}
-            label={column.label}
-            clients={clientsByStatus.get(column.key) ?? []}
-            variant="mobile"
-          />
-        ))}
+        {STATUS_COLUMNS.map((column) => {
+          const columnClients = clientsByStatus.get(column.key) ?? [];
+          const totalCount =
+            perStatusCounts?.[column.key] ?? columnClients.length;
+          return (
+            <PipelineColumn
+              key={column.key}
+              label={column.label}
+              clients={columnClients}
+              totalCount={totalCount}
+              variant="mobile"
+            />
+          );
+        })}
       </div>
     </div>
   );

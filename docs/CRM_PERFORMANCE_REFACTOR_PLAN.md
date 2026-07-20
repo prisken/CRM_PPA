@@ -79,7 +79,7 @@ Confirmed against `prisma/schema.prisma` + migrations (July 21, 2026):
 |------|------------|-----------------|
 | **Lead Command Center** | Default path: Prisma `skip`/`take` + `lastModified` order. Fallback still load-all for dup / needsAttention / latest-source. Dup flags: candidate peer lookup (not full-table) | `fetchLeadCommandCenterPage`, `loadDuplicateClientIdsForCandidates` |
 | **Lead preview** | Preview API is separate (good), but still runs **full dup scan** on open | `fetchLeadCommandCenterPreview` |
-| **Master Pipeline** | Unbounded `findMany` of all clients; filters in browser | `GET /api/admin/pipeline`, `fetchAdminPipelineClients`, `MasterPipelineView` |
+| **Master Pipeline** | ✅ Partial: default **50/status** + server filters + honest `meta`; legacy unbounded via `mode=legacy` / `ADMIN_PIPELINE_LEGACY`. Still open: cursor / load-more per column | `GET /api/admin/pipeline`, `fetchAdminPipelinePage`, `MasterPipelineView` |
 | **Client 360 refresh** | Typed slice keys + `refreshClient360Slices`; details skip workspace; stage/merge/archive/team still `all` | `client360Refresh.tsx`, `Client360PageClient` |
 | **Client 360 deals** | Slim list (`DealListItem`, no notes); full detail on `GET …/deals/[dealId]` | `listClientDealsForClient360`, `getClientDealDetail` |
 | **Admin / dashboard commission** | Hydrate WON deals + participants (cached 10 min for admin; per-request for standard context) | `adminAnalyticsCache`, `fetchWonDealsWithParticipants*`, `standardDashboardContext` |
@@ -99,7 +99,7 @@ Ordered by leverage (final performance review). No new measurements invented —
 | **1** | **LCC duplicate optimization + SQL pagination preparation** | ✅ Phase 1: candidate peer lookup. ✅ Phase A (partial): Prisma `skip`/`take` + `lastModified` order when post-filters idle; fallback path for dup/needsAttention/latest-source. Still open: precompute attention/dup flags for full SQL path |
 | **2** | **Client 360 scoped refresh + deal summary DTO** | ✅ Slice refresh controller + details save migration. Still open: team/stage stay on `all`; deal summary DTO; avoid RSC on pure client slices |
 | **3** | **Dashboard `take` + assignment dedupe** | ✅ DB `take` on open-tasks / deal-participation (20). ✅ Standard dashboard passes assignment bootstrap into Important Dates calendar / add-date modal |
-| **4** | **Admin pipeline bounded API** | Server status/search filters + `limit`/cursor; stop unbounded all-clients hydrate |
+| **4** | **Admin pipeline bounded API** | ✅ Partial: per-status `take` (50) + `status`/`assignedUserId` server filters + `meta` (`total`, `returned`, `hasMore`, `perStatusCounts`). Still open: cursor / load-more |
 | **5** | **Jobs processing ops** | Ensure staging/prod cron or scheduled `jobs:process`; log/alert PENDING/FAILED; runbook for replay |
 | **6** | **Re-baseline timings** | Re-run `PERF_LOGGING_ENABLED` + `profile-api-routes` (and extend coverage: LCC, preview, pipeline, Client 360 refresh, strategy GET, search, calendar); update UI reference June 24 table |
 
@@ -114,7 +114,7 @@ Use `PERF_LOGGING_ENABLED=true` and extend `[perf]` tags where missing (Client 3
 | `GET /api/admin/leads` | Default inbox DB-paginated (`skip`/`take`); post-filters still load-all | Persist attention/dup/latest-source for full SQL path; cursor later |
 | `GET /api/admin/leads/[id]/preview` | Dup scan on open | Share cached dup set / skip full scan |
 | `GET /api/admin/leads/duplicates` | Heavy email/phone grouping | Dedicated query + indexes; optional TTL cache |
-| `GET /api/admin/pipeline` | Unbounded client list | Server filters + cursor/limit |
+| `GET /api/admin/pipeline` | Default bounded (50/status); legacy unbounded still available | Cursor / load-more per column; remove legacy path |
 | Client 360 RSC (`/clients/[id]`) | Full core+deals+hierarchy on every `router.refresh` | Targeted revalidation / client-only widget refresh |
 | `GET /api/clients/[id]/strategy-plans/[planId]` | Deep include (steps, expenses, milestones, sources, deals) | View-specific selects (board vs list vs projection) |
 | `GET /api/dashboard/widgets/*` | Some widgets still hydrate large deal graphs; missing DB `take` | Prefer SQL aggregates; cap list widgets at DB |
@@ -295,9 +295,9 @@ GROUP BY client_id, role HAVING COUNT(*) > 1;
 2. ✅ Add `take` to `buildDealParticipationWidget` and `buildOpenTasksWidget` (limit 20; deal participation uses Deal `take` candidate pool then status sort).
 3. Ensure all live widgets use shared context or aggregates — no accidental standalone full hydrates in hot paths.
 
-### Phase B — Admin surfaces — **OPEN** (pipeline unbounded)
+### Phase B — Admin surfaces — **PARTIAL** (pipeline bounded default; cursor open)
 
-1. Master Pipeline: server-side status/search filters + cursor pagination; keep mobile grouped list / desktop kanban.
+1. Master Pipeline: ✅ server `status` / `assignedUserId` + per-status cap + meta. Still open: cursor / load-more; keep mobile grouped list / desktop kanban.
 2. Optional: light skeleton loaders on admin KPI/funnel (docs gap).
 3. Keep 600s cache; document lag; add on-demand revalidate only if product requires fresher KPIs.
 
@@ -481,7 +481,7 @@ Prefer **§3 Next Sprint Hot Paths** for the immediate sprint. Waves below remai
 
 ### Wave 5 — Admin pipeline & dashboard depth (medium–high risk)
 
-- [ ] Pipeline server filters + cursor/limit — **OPEN**
+- [x] Pipeline server filters + per-status limit + meta — **PARTIAL** (cursor / load-more still open)
 - [ ] Admin skeleton polish (optional)
 - [ ] Plan commission summary/read-model spike (design only → implement if approved)
 

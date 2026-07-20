@@ -31,7 +31,7 @@ export const PAYLOAD_WARN_THRESHOLDS: Record<PayloadCategory, number> = {
   deals: 150 * 1024,
   'lead-command-center': 250 * 1024,
   'strategy-planner': 200 * 1024,
-  /** Unbounded master pipeline list — warn early as client volume grows. */
+  /** Master pipeline cards — warn if payload grows past bounded per-status pages. */
   'admin-pipeline': 150 * 1024,
 };
 

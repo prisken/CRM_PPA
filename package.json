@@ -10,6 +10,7 @@
     "find:duplicate-clients": "npx tsx scripts/find-duplicate-clients.ts",
     "test:lead-ingestion": "npx tsx scripts/test-lead-ingestion.ts",
     "test:lead-command-center": "npx tsx scripts/test-lead-command-center.ts",
+    "test:admin-pipeline": "npx tsx scripts/test-admin-pipeline.ts",
     "test:merge-custom-fields": "npx tsx scripts/test-merge-custom-fields.ts",
     "backfill:deal-participants": "npx tsx scripts/backfill-deal-participants.ts",
     "backfill:deal-participants:dry": "npx tsx scripts/backfill-deal-participants.ts --dry-run",
