@@ -1,7 +1,7 @@
 import { AssignmentRole, UserRole } from '@prisma/client';
 import { NextResponse } from 'next/server';
+import { getAuthenticatedUserFromRequest } from '@/lib/authHelpers';
 import { prisma } from '@/lib/prisma';
-import { createSupabaseServerClient } from '@/lib/supabaseServer';
 
 export const dynamic = 'force-dynamic';
 
@@ -43,26 +43,14 @@ function mapClient(
   };
 }
 
-export async function GET() {
-  const supabase = await createSupabaseServerClient();
-
-  const {
-    data: { user },
-    error: authError,
-  } = await supabase.auth.getUser();
-
-  if (authError || !user) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+/** Legacy dashboard list — Bearer or session; rejects deactivated users. */
+export async function GET(request: Request) {
+  const auth = await getAuthenticatedUserFromRequest(request);
+  if (auth.error) {
+    return auth.error;
   }
 
-  const dbUser = await prisma.user.findUnique({
-    where: { id: user.id },
-    select: { id: true, role: true },
-  });
-
-  if (!dbUser) {
-    return NextResponse.json({ error: 'User not found' }, { status: 404 });
-  }
+  const dbUser = auth.user;
 
   // Super admins see every client (no per-client assignment role)
   if (dbUser.role === UserRole.SUPER_ADMIN) {
@@ -77,7 +65,7 @@ export async function GET() {
 
   // Standard users: fetch clients via client_assignments junction table
   const assignments = await prisma.clientAssignment.findMany({
-    where: { userId: user.id },
+    where: { userId: dbUser.id },
     include: { client: true },
     orderBy: { client: { createdAt: 'desc' } },
   });

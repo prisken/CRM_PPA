@@ -316,8 +316,8 @@ Standard users advance one stage at a time via **Move to Next Stage** + confirma
 
 | Mode | How it works | Used by |
 |------|--------------|---------|
-| Session cookie | Supabase session via `getAuthenticatedUser()` | Most Client 360 sub-routes (interactions, strategy, tasks, deals, assignments) |
-| Bearer or session | JWT in `Authorization` header **or** session via `getAuthenticatedUserFromRequest()`. Invalid Bearer falls back to session cookie. | Dashboard APIs, `POST /api/auth/token`, `GET /api/search/clients`, Lead Command Center APIs, `PATCH /api/user/profile`, `PUT .../details`, `PATCH .../follow-up`, `POST .../quick-note`, employees endpoints, `POST /api/clients`, commission returnable APIs |
+| Session cookie | Supabase session via `getAuthenticatedUser()` | Legacy call sites without a `Request`; prefer request-based helpers |
+| Bearer or session | JWT in `Authorization` header **or** session via `getAuthenticatedUserFromRequest()`. Invalid Bearer falls back to session cookie. | Dashboard APIs, Client 360 core + workspace/interactions/docs/tasks/deals/assignments, strategy plans, Lead Command Center, notifications, commission returnables, `POST /api/clients`, etc. |
 
 **Note:** Client-side fetches that only send Bearer tokens will fail on session-only routes unless cookies are also sent (`credentials: 'same-origin'`).
 
@@ -1592,8 +1592,8 @@ Per merge (pairwise step or full `mergeClients` call), in a **single Prisma tran
 |--------|------|------|-------------|
 | POST | `/api/clients` | Bearer or session | Create lead/client. Standard users auto-assigned `RELATIONSHIP`. Body: `name` (required), `company`, `email`, `phone`, `lead_source`, `role_in_company`, `employee_count`, `expectations`, `status`, `contactInfo` (legacy). Returns created client including new detail fields |
 | GET | `/api/clients/[id]` | Bearer or session — super admin, any client assignment, or any deal participant on the client | **Core** Client 360 payload — client details, team, documents, strategy text. **No** deals, tasks, or activity log |
-| GET | `/api/clients/[id]/workspace` | Super admin or any client assignment (session) | Lazy tab data. Query: `?tab=strategy-tasks` or `?tab=activity-notes` (alias: `activity`) |
-| PATCH | `/api/clients/[id]` | Session | Super admin: any field; standard user: `status` only (role-based). Returns core payload. Stage changes log system activity |
+| GET | `/api/clients/[id]/workspace` | Super admin or any client assignment (Bearer or session) | Lazy tab data. Query: `?tab=strategy-tasks` or `?tab=activity-notes` (alias: `activity`) |
+| PATCH | `/api/clients/[id]` | Bearer or session | Super admin: any field; standard user: `status` only (role-based). Returns core payload. Stage changes log system activity |
 | PUT | `/api/clients/[id]/details` | Super admin or `RELATIONSHIP` assignee (Bearer or session) | Name, company, email, phone, lead source, `roleInCompany`, `employeeCount`, `expectations`, `importantDates` (full replace; date + optional time) |
 | GET | `/api/clients/[id]/important-dates` | Core read — super admin, any assignment, or deal participant (Bearer or session) | List important dates for client/lead. `{ client_id, importantDates }` |
 | POST | `/api/clients/[id]/important-dates` | Super admin or `RELATIONSHIP` (Bearer or session) | Create one date. Body: `label`/`title`, `date`, optional `time`, optional `notes`/`details`, optional matching `clientId`/`leadId` |
@@ -1613,23 +1613,23 @@ Per merge (pairwise step or full `mergeClients` call), in a **single Prisma tran
 | PUT/PATCH | `/api/clients/[id]/strategy-plans/[planId]/projection-milestones/[milestoneId]` | Manage | Update milestone |
 | DELETE | `/api/clients/[id]/strategy-plans/[planId]/projection-milestones/[milestoneId]` | Manage | Delete milestone |
 | PUT | `/api/clients/[id]/strategy-plans/[planId]/projection-milestones/reorder` | Manage | Body `{ orderedIds }` — same-year Move up/down only |
-| GET | `/api/clients/[id]/deals` | Deal view access (session) — super admin, relationship/follow-up assignee, legacy doctor, or deal-level doctor participant | List deals. Response: `{ client_id, deals: DealResponse[] }` each with `participants` array |
-| POST | `/api/clients/[id]/deals` | Deal create access (session) | Create deal. Body: `name`, `dealValue`, `totalCommission`, `status`, optional `dealType`, optional `participants[]`. Without `participants`, builds defaults from client assignments + `dealType`. Creates returnables if `WON` |
-| PUT | `/api/clients/[id]/deals/[dealId]` | Deal manage access (session) | Update deal. Body may include `dealType`, `participants[]` (replaces all rows). Participant-backed WON deals require 100% split + amount/returnable validation (`Validation failed` + `details`). Triggers returnable generation on transition to `WON` |
-| DELETE | `/api/clients/[id]/deals/[dealId]` | Deal manage access (session) | Delete deal |
+| GET | `/api/clients/[id]/deals` | Deal view access (Bearer or session) — super admin, relationship/follow-up assignee, legacy doctor, or deal-level doctor participant | List deals. Response: `{ client_id, deals: DealResponse[] }` each with `participants` array |
+| POST | `/api/clients/[id]/deals` | Deal create access (Bearer or session) | Create deal. Body: `name`, `dealValue`, `totalCommission`, `status`, optional `dealType`, optional `participants[]`. Without `participants`, builds defaults from client assignments + `dealType`. Creates returnables if `WON` |
+| PUT | `/api/clients/[id]/deals/[dealId]` | Deal manage access (Bearer or session) | Update deal. Body may include `dealType`, `participants[]` (replaces all rows). Participant-backed WON deals require 100% split + amount/returnable validation (`Validation failed` + `details`). Triggers returnable generation on transition to `WON` |
+| DELETE | `/api/clients/[id]/deals/[dealId]` | Deal manage access (Bearer or session) | Delete deal |
 | GET | `/api/clients/[id]/deals/participant-users` | Deal picker access (session) | Active users for participant user picker (`{ users: [{ user_id, userName, email }] }`). Not super-admin-only |
-| PUT | `/api/clients/[id]/strategy` | Super admin or `DOCTOR` assignment (session) | `strategyText` |
-| POST | `/api/clients/[id]/tasks` | Super admin or `DOCTOR` assignment (session) | Create task |
-| PUT | `/api/clients/[id]/tasks/[taskId]` | Super admin or `DOCTOR` assignment (session) | Update task |
-| DELETE | `/api/clients/[id]/tasks/[taskId]` | Super admin or `DOCTOR` assignment (session) | Delete task |
-| POST | `/api/clients/[id]/interactions` | Super admin or any assignment (session) | Add interaction (note, call, email, meeting). Body: `content`, `type` |
-| PUT | `/api/clients/[id]/interactions/[interactionId]` | Author or super admin (session) | Edit interaction |
-| DELETE | `/api/clients/[id]/interactions/[interactionId]` | Author or super admin (session) | Delete interaction |
+| PUT | `/api/clients/[id]/strategy` | Super admin or `DOCTOR` assignment (Bearer or session) | `strategyText` |
+| POST | `/api/clients/[id]/tasks` | Super admin or `DOCTOR` assignment (Bearer or session) | Create task |
+| PUT | `/api/clients/[id]/tasks/[taskId]` | Super admin or `DOCTOR` assignment (Bearer or session) | Update task |
+| DELETE | `/api/clients/[id]/tasks/[taskId]` | Super admin or `DOCTOR` assignment (Bearer or session) | Delete task |
+| POST | `/api/clients/[id]/interactions` | Super admin or any assignment (Bearer or session) | Add interaction (note, call, email, meeting). Body: `content`, `type` |
+| PUT | `/api/clients/[id]/interactions/[interactionId]` | Author or super admin (Bearer or session) | Edit interaction |
+| DELETE | `/api/clients/[id]/interactions/[interactionId]` | Author or super admin (Bearer or session) | Delete interaction |
 | GET | `/api/clients/[id]/employees` | Bearer or session — super admin or any client assignment (not deal-only participants) | Company hierarchy: `employeeCount`, colleagues with same `company` |
-| GET | `/api/clients/[id]/source-records` | Super admin or any client assignment (session) | Lead source history — newest `receivedAt` first; includes raw `payload` JSON |
+| GET | `/api/clients/[id]/source-records` | Super admin or any client assignment (Bearer or session) | Lead source history — newest `receivedAt` first; includes raw `payload` JSON |
 | POST | `/api/clients/[id]/employees` | Bearer or session — super admin or any client assignment (not deal-only participants) | Create employee as new lead. Body: `fullName`, `roleInCompany`. Auto-assigns creator as `RELATIONSHIP` |
-| POST | `/api/clients/[id]/assignments` | Super admin (session) | Assign user to client. **`DOCTOR` rejected.** Enforces `ROLE_OCCUPANCY_LIMITS` for relationship/follow-up. Schedules background returnable recalculation via `scheduleReturnableRecalculation()` |
-| DELETE | `/api/clients/[id]/assignments/[assignmentId]` | Super admin (session) | Remove assignment. Schedules background returnable recalculation via `scheduleReturnableRecalculation()` |
+| POST | `/api/clients/[id]/assignments` | Super admin (Bearer or session) | Assign user to client. **`DOCTOR` rejected.** Enforces `ROLE_OCCUPANCY_LIMITS` for relationship/follow-up. Schedules background returnable recalculation via `scheduleReturnableRecalculation()` |
+| DELETE | `/api/clients/[id]/assignments/[assignmentId]` | Super admin (Bearer or session) | Remove assignment. Schedules background returnable recalculation via `scheduleReturnableRecalculation()` |
 | POST | `/api/clients/[id]/documents` | Super admin or any assignment (session) | Upload document (Supabase Storage, 10MB, MIME whitelist) |
 | DELETE | `/api/clients/[id]/documents/[documentId]` | Super admin (session) | Delete document |
 | POST | `/api/clients/[id]/archive` | Super admin (Bearer or session) | Soft delete: sets `status` to `ARCHIVED`. Body: `{ confirmName }` (must match client name) |
@@ -1707,15 +1707,15 @@ No CRM login required. All webhook routes validate header `x-webhook-secret` aga
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
-| GET | `/api/notifications` | Session | List for current user |
-| POST | `/api/notifications` | Super admin | Bulk create (`recipient_ids`, `message`, optional `client_id`) |
-| PUT | `/api/notifications/[id]/read` | Session (recipient only) | Mark read |
+| GET | `/api/notifications` | Bearer or session | List for current user (rejects deactivated) |
+| POST | `/api/notifications` | Super admin (Bearer or session) | Bulk create (`recipient_ids`, `message`, optional `client_id`) |
+| PUT | `/api/notifications/[id]/read` | Bearer or session (recipient only) | Mark read |
 
 ### Legacy
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/api/get-dashboard-data` | Older aggregated dashboard endpoint |
+| GET | `/api/get-dashboard-data` | Bearer or session | Older aggregated dashboard endpoint (rejects deactivated) |
 
 ---
 
@@ -2702,17 +2702,17 @@ All exported functions in `lib/authHelpers.ts`:
 
 | Function | Purpose |
 |----------|---------|
-| `requireSuperAdmin()` | Session → must be `SUPER_ADMIN` and `ACTIVE` |
-| `getAuthenticatedUser()` | Session → returns user profile; rejects `DEACTIVATED` |
-| `getAuthenticatedUserFromRequest(request)` | Bearer JWT **or** session fallback; rejects `DEACTIVATED` |
+| `requireSuperAdmin()` | Optional `request` → same as `requireSuperAdminFromRequest` (Bearer or session). Without `request`, session only |
+| `getAuthenticatedUser()` | Session → returns user profile; rejects `DEACTIVATED`. Request-cached via `react.cache` |
+| `getAuthenticatedUserFromRequest(request)` | Bearer JWT **or** session fallback; rejects `DEACTIVATED`. Request-cached (session + per-token) |
 | `requireSuperAdminFromRequest(request?)` | Bearer or session → must be `SUPER_ADMIN` and `ACTIVE` |
 | `verifyAdminPassword(email, password)` | Ephemeral Supabase `signInWithPassword` to confirm admin identity before permanent deletes |
 | `authorizeClientDetailsEdit(request, clientId)` | Super admin **or** `RELATIONSHIP` assignee |
 | `requireStandardUser(request?)` | Bearer or session → must be `STANDARD_USER` |
 | `getClientOr404(clientId)` | Client existence check (no auth) |
 | `hasClientAssignment(userId, clientId, roles?)` | Lookup assignment; optional role filter |
-| `requireSuperAdminOrClientRole(clientId, roles[])` | Session → super admin or matching assignment role |
-| `requireSuperAdminOrClientAccess(clientId)` | Session → super admin or any assignment |
+| `requireSuperAdminOrClientRole(clientId, roles[], request?)` | Bearer/session when `request` passed → super admin or matching assignment role |
+| `requireSuperAdminOrClientAccess(clientId, request?)` | Bearer/session when `request` passed → super admin or any assignment |
 | `hasDealParticipantOnClient(userId, clientId)` | True if user is any `DealParticipant` on a deal for the client |
 | `canReadClientCore(userId, userRole, clientId)` | Super admin, any assignment, or deal participant |
 | `canAccessClientHierarchy(userId, userRole, clientId)` | Super admin or any assignment (not deal-only) |
@@ -2723,9 +2723,9 @@ All exported functions in `lib/authHelpers.ts`:
 | `authorizePipelineStatusChange(...)` | Role-based pipeline stage advance check |
 | `canAssignmentRoleChangePipelineStatus` | Re-export from `lib/pipelinePermissions.ts` |
 | `getDealAccessForClient(userId, userRole, clientId)` | Returns `canView`, `canCreate`, `canManageAll`, `manageableDealIds` |
-| `requireDealViewAccess(clientId)` | Session → deal list/read permission |
-| `requireDealCreateAccess(clientId)` | Session → deal create permission |
-| `requireDealManageAccess(clientId, dealId)` | Session → deal update/delete permission |
+| `requireDealViewAccess(clientId, request?)` | Bearer/session when `request` passed → deal list/read permission |
+| `requireDealCreateAccess(clientId, request?)` | Bearer/session when `request` passed → deal create permission |
+| `requireDealManageAccess(clientId, dealId, request?)` | Bearer/session when `request` passed → deal update/delete permission |
 | `canUseDealParticipantPicker(userRole, access)` | Whether user may call participant-users picker API |
 
 Related: `lib/pipelinePermissions.ts` exports `getNextPipelineStage`, `canUserAdvancePipelineStage`, `getPipelineAdvanceChecklist`, and `PIPELINE_ADVANCE_CHECKLIST`.
@@ -2829,7 +2829,7 @@ Related: `lib/pipelinePermissions.ts` exports `getNextPipelineStage`, `canUserAd
 |------|-------|
 | User reactivation | No UI/API to restore `DEACTIVATED` → `ACTIVE`; requires direct DB update |
 | Client restore from ARCHIVED | No dedicated un-archive API; super admin can change stage via `PATCH` |
-| Bearer vs session split | Dashboard/returnable/details/employees/Client 360 core accept Bearer+session; interactions, strategy, tasks, deals use session-only helpers |
+| Bearer vs session split | Most Client 360 + dashboard routes accept Bearer or session. Legacy `/api/reports/*` still session-only via `requireSuperAdmin()` without `request`. Middleware `/admin` is session-only (no role). |
 | Legacy client-level `DOCTOR` assignments | May exist for audit; not assignable for new operations; doctors belong on deals via `DealParticipant` |
 | Legacy commission/returnable fallback | Deals without `DealParticipant` rows still use client-assignment pools (`commissionModel: LEGACY_FALLBACK`). Surfaced in deal API metadata + Deal Info warning; audit with `npm run audit:legacy-commission`, then backfill (`npm run backfill:deal-participants`) |
 | Participant returnables v1 | Explicit per-doctor fields; create/update validates caps/`userId`/commissionable; backfill still does not infer returnables — business review after migration |

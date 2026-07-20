@@ -12,7 +12,7 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id: clientId } = await params;
-  const auth = await requireSuperAdmin();
+  const auth = await requireSuperAdmin(request);
   if (auth.error) {
     return auth.error;
   }

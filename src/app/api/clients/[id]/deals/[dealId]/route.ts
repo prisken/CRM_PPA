@@ -46,7 +46,7 @@ export async function PUT(
   { params }: { params: Promise<{ id: string; dealId: string }> }
 ) {
   const { id: clientId, dealId } = await params;
-  const auth = await requireDealManageAccess(clientId, dealId);
+  const auth = await requireDealManageAccess(clientId, dealId, request);
   if (auth.error) {
     return auth.error;
   }
@@ -230,11 +230,11 @@ export async function PUT(
 }
 
 export async function DELETE(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string; dealId: string }> }
 ) {
   const { id: clientId, dealId } = await params;
-  const auth = await requireDealManageAccess(clientId, dealId);
+  const auth = await requireDealManageAccess(clientId, dealId, request);
   if (auth.error) {
     return auth.error;
   }

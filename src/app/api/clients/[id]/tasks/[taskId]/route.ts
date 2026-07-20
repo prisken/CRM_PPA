@@ -85,9 +85,11 @@ export async function PUT(
   { params }: { params: Promise<{ id: string; taskId: string }> }
 ) {
   const { id: clientId, taskId } = await params;
-  const auth = await requireSuperAdminOrClientRole(clientId, [
-    AssignmentRole.DOCTOR,
-  ]);
+  const auth = await requireSuperAdminOrClientRole(
+    clientId,
+    [AssignmentRole.DOCTOR],
+    request
+  );
   if (auth.error) {
     return auth.error;
   }
@@ -162,13 +164,15 @@ export async function PUT(
 }
 
 export async function DELETE(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string; taskId: string }> }
 ) {
   const { id: clientId, taskId } = await params;
-  const auth = await requireSuperAdminOrClientRole(clientId, [
-    AssignmentRole.DOCTOR,
-  ]);
+  const auth = await requireSuperAdminOrClientRole(
+    clientId,
+    [AssignmentRole.DOCTOR],
+    request
+  );
   if (auth.error) {
     return auth.error;
   }

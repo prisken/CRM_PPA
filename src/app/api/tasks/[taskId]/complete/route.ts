@@ -1,18 +1,18 @@
 import { TaskStatus, UserRole } from '@prisma/client';
 import { NextResponse } from 'next/server';
 import {
-  getAuthenticatedUser,
+  getAuthenticatedUserFromRequest,
   hasClientAssignment,
   logClientSystemEvent,
 } from '@/lib/authHelpers';
 import { prisma } from '@/lib/prisma';
 
 export async function PUT(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ taskId: string }> }
 ) {
   const { taskId } = await params;
-  const auth = await getAuthenticatedUser();
+  const auth = await getAuthenticatedUserFromRequest(request);
   if (auth.error) {
     return auth.error;
   }

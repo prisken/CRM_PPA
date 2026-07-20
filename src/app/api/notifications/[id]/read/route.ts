@@ -1,21 +1,15 @@
 import { NextResponse } from 'next/server';
+import { getAuthenticatedUserFromRequest } from '@/lib/authHelpers';
 import { prisma } from '@/lib/prisma';
-import { createSupabaseServerClient } from '@/lib/supabaseServer';
 
 export async function PUT(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const supabase = await createSupabaseServerClient();
-
-  const {
-    data: { user },
-    error: authError,
-  } = await supabase.auth.getUser();
-
-  if (authError || !user) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const auth = await getAuthenticatedUserFromRequest(request);
+  if (auth.error) {
+    return auth.error;
   }
 
   const notification = await prisma.notification.findUnique({
@@ -26,7 +20,7 @@ export async function PUT(
     return NextResponse.json({ error: 'Notification not found' }, { status: 404 });
   }
 
-  if (notification.recipientUserId !== user.id) {
+  if (notification.recipientUserId !== auth.user.id) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 

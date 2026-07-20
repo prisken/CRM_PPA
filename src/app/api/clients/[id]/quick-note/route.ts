@@ -1,13 +1,11 @@
 import {
   ActivityLogType,
   InteractionType,
-  UserRole,
 } from '@prisma/client';
 import { NextResponse } from 'next/server';
 import {
-  getAuthenticatedUserFromRequest,
   getClientOr404,
-  hasClientAssignment,
+  requireSuperAdminOrClientAccess,
 } from '@/lib/authHelpers';
 import { prisma } from '@/lib/prisma';
 
@@ -23,27 +21,6 @@ const INTERACTION_TYPES = new Set<string>([
 ]);
 
 type QuickNoteMode = 'interaction' | 'system';
-
-async function requireSuperAdminOrClientAccessFromRequest(
-  request: Request,
-  clientId: string
-) {
-  const auth = await getAuthenticatedUserFromRequest(request);
-  if (auth.error) {
-    return auth;
-  }
-
-  if (auth.user.role === UserRole.SUPER_ADMIN) {
-    return auth;
-  }
-
-  const assignment = await hasClientAssignment(auth.user.id, clientId);
-  if (!assignment) {
-    return { error: NextResponse.json({ error: 'Forbidden' }, { status: 403 }) };
-  }
-
-  return { ...auth, assignment };
-}
 
 function parseMode(value: unknown): QuickNoteMode | null {
   if (value === undefined || value === null || value === '') {
@@ -70,7 +47,7 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id: clientId } = await params;
-  const auth = await requireSuperAdminOrClientAccessFromRequest(request, clientId);
+  const auth = await requireSuperAdminOrClientAccess(clientId, request);
   if (auth.error) {
     return auth.error;
   }

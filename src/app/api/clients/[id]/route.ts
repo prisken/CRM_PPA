@@ -8,7 +8,7 @@ import { replaceClientContacts } from '@/lib/clientContacts';
 import { prisma } from '@/lib/prisma';
 import {
   authorizePipelineStatusChange,
-  getAuthenticatedUser,
+  getAuthenticatedUserFromRequest,
   requireClientCoreReadAccess,
   requireSuperAdminFromRequest,
   verifyAdminPassword,
@@ -75,7 +75,7 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const auth = await getAuthenticatedUser();
+  const auth = await getAuthenticatedUserFromRequest(request);
   if (auth.error) {
     return auth.error;
   }

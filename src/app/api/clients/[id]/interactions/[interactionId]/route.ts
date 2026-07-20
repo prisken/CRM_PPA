@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import {
   authorizeInteractionOwner,
-  getAuthenticatedUser,
+  getAuthenticatedUserFromRequest,
   getClientOr404,
 } from '@/lib/authHelpers';
 import { prisma } from '@/lib/prisma';
@@ -30,7 +30,7 @@ export async function PUT(
   { params }: { params: Promise<{ id: string; interactionId: string }> }
 ) {
   const { id: clientId, interactionId } = await params;
-  const auth = await getAuthenticatedUser();
+  const auth = await getAuthenticatedUserFromRequest(request);
   if (auth.error) {
     return auth.error;
   }
@@ -83,11 +83,11 @@ export async function PUT(
 }
 
 export async function DELETE(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string; interactionId: string }> }
 ) {
   const { id: clientId, interactionId } = await params;
-  const auth = await getAuthenticatedUser();
+  const auth = await getAuthenticatedUserFromRequest(request);
   if (auth.error) {
     return auth.error;
   }

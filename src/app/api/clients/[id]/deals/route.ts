@@ -81,11 +81,11 @@ async function resolveDealParticipants({
 }
 
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id: clientId } = await params;
-  const auth = await requireDealViewAccess(clientId);
+  const auth = await requireDealViewAccess(clientId, request);
   if (auth.error) {
     return auth.error;
   }
@@ -123,7 +123,7 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id: clientId } = await params;
-  const auth = await requireDealCreateAccess(clientId);
+  const auth = await requireDealCreateAccess(clientId, request);
   if (auth.error) {
     return auth.error;
   }

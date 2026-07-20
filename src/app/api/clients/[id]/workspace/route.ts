@@ -18,7 +18,7 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const auth = await requireSuperAdminOrClientAccess(id);
+  const auth = await requireSuperAdminOrClientAccess(id, request);
   if (auth.error) {
     return auth.error;
   }

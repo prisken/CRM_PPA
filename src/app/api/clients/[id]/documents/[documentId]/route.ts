@@ -21,11 +21,11 @@ function getStoragePathFromUrl(url: string) {
 }
 
 export async function DELETE(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string; documentId: string }> }
 ) {
   const { id: clientId, documentId } = await params;
-  const auth = await requireSuperAdmin();
+  const auth = await requireSuperAdmin(request);
   if (auth.error) {
     return auth.error;
   }

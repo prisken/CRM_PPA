@@ -8,7 +8,7 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string; assignmentId: string }> }
 ) {
   const { id: clientId, assignmentId } = await params;
-  const auth = await requireSuperAdmin();
+  const auth = await requireSuperAdmin(request);
   if (auth.error) {
     return auth.error;
   }

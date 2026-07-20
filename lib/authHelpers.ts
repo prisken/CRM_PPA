@@ -1,13 +1,53 @@
 import { AssignmentRole, ClientStatus, DealParticipantRole, UserRole, UserStatus } from '@prisma/client';
 import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
+import { cache } from 'react';
 import {
   canAssignmentRoleChangePipelineStatus,
 } from '@/lib/pipelinePermissions';
 import { prisma } from '@/lib/prisma';
 import { createSupabaseServerClient } from '@/lib/supabaseServer';
 
-export async function requireSuperAdmin() {
+type AuthUserRow = {
+  id: string;
+  role: UserRole;
+  name: string | null;
+  email: string;
+  status: UserStatus;
+};
+
+type AuthSuccess = { user: AuthUserRow; error?: undefined };
+type AuthFailure = { error: NextResponse; user?: undefined };
+type AuthResult = AuthSuccess | AuthFailure;
+
+const authUserSelect = {
+  id: true,
+  role: true,
+  name: true,
+  email: true,
+  status: true,
+} as const;
+
+function deactivatedError(): AuthFailure {
+  return {
+    error: NextResponse.json({ error: 'Account deactivated' }, { status: 403 }),
+  };
+}
+
+function toAuthResult(dbUser: AuthUserRow | null): AuthResult {
+  if (!dbUser) {
+    return { error: NextResponse.json({ error: 'User not found' }, { status: 404 }) };
+  }
+
+  if (dbUser.status !== UserStatus.ACTIVE) {
+    return deactivatedError();
+  }
+
+  return { user: dbUser };
+}
+
+/** Request-scoped: session cookie → ACTIVE User row (deduped within one request). */
+const getAuthenticatedUserFromSessionCached = cache(async (): Promise<AuthResult> => {
   const supabase = await createSupabaseServerClient();
 
   const {
@@ -23,89 +63,57 @@ export async function requireSuperAdmin() {
 
   const dbUser = await prisma.user.findUnique({
     where: { id: user.id },
-    select: { id: true, role: true, email: true, status: true },
+    select: authUserSelect,
   });
 
-  if (!dbUser) {
-    return { error: NextResponse.json({ error: 'User not found' }, { status: 404 }) };
+  return toAuthResult(dbUser);
+});
+
+/** Request-scoped: valid Bearer JWT → User row, or null if missing, or 'invalid' if JWT fails. */
+const resolveBearerUserCached = cache(
+  async (token: string): Promise<AuthUserRow | null | 'invalid'> => {
+    try {
+      const { verifyAuthToken } = await import('@/lib/jwt');
+      const payload = await verifyAuthToken(token);
+
+      return prisma.user.findUnique({
+        where: { id: payload.id },
+        select: authUserSelect,
+      });
+    } catch {
+      return 'invalid';
+    }
   }
+);
 
-  if (dbUser.status !== UserStatus.ACTIVE) {
-    return {
-      error: NextResponse.json({ error: 'Account deactivated' }, { status: 403 }),
-    };
-  }
-
-  if (dbUser.role !== UserRole.SUPER_ADMIN) {
-    return { error: NextResponse.json({ error: 'Forbidden' }, { status: 403 }) };
-  }
-
-  return { user: dbUser };
-}
-
+/**
+ * Session-cookie auth. Prefer getAuthenticatedUserFromRequest when a Request
+ * is available so Bearer tokens work the same as the browser cookie path.
+ */
 export async function getAuthenticatedUser() {
-  const supabase = await createSupabaseServerClient();
-
-  const {
-    data: { session },
-    error: sessionError,
-  } = await supabase.auth.getSession();
-
-  const user = session?.user;
-
-  if (sessionError || !user) {
-    return { error: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }) };
-  }
-
-  const dbUser = await prisma.user.findUnique({
-    where: { id: user.id },
-    select: { id: true, role: true, name: true, email: true, status: true },
-  });
-
-  if (!dbUser) {
-    return { error: NextResponse.json({ error: 'User not found' }, { status: 404 }) };
-  }
-
-  if (dbUser.status !== UserStatus.ACTIVE) {
-    return {
-      error: NextResponse.json({ error: 'Account deactivated' }, { status: 403 }),
-    };
-  }
-
-  return { user: dbUser };
+  return getAuthenticatedUserFromSessionCached();
 }
 
+/**
+ * Bearer JWT or session cookie. Invalid/expired Bearer falls back to session.
+ * Valid Bearer for a DEACTIVATED user returns 403 (does not fall back).
+ * User lookup is request-cached (session path and per-token Bearer path).
+ */
 export async function getAuthenticatedUserFromRequest(request: Request) {
   const authHeader = request.headers.get('authorization');
   if (authHeader?.startsWith('Bearer ')) {
     const token = authHeader.slice(7).trim();
 
     if (token) {
-      try {
-        const { verifyAuthToken } = await import('@/lib/jwt');
-        const payload = await verifyAuthToken(token);
-
-        const dbUser = await prisma.user.findUnique({
-          where: { id: payload.id },
-          select: { id: true, role: true, name: true, email: true, status: true },
-        });
-
-        if (dbUser) {
-          if (dbUser.status !== UserStatus.ACTIVE) {
-            return {
-              error: NextResponse.json({ error: 'Account deactivated' }, { status: 403 }),
-            };
-          }
-
-          return { user: dbUser };
-        }
-      } catch {
-        // Fall back to the Supabase session cookie when the Bearer token is invalid.
+      const bearerUser = await resolveBearerUserCached(token);
+      if (bearerUser !== 'invalid' && bearerUser !== null) {
+        return toAuthResult(bearerUser);
       }
+      // Missing User row or invalid/expired token → try session cookie.
     }
   }
 
-  return getAuthenticatedUser();
+  return getAuthenticatedUserFromSessionCached();
 }
 
 export async function requireSuperAdminFromRequest(request?: Request) {
@@ -122,6 +130,14 @@ export async function requireSuperAdminFromRequest(request?: Request) {
   }
 
   return auth;
+}
+
+/**
+ * Super-admin gate. Pass `request` when available so Bearer or session both work.
+ * Without `request`, session cookie only (legacy call sites).
+ */
+export async function requireSuperAdmin(request?: Request) {
+  return requireSuperAdminFromRequest(request);
 }
 
 export async function authorizeClientDetailsEdit(request: Request, clientId: string) {
@@ -310,9 +326,10 @@ export async function requireClientEmployeeLeadCreateAccess(
 
 export async function requireSuperAdminOrClientRole(
   clientId: string,
-  roles: AssignmentRole[]
+  roles: AssignmentRole[],
+  request?: Request
 ) {
-  const auth = await getAuthenticatedUser();
+  const auth = await resolveAuthenticatedUser(request);
   if (auth.error) {
     return auth;
   }
@@ -409,12 +426,15 @@ export function canUseDealParticipantPicker(
   );
 }
 
-async function requireAuthenticatedActiveUser() {
-  return getAuthenticatedUser();
+async function requireAuthenticatedActiveUser(request?: Request) {
+  return resolveAuthenticatedUser(request);
 }
 
-export async function requireDealViewAccess(clientId: string) {
-  const auth = await requireAuthenticatedActiveUser();
+export async function requireDealViewAccess(
+  clientId: string,
+  request?: Request
+) {
+  const auth = await requireAuthenticatedActiveUser(request);
   if (auth.error) {
     return auth;
   }
@@ -432,8 +452,11 @@ export async function requireDealViewAccess(clientId: string) {
   return { ...auth, dealAccess: access };
 }
 
-export async function requireDealCreateAccess(clientId: string) {
-  const auth = await requireAuthenticatedActiveUser();
+export async function requireDealCreateAccess(
+  clientId: string,
+  request?: Request
+) {
+  const auth = await requireAuthenticatedActiveUser(request);
   if (auth.error) {
     return auth;
   }
@@ -451,8 +474,12 @@ export async function requireDealCreateAccess(clientId: string) {
   return { ...auth, dealAccess: access };
 }
 
-export async function requireDealManageAccess(clientId: string, dealId: string) {
-  const auth = await requireAuthenticatedActiveUser();
+export async function requireDealManageAccess(
+  clientId: string,
+  dealId: string,
+  request?: Request
+) {
+  const auth = await requireAuthenticatedActiveUser(request);
   if (auth.error) {
     return auth;
   }
@@ -487,8 +514,11 @@ export async function hasDealParticipantRole(
   return participant;
 }
 
-export async function requireSuperAdminOrClientAccess(clientId: string) {
-  const auth = await getAuthenticatedUser();
+export async function requireSuperAdminOrClientAccess(
+  clientId: string,
+  request?: Request
+) {
+  const auth = await resolveAuthenticatedUser(request);
   if (auth.error) {
     return auth;
   }

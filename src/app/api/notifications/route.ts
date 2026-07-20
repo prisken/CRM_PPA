@@ -1,34 +1,12 @@
-import { UserRole } from '@prisma/client';
 import { NextResponse } from 'next/server';
+import {
+  getAuthenticatedUserFromRequest,
+  requireSuperAdminFromRequest,
+} from '@/lib/authHelpers';
 import { prisma } from '@/lib/prisma';
-import { createSupabaseServerClient } from '@/lib/supabaseServer';
 
-async function getAuthenticatedUser() {
-  const supabase = await createSupabaseServerClient();
-
-  const {
-    data: { user },
-    error: authError,
-  } = await supabase.auth.getUser();
-
-  if (authError || !user) {
-    return { error: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }) };
-  }
-
-  const dbUser = await prisma.user.findUnique({
-    where: { id: user.id },
-    select: { id: true, role: true },
-  });
-
-  if (!dbUser) {
-    return { error: NextResponse.json({ error: 'User not found' }, { status: 404 }) };
-  }
-
-  return { user: dbUser };
-}
-
-export async function GET() {
-  const auth = await getAuthenticatedUser();
+export async function GET(request: Request) {
+  const auth = await getAuthenticatedUserFromRequest(request);
   if (auth.error) {
     return auth.error;
   }
@@ -62,13 +40,9 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const auth = await getAuthenticatedUser();
+  const auth = await requireSuperAdminFromRequest(request);
   if (auth.error) {
     return auth.error;
-  }
-
-  if (auth.user.role !== UserRole.SUPER_ADMIN) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
   const body = await request.json();

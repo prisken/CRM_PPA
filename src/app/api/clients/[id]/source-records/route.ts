@@ -8,11 +8,11 @@ import { prisma } from '@/lib/prisma';
 export const dynamic = 'force-dynamic';
 
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id: clientId } = await params;
-  const auth = await requireSuperAdminOrClientAccess(clientId);
+  const auth = await requireSuperAdminOrClientAccess(clientId, request);
   if (auth.error) {
     return auth.error;
   }
