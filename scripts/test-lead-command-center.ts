@@ -1,10 +1,11 @@
 /**
- * Smoke test for fetchLeadCommandCenterRows (direct lib call, no HTTP auth).
+ * Smoke test for fetchLeadCommandCenterRows / preview (direct lib call, no HTTP auth).
  * Read-only — does not modify the database.
  *
  * Run: npx tsx scripts/test-lead-command-center.ts
  */
 import {
+  fetchLeadCommandCenterPreview,
   fetchLeadCommandCenterRows,
   type LeadCommandCenterRow,
 } from '../lib/leadCommandCenter';
@@ -20,6 +21,9 @@ function printRowSummary(row: LeadCommandCenterRow) {
     attentionReasons: row.attentionReasons,
     dataQualityWarnings: row.dataQualityWarnings,
     duplicateWarnings: row.duplicateWarnings,
+    hasSourcesField: 'sources' in row,
+    hasTagsField: 'tags' in row,
+    hasLastActivitySummary: 'lastActivitySummary' in row,
   });
 }
 
@@ -42,6 +46,30 @@ async function main() {
   console.log('\nFirst 5 rows:');
   for (const row of defaultRows.slice(0, 5)) {
     printRowSummary(row);
+    if ('sources' in row || 'tags' in row || 'lastActivitySummary' in row) {
+      throw new Error(
+        `Inbox row ${row.clientId} unexpectedly includes preview-only fields`
+      );
+    }
+  }
+
+  if (defaultRows[0]) {
+    const preview = await fetchLeadCommandCenterPreview(defaultRows[0].clientId);
+    if (!preview) {
+      throw new Error(`Preview not found for ${defaultRows[0].clientId}`);
+    }
+
+    console.log(`\n${'='.repeat(72)}`);
+    console.log('Preview fetch');
+    console.log('='.repeat(72));
+    console.log({
+      clientId: preview.clientId,
+      sourceRecordCount: preview.sourceRecordCount,
+      sourcesReturned: preview.sources.length,
+      tagsReturned: preview.tags.length,
+      lastActivitySummary: preview.lastActivitySummary,
+      roleInCompany: preview.roleInCompany,
+    });
   }
 
   const filterCases = [

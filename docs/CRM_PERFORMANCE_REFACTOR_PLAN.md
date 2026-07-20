@@ -183,11 +183,18 @@ GROUP BY client_id, role HAVING COUNT(*) > 1;
 
 **Current (docs):** Compact inbox, attention scoring, filters, preview drawer, bulk actions; lib `leadCommandCenter.ts`.
 
+### Done — Split inbox vs preview payloads
+
+1. Slim `LeadCommandCenterRow` for `GET /api/admin/leads` (no full `sources[]`, activity summary, tags, expectations/role).
+2. Cap inbox source sample; use `_count` for `sourceRecordCount`; light activity timestamps for attention only.
+3. `GET /api/admin/leads/[id]/preview` returns `LeadCommandCenterPreview`; drawer loads on open with loading/error/retry.
+4. Merge selected loads preview details per selected id before opening `MergeClientsModal`.
+
 ### Phase A — Stop load-all-then-slice
 
 1. Apply Prisma `take`/`skip` (or cursor) to the primary client query for the default inbox path.
 2. Document which post-filters (`needsAttention`, dup flags, latest-source) break pure SQL pagination — migrate those filters to indexed columns or computed fields over time.
-3. Cap nested includes (e.g. sourceRecords: latest N only).
+3. Cap nested includes (e.g. sourceRecords: latest N only). ✅ (inbox sample + preview full history)
 
 ### Phase B — Duplicate detection
 

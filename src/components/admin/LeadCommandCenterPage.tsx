@@ -21,7 +21,10 @@ import { useUserProfile } from '@/hooks/useUserProfile';
 import { authenticatedFetch } from '@/lib/authenticatedFetch';
 import { CLIENT_STAGES } from '@/lib/clientStages';
 import type { MergeModalResult } from '@/components/admin/MergeClientsModal';
-import type { LeadCommandCenterRow } from '@/lib/leadCommandCenter';
+import type {
+  LeadCommandCenterPreview,
+  LeadCommandCenterRow,
+} from '@/lib/leadCommandCenter';
 import type { DuplicateReviewClient } from '@/lib/leadDuplicates';
 import { supabase } from '@/lib/supabaseClient';
 
@@ -188,8 +191,8 @@ function getRelationshipOwner(lead: LeadCommandCenterRow) {
   return lead.assignedUsers.find((user) => user.role === 'RELATIONSHIP') ?? null;
 }
 
-function mapLeadRowToDuplicateReviewClient(
-  lead: LeadCommandCenterRow
+function mapLeadPreviewToDuplicateReviewClient(
+  lead: LeadCommandCenterPreview
 ): DuplicateReviewClient {
   return {
     clientId: lead.clientId,
@@ -735,7 +738,8 @@ export default function LeadCommandCenterPage() {
   const [leadsLoading, setLeadsLoading] = useState(true);
   const [leadsError, setLeadsError] = useState<string | null>(null);
   const [copyMessage, setCopyMessage] = useState<string | null>(null);
-  const [previewLead, setPreviewLead] = useState<LeadCommandCenterRow | null>(null);
+  const [previewClientId, setPreviewClientId] = useState<string | null>(null);
+  const [previewFallbackName, setPreviewFallbackName] = useState<string | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [quickNoteTarget, setQuickNoteTarget] = useState<{
     clientId: string;
@@ -747,6 +751,11 @@ export default function LeadCommandCenterPage() {
   const [bulkAssignRelationshipOpen, setBulkAssignRelationshipOpen] = useState(false);
   const [bulkTagsOpen, setBulkTagsOpen] = useState(false);
   const [bulkMergeOpen, setBulkMergeOpen] = useState(false);
+  const [selectedMergeClients, setSelectedMergeClients] = useState<DuplicateReviewClient[]>(
+    []
+  );
+  const [bulkMergeLoading, setBulkMergeLoading] = useState(false);
+  const [bulkMergeError, setBulkMergeError] = useState<string | null>(null);
   const [duplicatesRefreshKey, setDuplicatesRefreshKey] = useState(0);
   const [selectedClientIds, setSelectedClientIds] = useState<Set<string>>(new Set());
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
@@ -875,16 +884,6 @@ export default function LeadCommandCenterPage() {
     [selectedClientIds]
   );
 
-  const selectedLeads = useMemo(
-    () => leads.filter((lead) => selectedClientIds.has(lead.clientId)),
-    [leads, selectedClientIds]
-  );
-
-  const selectedMergeClients = useMemo(
-    () => selectedLeads.map(mapLeadRowToDuplicateReviewClient),
-    [selectedLeads]
-  );
-
   const canMergeSelected =
     selectedCount >= 2 && selectedCount <= MAX_MERGE_SELECTED;
   const mergeDisabledReason =
@@ -893,32 +892,6 @@ export default function LeadCommandCenterPage() {
       : selectedCount > MAX_MERGE_SELECTED
         ? 'Merge supports up to 10 records at a time.'
         : undefined;
-
-  useEffect(() => {
-    if (!previewOpen || !previewLead) {
-      return;
-    }
-
-    const updatedLead = leads.find((lead) => lead.clientId === previewLead.clientId);
-    if (!updatedLead) {
-      return;
-    }
-
-    setPreviewLead((current) => {
-      if (
-        current?.clientId === updatedLead.clientId &&
-        current.lastModified === updatedLead.lastModified &&
-        current.lastActivityAt === updatedLead.lastActivityAt &&
-        current.priority === updatedLead.priority &&
-        current.nextAction === updatedLead.nextAction &&
-        current.nextFollowUpAt === updatedLead.nextFollowUpAt
-      ) {
-        return current;
-      }
-
-      return updatedLead;
-    });
-  }, [leads, previewOpen, previewLead?.clientId]);
 
   const toggleChip = useCallback((chip: FilterChipKey) => {
     setActiveChips((current) => {
@@ -1051,22 +1024,27 @@ export default function LeadCommandCenterPage() {
   }, []);
 
   const openPreview = useCallback((lead: LeadCommandCenterRow) => {
-    setPreviewLead(lead);
+    setPreviewClientId(lead.clientId);
+    setPreviewFallbackName(lead.name);
     setPreviewOpen(true);
   }, []);
 
   const closePreview = useCallback(() => {
     setPreviewOpen(false);
-    setPreviewLead(null);
+    setPreviewClientId(null);
+    setPreviewFallbackName(null);
   }, []);
 
-  const openQuickNote = useCallback((lead: LeadCommandCenterRow) => {
-    setQuickNoteTarget({
-      clientId: lead.clientId,
-      clientName: lead.name,
-    });
-    setQuickNoteOpen(true);
-  }, []);
+  const openQuickNote = useCallback(
+    (lead: Pick<LeadCommandCenterRow, 'clientId' | 'name'>) => {
+      setQuickNoteTarget({
+        clientId: lead.clientId,
+        clientName: lead.name,
+      });
+      setQuickNoteOpen(true);
+    },
+    []
+  );
 
   const closeQuickNote = useCallback(() => {
     setQuickNoteOpen(false);
@@ -1143,17 +1121,60 @@ export default function LeadCommandCenterPage() {
     setBulkTagsOpen(false);
   }, []);
 
-  const openBulkMerge = useCallback(() => {
+  const openBulkMerge = useCallback(async () => {
     if (selectedClientIds.size < 2 || selectedClientIds.size > MAX_MERGE_SELECTED) {
       return;
     }
 
-    setBulkMergeOpen(true);
+    const clientIds = [...selectedClientIds];
+    setBulkMergeLoading(true);
+    setBulkMergeError(null);
     setSuccessMessage(null);
-  }, [selectedClientIds.size]);
+    setBulkMergeOpen(true);
+    setSelectedMergeClients([]);
+
+    try {
+      const clients = await Promise.all(
+        clientIds.map(async (clientId) => {
+          const response = await authenticatedFetch(
+            `/api/admin/leads/${clientId}/preview`
+          );
+          if (!response.ok) {
+            const data = await response.json().catch(() => ({}));
+            throw new Error(
+              typeof data.error === 'string'
+                ? data.error
+                : `Failed to load merge details for ${clientId}`
+            );
+          }
+
+          const data = (await response.json()) as {
+            lead?: LeadCommandCenterPreview;
+          };
+          if (!data.lead) {
+            throw new Error(`Merge details missing for ${clientId}`);
+          }
+
+          return mapLeadPreviewToDuplicateReviewClient(data.lead);
+        })
+      );
+
+      setSelectedMergeClients(clients);
+    } catch (error) {
+      setBulkMergeOpen(false);
+      setSelectedMergeClients([]);
+      setBulkMergeError(
+        error instanceof Error ? error.message : 'Failed to load merge candidates'
+      );
+    } finally {
+      setBulkMergeLoading(false);
+    }
+  }, [selectedClientIds]);
 
   const closeBulkMerge = useCallback(() => {
     setBulkMergeOpen(false);
+    setSelectedMergeClients([]);
+    setBulkMergeError(null);
   }, []);
 
   const handleBulkMergeCompleted = useCallback(
@@ -1169,6 +1190,7 @@ export default function LeadCommandCenterPage() {
         `Merged ${mergedCount} client${mergedCount === 1 ? '' : 's'} successfully. Duplicate${mergedCount === 1 ? '' : 's'} archived.${conflictSuffix}`
       );
       setSelectedClientIds(new Set());
+      setSelectedMergeClients([]);
       setBulkMergeOpen(false);
       void loadLeads({ silent: true });
       if (activeTab === 'duplicates') {
@@ -1487,7 +1509,7 @@ export default function LeadCommandCenterPage() {
             </div>
           )}
 
-          {(copyMessage || successMessage) && (
+          {(copyMessage || successMessage || bulkMergeError) && (
             <div className="space-y-1">
               {copyMessage && (
                 <p className="text-xs text-green-700" role="status">
@@ -1500,6 +1522,14 @@ export default function LeadCommandCenterPage() {
                   role="status"
                 >
                   {successMessage}
+                </p>
+              )}
+              {bulkMergeError && (
+                <p
+                  className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
+                  role="alert"
+                >
+                  {bulkMergeError}
                 </p>
               )}
             </div>
@@ -1603,15 +1633,12 @@ export default function LeadCommandCenterPage() {
       </div>
 
       <LeadPreviewDrawer
-        lead={previewLead}
+        clientId={previewClientId}
+        fallbackName={previewFallbackName}
         open={previewOpen}
         onClose={closePreview}
         onRefresh={() => loadLeads({ silent: true })}
-        onAddNote={
-          previewLead
-            ? () => openQuickNote(previewLead)
-            : undefined
-        }
+        onAddNote={openQuickNote}
       />
 
       {quickNoteTarget && (
@@ -1653,6 +1680,7 @@ export default function LeadCommandCenterPage() {
       />
 
       {bulkMergeOpen &&
+        !bulkMergeLoading &&
         selectedMergeClients.length >= 2 &&
         selectedMergeClients.length <= MAX_MERGE_SELECTED && (
         <MergeClientsModal
@@ -1662,6 +1690,14 @@ export default function LeadCommandCenterPage() {
           onClose={closeBulkMerge}
           onMerged={handleBulkMergeCompleted}
         />
+      )}
+
+      {bulkMergeOpen && bulkMergeLoading && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="rounded-lg bg-white px-5 py-4 text-sm text-gray-700 shadow-lg" role="status">
+            Loading merge details…
+          </div>
+        </div>
       )}
 
       {activeTab === 'inbox' && selectedCount > 0 && (

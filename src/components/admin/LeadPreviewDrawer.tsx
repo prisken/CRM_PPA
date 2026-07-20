@@ -16,16 +16,18 @@ import {
   getTightStackSpacingClass,
 } from '@/components/ui/displayDensity';
 import { authenticatedFetch } from '@/lib/authenticatedFetch';
-import type { LeadCommandCenterRow } from '@/lib/leadCommandCenter';
+import type { LeadCommandCenterPreview } from '@/lib/leadCommandCenter';
 import { useUserProfile } from '@/hooks/useUserProfile';
 import { UserRole } from '@prisma/client';
 
 type LeadPreviewDrawerProps = {
-  lead: LeadCommandCenterRow | null;
+  clientId: string | null;
+  /** Optional name hint while preview detail is loading. */
+  fallbackName?: string | null;
   open: boolean;
   onClose: () => void;
   onRefresh?: () => void;
-  onAddNote?: () => void;
+  onAddNote?: (lead: LeadCommandCenterPreview) => void;
   /** When omitted, SUPER_ADMIN may edit (Lead Command Center is SA-only). */
   canEditImportantDates?: boolean;
 };
@@ -82,7 +84,7 @@ function toDateTimeLocalValue(value: string | null) {
   return `${parsed.getFullYear()}-${pad(parsed.getMonth() + 1)}-${pad(parsed.getDate())}T${pad(parsed.getHours())}:${pad(parsed.getMinutes())}`;
 }
 
-function getRelationshipOwner(lead: LeadCommandCenterRow) {
+function getRelationshipOwner(lead: LeadCommandCenterPreview) {
   return lead.assignedUsers.find((user) => user.role === 'RELATIONSHIP') ?? null;
 }
 
@@ -162,7 +164,8 @@ function ContactField({
 }
 
 function LeadPreviewDrawer({
-  lead,
+  clientId,
+  fallbackName,
   open,
   onClose,
   onRefresh,
@@ -177,6 +180,10 @@ function LeadPreviewDrawer({
   const canManageDates =
     canEditImportantDates ?? profile?.role === UserRole.SUPER_ADMIN;
   const [copyMessage, setCopyMessage] = useState<string | null>(null);
+  const [lead, setLead] = useState<LeadCommandCenterPreview | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
   const [priority, setPriority] = useState('');
   const [nextAction, setNextAction] = useState('');
   const [nextFollowUpAt, setNextFollowUpAt] = useState('');
@@ -228,6 +235,66 @@ function LeadPreviewDrawer({
   }, [copyMessage]);
 
   useEffect(() => {
+    if (!open || !clientId) {
+      setLead(null);
+      setLoadError(null);
+      setIsLoading(false);
+      return;
+    }
+
+    const controller = new AbortController();
+    let cancelled = false;
+
+    async function loadPreview() {
+      setIsLoading(true);
+      setLoadError(null);
+
+      try {
+        const response = await authenticatedFetch(
+          `/api/admin/leads/${clientId}/preview`,
+          { signal: controller.signal }
+        );
+
+        if (!response.ok) {
+          const data = await response.json().catch(() => ({}));
+          throw new Error(
+            typeof data.error === 'string' ? data.error : 'Failed to load lead preview'
+          );
+        }
+
+        const data = (await response.json()) as { lead?: LeadCommandCenterPreview };
+        if (!data.lead) {
+          throw new Error('Lead preview response was empty');
+        }
+
+        if (!cancelled) {
+          setLead(data.lead);
+        }
+      } catch (error) {
+        if (cancelled || controller.signal.aborted) {
+          return;
+        }
+
+        setLead(null);
+        setLoadError(
+          error instanceof Error ? error.message : 'Failed to load lead preview'
+        );
+      } finally {
+        if (!cancelled) {
+          setIsLoading(false);
+        }
+      }
+    }
+
+    void loadPreview();
+
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+  }, [open, clientId, reloadKey]);
+
+  useEffect(() => {
     if (!lead) {
       return;
     }
@@ -275,6 +342,7 @@ function LeadPreviewDrawer({
       }
 
       setFollowUpMessage('Follow-up saved');
+      setReloadKey((key) => key + 1);
       onRefresh?.();
     } catch (error) {
       setFollowUpError(
@@ -285,15 +353,17 @@ function LeadPreviewDrawer({
     }
   }
 
-  if (!open || !lead) {
+  if (!open || !clientId) {
     return null;
   }
 
-  const relationshipOwner = getRelationshipOwner(lead);
-  const extraTeamCount = relationshipOwner
-    ? lead.assignedUsers.length - 1
-    : lead.assignedUsers.length;
-  const attentionExpandedByDefault = lead.attentionScore > 0;
+  const relationshipOwner = lead ? getRelationshipOwner(lead) : null;
+  const extraTeamCount = lead
+    ? relationshipOwner
+      ? lead.assignedUsers.length - 1
+      : lead.assignedUsers.length
+    : 0;
+  const attentionExpandedByDefault = (lead?.attentionScore ?? 0) > 0;
 
   return (
     <div className="fixed inset-0 z-50" role="presentation">
@@ -329,305 +399,336 @@ function LeadPreviewDrawer({
           </p>
         )}
 
-        <div key={lead.clientId} className={`flex-1 overflow-y-auto ${bodyPaddingClass}`}>
-          <div className={stackSpacingClass}>
-            <SectionCard title="Summary" collapsible className="shadow-none">
-              <div className={tightStackSpacingClass}>
-                <div>
-                  <p className="text-base font-semibold text-gray-900">{lead.name}</p>
-                  {lead.company && (
-                    <p className="mt-0.5 text-sm text-gray-500">{lead.company}</p>
-                  )}
-                </div>
-
-                <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-                  <div>
-                    <dt className="text-[11px] font-medium uppercase tracking-wide text-gray-400">
-                      Status
-                    </dt>
-                    <dd className="mt-0.5">
-                      <StatusPill status={lead.status} />
-                    </dd>
-                  </div>
-                  <div>
-                    <dt className="text-[11px] font-medium uppercase tracking-wide text-gray-400">
-                      Priority
-                    </dt>
-                    <dd className="mt-0.5">
-                      {lead.priority ? (
-                        <CompactPill tone={priorityTone(lead.priority)} size="xs">
-                          {lead.priority}
-                        </CompactPill>
-                      ) : (
-                        <EmptyMuted label="No priority">—</EmptyMuted>
-                      )}
-                    </dd>
-                  </div>
-                  <div className="col-span-2">
-                    <dt className="text-[11px] font-medium uppercase tracking-wide text-gray-400">
-                      Owner
-                    </dt>
-                    <dd className="mt-0.5 text-sm text-gray-800">
-                      {relationshipOwner ? (
-                        <>
-                          {relationshipOwner.name}
-                          {extraTeamCount > 0 && (
-                            <span className="text-gray-500">{` · +${extraTeamCount} team`}</span>
-                          )}
-                        </>
-                      ) : lead.assignedUsers.length > 0 ? (
-                        <>
-                          <EmptyMuted label="Unassigned">Unassigned</EmptyMuted>
-                          <span className="text-gray-500">{` · +${lead.assignedUsers.length} team`}</span>
-                        </>
-                      ) : (
-                        <EmptyMuted label="Unassigned">Unassigned</EmptyMuted>
-                      )}
-                    </dd>
-                  </div>
-                </dl>
-
-                <div className="flex flex-wrap gap-2 border-t border-gray-100 pt-3">
-                  <Link
-                    href={`/clients/${lead.clientId}`}
-                    className="inline-flex rounded-md bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700"
-                  >
-                    Open Client 360
-                  </Link>
-                  {onAddNote && (
-                    <button
-                      type="button"
-                      onClick={onAddNote}
-                      className="rounded-md border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
-                    >
-                      Add quick note
-                    </button>
-                  )}
-                </div>
-              </div>
-            </SectionCard>
-
-            <SectionCard title="Contact" collapsible defaultCollapsed className="shadow-none">
-              <div className={tightStackSpacingClass}>
-                <ContactField label="Email" value={lead.email} onCopy={handleCopy} />
-                <ContactField label="Phone" value={lead.phone} onCopy={handleCopy} />
-              </div>
-            </SectionCard>
-
-            <SectionCard title="Important Dates" collapsible className="shadow-none">
-              <ImportantDatesPanel
-                key={lead.clientId}
-                ownerId={lead.clientId}
-                ownerKind="lead"
-                canEdit={canManageDates}
-                showHeading={false}
-                onChanged={onRefresh}
-              />
-            </SectionCard>
-
-            <SectionCard title="Follow-up" collapsible className="shadow-none">
-              <form onSubmit={handleSaveFollowUp} className={tightStackSpacingClass}>
-                <div>
-                  <label
-                    htmlFor="lead-preview-priority"
-                    className="mb-1 block text-xs font-medium text-gray-600"
-                  >
-                    Priority
-                  </label>
-                  <select
-                    id="lead-preview-priority"
-                    value={priority}
-                    onChange={(event) => setPriority(event.target.value)}
-                    disabled={isSavingFollowUp}
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 disabled:opacity-60 bg-white placeholder:text-gray-500 caret-gray-900"
-                  >
-                    {PRIORITY_OPTIONS.map((option) => (
-                      <option key={option.value || 'none'} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label
-                    htmlFor="lead-preview-next-action"
-                    className="mb-1 block text-xs font-medium text-gray-600"
-                  >
-                    Next action
-                  </label>
-                  <textarea
-                    id="lead-preview-next-action"
-                    value={nextAction}
-                    onChange={(event) => setNextAction(event.target.value)}
-                    disabled={isSavingFollowUp}
-                    rows={3}
-                    placeholder="What should happen next?"
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:opacity-60 bg-white text-gray-900 placeholder:text-gray-500 caret-gray-900"
-                  />
-                </div>
-
-                <div>
-                  <label
-                    htmlFor="lead-preview-follow-up-at"
-                    className="mb-1 block text-xs font-medium text-gray-600"
-                  >
-                    Follow-up date
-                  </label>
-                  <input
-                    id="lead-preview-follow-up-at"
-                    type="datetime-local"
-                    value={nextFollowUpAt}
-                    onChange={(event) => setNextFollowUpAt(event.target.value)}
-                    disabled={isSavingFollowUp}
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:opacity-60 bg-white text-gray-900 placeholder:text-gray-500 caret-gray-900"
-                  />
-                </div>
-
-                {followUpError && <p className="text-xs text-red-600">{followUpError}</p>}
-                {followUpMessage && (
-                  <p className="text-xs text-green-700" role="status">
-                    {followUpMessage}
-                  </p>
-                )}
-
-                <button
-                  type="submit"
-                  disabled={isSavingFollowUp}
-                  className="rounded-md bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  {isSavingFollowUp ? 'Saving...' : 'Save follow-up'}
-                </button>
-              </form>
-            </SectionCard>
-
-            <SectionCard
-              title="Attention"
-              collapsible
-              defaultCollapsed={!attentionExpandedByDefault}
-              className="shadow-none"
-            >
-              <div className={tightStackSpacingClass}>
-                <div>
-                  <p className="text-[11px] font-medium uppercase tracking-wide text-gray-400">
-                    Score
-                  </p>
-                  <p className="mt-0.5 text-sm font-medium text-gray-900">
-                    {lead.attentionScore > 0 ? lead.attentionScore : '—'}
-                  </p>
-                </div>
-
-                <div>
-                  <p className="mb-1.5 text-[11px] font-medium uppercase tracking-wide text-gray-400">
-                    Reasons
-                  </p>
-                  <WarningList items={lead.attentionReasons} tone="orange" />
-                </div>
-
-                <div>
-                  <p className="mb-1.5 text-[11px] font-medium uppercase tracking-wide text-gray-400">
-                    Data quality
-                  </p>
-                  <WarningList items={lead.dataQualityWarnings} tone="yellow" />
-                </div>
-
-                <div>
-                  <p className="mb-1.5 text-[11px] font-medium uppercase tracking-wide text-gray-400">
-                    Duplicates
-                  </p>
-                  <WarningList items={lead.duplicateWarnings} tone="red" />
-                </div>
-              </div>
-            </SectionCard>
-
-            <SectionCard
-              title="Sources and tags"
-              collapsible
-              defaultCollapsed
-              className="shadow-none"
-            >
-              <div className={stackSpacingClass}>
-                <div>
-                  <p className="mb-1.5 text-[11px] font-medium uppercase tracking-wide text-gray-400">
-                    Sources
-                  </p>
-                  <LeadSourceBadges sources={lead.sourceLabels} maxVisible={2} />
-                </div>
-
-                <div>
-                  <p className="mb-1.5 text-[11px] font-medium uppercase tracking-wide text-gray-400">
-                    Latest source
-                  </p>
-                  <p className="text-sm text-gray-800">
-                    {lead.latestSourceLabel ?? '—'}
-                  </p>
-                  <p className="mt-0.5 text-xs text-gray-500">
-                    {formatDateTime(lead.latestSourceReceivedAt)}
-                  </p>
-                </div>
-
-                <div>
-                  <p className="mb-1.5 text-[11px] font-medium uppercase tracking-wide text-gray-400">
-                    Source records
-                  </p>
-                  <p className="text-sm text-gray-700">
-                    {lead.sourceRecordCount} record{lead.sourceRecordCount === 1 ? '' : 's'}
-                  </p>
-                  {lead.sources.length > 0 ? (
-                    <ul className="mt-2 space-y-1.5">
-                      {lead.sources.slice(0, 2).map((record, index) => (
-                        <li
-                          key={`${record.source}-${record.receivedAt}-${index}`}
-                          className="rounded-md border border-gray-100 bg-gray-50 px-2.5 py-1.5 text-xs text-gray-700"
-                        >
-                          <span className="font-medium text-gray-900">
-                            {formatSourceRecordLabel(record.source)}
-                          </span>
-                          <span className="text-gray-400"> · </span>
-                          <span className="text-gray-500">
-                            {formatDateTime(record.receivedAt)}
-                          </span>
-                        </li>
-                      ))}
-                      {lead.sources.length > 2 && (
-                        <li className="text-xs text-gray-500">
-                          +{lead.sources.length - 2} more record
-                          {lead.sources.length - 2 === 1 ? '' : 's'}
-                        </li>
-                      )}
-                    </ul>
-                  ) : (
-                    <p className="mt-1 text-xs text-gray-500">No source records yet.</p>
-                  )}
-                </div>
-
-                <div>
-                  <p className="mb-1.5 text-[11px] font-medium uppercase tracking-wide text-gray-400">
-                    Tags
-                  </p>
-                  {lead.tags.length > 0 ? (
-                    <LeadTagBadges tags={lead.tags} maxVisible={2} />
-                  ) : (
-                    <EmptyMuted label="No tags" />
-                  )}
-                </div>
-              </div>
-            </SectionCard>
-
-            <SectionCard
-              title="Recent activity"
-              collapsible
-              defaultCollapsed
-              className="shadow-none"
-            >
-              <p className="text-sm text-gray-800">{formatDateTime(lead.lastActivityAt)}</p>
-              {lead.lastActivitySummary ? (
-                <p className="mt-1 text-sm text-gray-600">{lead.lastActivitySummary}</p>
-              ) : (
-                <EmptyMuted label="No activity summary" />
+        <div key={clientId} className={`flex-1 overflow-y-auto ${bodyPaddingClass}`}>
+          {isLoading && !lead ? (
+            <div className="flex h-40 items-center justify-center" role="status">
+              <p className="text-sm text-gray-500">Loading lead details…</p>
+            </div>
+          ) : loadError && !lead ? (
+            <div className="space-y-3 rounded-lg border border-red-200 bg-red-50 p-4">
+              <p className="text-sm text-red-700">{loadError}</p>
+              <button
+                type="button"
+                onClick={() => setReloadKey((key) => key + 1)}
+                className="rounded-md border border-red-300 bg-white px-3 py-1.5 text-xs font-medium text-red-700 hover:bg-red-50"
+              >
+                Retry
+              </button>
+            </div>
+          ) : !lead ? (
+            <div className="flex h-40 items-center justify-center">
+              <p className="text-sm text-gray-500">
+                {fallbackName
+                  ? `Unable to load details for ${fallbackName}.`
+                  : 'Lead details unavailable.'}
+              </p>
+            </div>
+          ) : (
+            <div className={stackSpacingClass}>
+              {isLoading && (
+                <p className="text-xs text-gray-500" role="status">
+                  Refreshing…
+                </p>
               )}
-            </SectionCard>
-          </div>
+
+              <SectionCard title="Summary" collapsible className="shadow-none">
+                <div className={tightStackSpacingClass}>
+                  <div>
+                    <p className="text-base font-semibold text-gray-900">{lead.name}</p>
+                    {lead.company && (
+                      <p className="mt-0.5 text-sm text-gray-500">{lead.company}</p>
+                    )}
+                  </div>
+
+                  <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+                    <div>
+                      <dt className="text-[11px] font-medium uppercase tracking-wide text-gray-400">
+                        Status
+                      </dt>
+                      <dd className="mt-0.5">
+                        <StatusPill status={lead.status} />
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="text-[11px] font-medium uppercase tracking-wide text-gray-400">
+                        Priority
+                      </dt>
+                      <dd className="mt-0.5">
+                        {lead.priority ? (
+                          <CompactPill tone={priorityTone(lead.priority)} size="xs">
+                            {lead.priority}
+                          </CompactPill>
+                        ) : (
+                          <EmptyMuted label="No priority">—</EmptyMuted>
+                        )}
+                      </dd>
+                    </div>
+                    <div className="col-span-2">
+                      <dt className="text-[11px] font-medium uppercase tracking-wide text-gray-400">
+                        Owner
+                      </dt>
+                      <dd className="mt-0.5 text-sm text-gray-800">
+                        {relationshipOwner ? (
+                          <>
+                            {relationshipOwner.name}
+                            {extraTeamCount > 0 && (
+                              <span className="text-gray-500">{` · +${extraTeamCount} team`}</span>
+                            )}
+                          </>
+                        ) : lead.assignedUsers.length > 0 ? (
+                          <>
+                            <EmptyMuted label="Unassigned">Unassigned</EmptyMuted>
+                            <span className="text-gray-500">{` · +${lead.assignedUsers.length} team`}</span>
+                          </>
+                        ) : (
+                          <EmptyMuted label="Unassigned">Unassigned</EmptyMuted>
+                        )}
+                      </dd>
+                    </div>
+                  </dl>
+
+                  <div className="flex flex-wrap gap-2 border-t border-gray-100 pt-3">
+                    <Link
+                      href={`/clients/${lead.clientId}`}
+                      className="inline-flex rounded-md bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700"
+                    >
+                      Open Client 360
+                    </Link>
+                    {onAddNote && (
+                      <button
+                        type="button"
+                        onClick={() => onAddNote(lead)}
+                        className="rounded-md border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
+                      >
+                        Add quick note
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </SectionCard>
+
+              <SectionCard title="Contact" collapsible defaultCollapsed className="shadow-none">
+                <div className={tightStackSpacingClass}>
+                  <ContactField label="Email" value={lead.email} onCopy={handleCopy} />
+                  <ContactField label="Phone" value={lead.phone} onCopy={handleCopy} />
+                </div>
+              </SectionCard>
+
+              <SectionCard title="Important Dates" collapsible className="shadow-none">
+                <ImportantDatesPanel
+                  key={lead.clientId}
+                  ownerId={lead.clientId}
+                  ownerKind="lead"
+                  canEdit={canManageDates}
+                  showHeading={false}
+                  onChanged={onRefresh}
+                />
+              </SectionCard>
+
+              <SectionCard title="Follow-up" collapsible className="shadow-none">
+                <form onSubmit={handleSaveFollowUp} className={tightStackSpacingClass}>
+                  <div>
+                    <label
+                      htmlFor="lead-preview-priority"
+                      className="mb-1 block text-xs font-medium text-gray-600"
+                    >
+                      Priority
+                    </label>
+                    <select
+                      id="lead-preview-priority"
+                      value={priority}
+                      onChange={(event) => setPriority(event.target.value)}
+                      disabled={isSavingFollowUp}
+                      className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 disabled:opacity-60 bg-white placeholder:text-gray-500 caret-gray-900"
+                    >
+                      {PRIORITY_OPTIONS.map((option) => (
+                        <option key={option.value || 'none'} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label
+                      htmlFor="lead-preview-next-action"
+                      className="mb-1 block text-xs font-medium text-gray-600"
+                    >
+                      Next action
+                    </label>
+                    <textarea
+                      id="lead-preview-next-action"
+                      value={nextAction}
+                      onChange={(event) => setNextAction(event.target.value)}
+                      disabled={isSavingFollowUp}
+                      rows={3}
+                      placeholder="What should happen next?"
+                      className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:opacity-60 bg-white text-gray-900 placeholder:text-gray-500 caret-gray-900"
+                    />
+                  </div>
+
+                  <div>
+                    <label
+                      htmlFor="lead-preview-follow-up-at"
+                      className="mb-1 block text-xs font-medium text-gray-600"
+                    >
+                      Follow-up date
+                    </label>
+                    <input
+                      id="lead-preview-follow-up-at"
+                      type="datetime-local"
+                      value={nextFollowUpAt}
+                      onChange={(event) => setNextFollowUpAt(event.target.value)}
+                      disabled={isSavingFollowUp}
+                      className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:opacity-60 bg-white text-gray-900 placeholder:text-gray-500 caret-gray-900"
+                    />
+                  </div>
+
+                  {followUpError && <p className="text-xs text-red-600">{followUpError}</p>}
+                  {followUpMessage && (
+                    <p className="text-xs text-green-700" role="status">
+                      {followUpMessage}
+                    </p>
+                  )}
+
+                  <button
+                    type="submit"
+                    disabled={isSavingFollowUp}
+                    className="rounded-md bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {isSavingFollowUp ? 'Saving...' : 'Save follow-up'}
+                  </button>
+                </form>
+              </SectionCard>
+
+              <SectionCard
+                title="Attention"
+                collapsible
+                defaultCollapsed={!attentionExpandedByDefault}
+                className="shadow-none"
+              >
+                <div className={tightStackSpacingClass}>
+                  <div>
+                    <p className="text-[11px] font-medium uppercase tracking-wide text-gray-400">
+                      Score
+                    </p>
+                    <p className="mt-0.5 text-sm font-medium text-gray-900">
+                      {lead.attentionScore > 0 ? lead.attentionScore : '—'}
+                    </p>
+                  </div>
+
+                  <div>
+                    <p className="mb-1.5 text-[11px] font-medium uppercase tracking-wide text-gray-400">
+                      Reasons
+                    </p>
+                    <WarningList items={lead.attentionReasons} tone="orange" />
+                  </div>
+
+                  <div>
+                    <p className="mb-1.5 text-[11px] font-medium uppercase tracking-wide text-gray-400">
+                      Data quality
+                    </p>
+                    <WarningList items={lead.dataQualityWarnings} tone="yellow" />
+                  </div>
+
+                  <div>
+                    <p className="mb-1.5 text-[11px] font-medium uppercase tracking-wide text-gray-400">
+                      Duplicates
+                    </p>
+                    <WarningList items={lead.duplicateWarnings} tone="red" />
+                  </div>
+                </div>
+              </SectionCard>
+
+              <SectionCard
+                title="Sources and tags"
+                collapsible
+                defaultCollapsed
+                className="shadow-none"
+              >
+                <div className={stackSpacingClass}>
+                  <div>
+                    <p className="mb-1.5 text-[11px] font-medium uppercase tracking-wide text-gray-400">
+                      Sources
+                    </p>
+                    <LeadSourceBadges sources={lead.sourceLabels} maxVisible={2} />
+                  </div>
+
+                  <div>
+                    <p className="mb-1.5 text-[11px] font-medium uppercase tracking-wide text-gray-400">
+                      Latest source
+                    </p>
+                    <p className="text-sm text-gray-800">
+                      {lead.latestSourceLabel ?? '—'}
+                    </p>
+                    <p className="mt-0.5 text-xs text-gray-500">
+                      {formatDateTime(lead.latestSourceReceivedAt)}
+                    </p>
+                  </div>
+
+                  <div>
+                    <p className="mb-1.5 text-[11px] font-medium uppercase tracking-wide text-gray-400">
+                      Source records
+                    </p>
+                    <p className="text-sm text-gray-700">
+                      {lead.sourceRecordCount} record{lead.sourceRecordCount === 1 ? '' : 's'}
+                    </p>
+                    {lead.sources.length > 0 ? (
+                      <ul className="mt-2 space-y-1.5">
+                        {lead.sources.slice(0, 2).map((record, index) => (
+                          <li
+                            key={`${record.source}-${record.receivedAt}-${index}`}
+                            className="rounded-md border border-gray-100 bg-gray-50 px-2.5 py-1.5 text-xs text-gray-700"
+                          >
+                            <span className="font-medium text-gray-900">
+                              {formatSourceRecordLabel(record.source)}
+                            </span>
+                            <span className="text-gray-400"> · </span>
+                            <span className="text-gray-500">
+                              {formatDateTime(record.receivedAt)}
+                            </span>
+                          </li>
+                        ))}
+                        {lead.sources.length > 2 && (
+                          <li className="text-xs text-gray-500">
+                            +{lead.sources.length - 2} more record
+                            {lead.sources.length - 2 === 1 ? '' : 's'}
+                          </li>
+                        )}
+                      </ul>
+                    ) : (
+                      <p className="mt-1 text-xs text-gray-500">No source records yet.</p>
+                    )}
+                  </div>
+
+                  <div>
+                    <p className="mb-1.5 text-[11px] font-medium uppercase tracking-wide text-gray-400">
+                      Tags
+                    </p>
+                    {lead.tags.length > 0 ? (
+                      <LeadTagBadges tags={lead.tags} maxVisible={2} />
+                    ) : (
+                      <EmptyMuted label="No tags" />
+                    )}
+                  </div>
+                </div>
+              </SectionCard>
+
+              <SectionCard
+                title="Recent activity"
+                collapsible
+                defaultCollapsed
+                className="shadow-none"
+              >
+                <p className="text-sm text-gray-800">{formatDateTime(lead.lastActivityAt)}</p>
+                {lead.lastActivitySummary ? (
+                  <p className="mt-1 text-sm text-gray-600">{lead.lastActivitySummary}</p>
+                ) : (
+                  <EmptyMuted label="No activity summary" />
+                )}
+              </SectionCard>
+            </div>
+          )}
         </div>
       </aside>
     </div>

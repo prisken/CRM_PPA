@@ -1488,7 +1488,9 @@ Google Forms returns `201` on create, `200` on update. Optional `GOOGLE_FORMS_DE
 
 Super-admin inbox at `/admin/leads`. Entry point: `fetchLeadCommandCenterRows(filters)`.
 
-**Row payload (`LeadCommandCenterRow`):** client core fields, assignments, latest source record, tags, duplicate flags (email/phone), follow-up fields (`priority`, `nextAction`, `nextFollowUpAt`), `attentionScore`, `attentionReasons`.
+**Row payload (`LeadCommandCenterRow`):** slim inbox fields for table/cards — identity, status, assignments, `sourceLabels` (+ capped source sample for scoring), duplicate warnings, follow-up fields (`priority`, `nextAction`, `nextFollowUpAt`), `attentionScore`, `attentionReasons`, `dataQualityWarnings`. Does **not** include full source history, activity summary, tags, `expectations` / `roleInCompany` / `employeeCount`.
+
+**Preview payload (`LeadCommandCenterPreview`):** fetched via `GET /api/admin/leads/[id]/preview` when the drawer opens (or when loading Merge selected candidates). Extends the row with full `sources[]`, `tags`, `lastActivityAt` / `lastActivitySummary`, `firstSourceLabel` / `latestSourceLabel`, `roleInCompany`, `employeeCount`, `expectations`.
 
 **Attention scoring** (higher = more urgent): overdue follow-up (+30), due today (+20), no next action on active lead (+15), unassigned (+25), missing email/phone (+10 each), duplicate email/phone (+20/+30), high priority (+30), recent ingest with no contact (+15–30), no relationship assignee (+10), etc. Rows sorted by `attentionScore` desc, then `lastModified` desc.
 
@@ -1655,7 +1657,8 @@ Per merge (pairwise step or full `mergeClients` call), in a **single Prisma tran
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
-| GET | `/api/admin/leads` | Super admin (Bearer or session) | Inbox rows with attention scoring. Rich query filters (see [Lead Command Center](#lead-command-center-libleadcommandcenterts)). Default `limit=200`, max 500. Returns `{ leads, meta }` |
+| GET | `/api/admin/leads` | Super admin (Bearer or session) | Slim inbox rows with attention scoring. Rich query filters (see [Lead Command Center](#lead-command-center-libleadcommandcenterts)). Default `limit=200`, max 500. Returns `{ leads, meta }` |
+| GET | `/api/admin/leads/[id]/preview` | Super admin (Bearer or session) | Full lead preview detail for the drawer / merge mapping. Returns `{ lead }` (`LeadCommandCenterPreview`) or 404 |
 | GET | `/api/admin/leads/duplicates` | Super admin (Bearer or session) | Duplicate groups by email/phone. Query: `?type=email\|phone\|all` |
 | POST | `/api/admin/leads/merge` | Super admin (Bearer or session) | Pairwise manual merge via `mergeClients()`. Body: `canonicalClientId`, `duplicateClientId`, optional `fieldChoices`, `fieldOverrides`, `reason` |
 | POST | `/api/admin/leads/merge-multiple` | Super admin (Bearer or session) | Multi merge via `mergeMultipleClients()`. Body: `canonicalClientId`, `duplicateClientIds` (1–9), optional `fieldChoicesByDuplicateId`, `fieldOverrides`, `reason`. Max 10 clients total. Returns `{ ok: true, result }` |
@@ -2087,13 +2090,13 @@ Responsive header — stacks on mobile (`flex-col`), horizontal from `sm` up; ac
 - **Filters** panel — collapsed by default; advanced filters (status, source, assignee, tags, date ranges, missing contact, duplicate flags, follow-up states)
 
 **Inbox layout (compact):**
-- Desktop: dense table rows — `StatusPill`, `LeadSourceBadges` / `LeadTagBadges` (max 2 visible + `+N`), truncated contact/next-step text, `EmptyMuted` (`—`) for blanks
+- Desktop: dense table rows — `StatusPill`, `LeadSourceBadges` (max 2 visible + `+N`), truncated contact/next-step text, `EmptyMuted` (`—`) for blanks
 - Mobile: compact cards; tap row opens preview drawer
-- Per-row primary action: **Preview** → `LeadPreviewDrawer` (Open Client 360 and follow-up editing live in the drawer)
-- Row selection + bulk actions: status change (`BulkStatusModal`), add tags (`BulkTagsModal`), assign relationship (`BulkAssignRelationshipModal`), bulk note (`BulkNoteModal`), **Merge selected** (2–10 leads, disabled above 10)
+- Per-row primary action: **Preview** → `LeadPreviewDrawer` fetches `GET /api/admin/leads/[id]/preview` on open (loading / error / retry); Open Client 360 and follow-up editing live in the drawer
+- Row selection + bulk actions: status change (`BulkStatusModal`), add tags (`BulkTagsModal`), assign relationship (`BulkAssignRelationshipModal`), bulk note (`BulkNoteModal`), **Merge selected** (2–10 leads, disabled above 10) — loads preview details per selected id before opening the merge modal
 
 **Preview drawer (`LeadPreviewDrawer`):**
-- Collapsible sections: Summary, Contact, Follow-up, Attention, Sources/tags, Recent activity
+- Collapsible sections: Summary, Contact, Important Dates, Follow-up, Attention, Sources/tags, Recent activity
 - Follow-up fields (`PATCH /api/clients/[id]/follow-up`), compact pills for priority/attention, source/tag lists capped at 2 visible
 - Primary CTA: **Open Client 360**
 

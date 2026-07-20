@@ -41,6 +41,7 @@ export type LeadCommandCenterTag = {
   color: string | null;
 };
 
+/** Slim inbox row — table/card display + scoring inputs only. */
 export type LeadCommandCenterRow = {
   clientId: string;
   name: string;
@@ -49,29 +50,36 @@ export type LeadCommandCenterRow = {
   phone: string | null;
   status: string;
   leadSource: string | null;
-  roleInCompany: string | null;
-  employeeCount: number | null;
-  expectations: string | null;
   createdAt: string;
   lastModified: string;
   assignedUsers: LeadCommandCenterAssignedUser[];
-  sources: LeadCommandCenterSource[];
   sourceLabels: string[];
-  firstSourceLabel: string | null;
-  latestSourceLabel: string | null;
   latestSourceReceivedAt: string | null;
   sourceRecordCount: number;
-  lastActivityAt: string | null;
-  lastActivitySummary: string | null;
   attentionScore: number;
   attentionReasons: string[];
   dataQualityWarnings: string[];
   duplicateWarnings: string[];
-  tags: LeadCommandCenterTag[];
   priority: string | null;
   nextAction: string | null;
   nextFollowUpAt: string | null;
 };
+
+/** Full lead detail for the preview drawer (fetched on open). */
+export type LeadCommandCenterPreview = LeadCommandCenterRow & {
+  roleInCompany: string | null;
+  employeeCount: number | null;
+  expectations: string | null;
+  sources: LeadCommandCenterSource[];
+  firstSourceLabel: string | null;
+  latestSourceLabel: string | null;
+  lastActivityAt: string | null;
+  lastActivitySummary: string | null;
+  tags: LeadCommandCenterTag[];
+};
+
+/** How many recent source rows to sample for inbox badges (full history is preview-only). */
+const INBOX_SOURCE_SAMPLE_LIMIT = 8;
 
 export type LeadCommandCenterFilters = {
   search?: string;
@@ -97,7 +105,52 @@ export type LeadCommandCenterFilters = {
   offset?: number;
 };
 
-export const leadCommandCenterClientSelect = {
+const leadCommandCenterAssignmentSelect = {
+  assignmentId: true,
+  role: true,
+  user: {
+    select: {
+      id: true,
+      name: true,
+      email: true,
+    },
+  },
+} satisfies Prisma.ClientAssignmentSelect;
+
+/** Inbox list query — capped source sample, no tags / expectations / full history. */
+export const leadCommandCenterInboxSelect = {
+  id: true,
+  name: true,
+  company: true,
+  email: true,
+  phone: true,
+  status: true,
+  leadSource: true,
+  createdAt: true,
+  lastModified: true,
+  priority: true,
+  nextAction: true,
+  nextFollowUpAt: true,
+  clientAssignments: {
+    select: leadCommandCenterAssignmentSelect,
+  },
+  sourceRecords: {
+    orderBy: { receivedAt: 'desc' as const },
+    take: INBOX_SOURCE_SAMPLE_LIMIT,
+    select: {
+      source: true,
+      receivedAt: true,
+    },
+  },
+  _count: {
+    select: {
+      sourceRecords: true,
+    },
+  },
+} satisfies Prisma.ClientSelect;
+
+/** Preview / search detail query — full source history + tags + profile fields. */
+export const leadCommandCenterPreviewSelect = {
   id: true,
   name: true,
   company: true,
@@ -114,17 +167,7 @@ export const leadCommandCenterClientSelect = {
   nextAction: true,
   nextFollowUpAt: true,
   clientAssignments: {
-    select: {
-      assignmentId: true,
-      role: true,
-      user: {
-        select: {
-          id: true,
-          name: true,
-          email: true,
-        },
-      },
-    },
+    select: leadCommandCenterAssignmentSelect,
   },
   sourceRecords: {
     orderBy: { receivedAt: 'desc' as const },
@@ -147,8 +190,15 @@ export const leadCommandCenterClientSelect = {
   },
 } satisfies Prisma.ClientSelect;
 
-type ClientWithRelations = Prisma.ClientGetPayload<{
-  select: typeof leadCommandCenterClientSelect;
+/** @deprecated Prefer leadCommandCenterInboxSelect or leadCommandCenterPreviewSelect */
+export const leadCommandCenterClientSelect = leadCommandCenterPreviewSelect;
+
+type InboxClientWithRelations = Prisma.ClientGetPayload<{
+  select: typeof leadCommandCenterInboxSelect;
+}>;
+
+type PreviewClientWithRelations = Prisma.ClientGetPayload<{
+  select: typeof leadCommandCenterPreviewSelect;
 }>;
 
 type LatestActivityRow = {
@@ -475,13 +525,43 @@ function formatActivitySummary(
   return `${actor} logged a ${activity.activity_type.toLowerCase()} on ${clientName}.`;
 }
 
-async function loadLatestActivitiesByClientId(
+/** Lightweight timestamps only — used for inbox attention scoring (no summary text). */
+async function loadLatestActivityTimestampsByClientId(
   clientIds: string[]
-): Promise<Map<string, LatestActivityRow>> {
+): Promise<Map<string, Date>> {
   if (clientIds.length === 0) {
     return new Map();
   }
 
+  const rows = await prisma.$queryRaw<
+    Array<{ client_id: string; activity_date: Date }>
+  >(Prisma.sql`
+    SELECT
+      client_id,
+      MAX(activity_date) AS activity_date
+    FROM (
+      SELECT i."clientId" AS client_id, i.date AS activity_date
+      FROM "Interaction" i
+      WHERE i."clientId" IN (${Prisma.join(clientIds)})
+      UNION ALL
+      SELECT cal.client_id AS client_id, cal.created_at AS activity_date
+      FROM client_activity_logs cal
+      WHERE cal.client_id IN (${Prisma.join(clientIds)})
+    ) combined
+    GROUP BY client_id
+  `);
+
+  const activityByClientId = new Map<string, Date>();
+  for (const row of rows) {
+    activityByClientId.set(row.client_id, row.activity_date);
+  }
+
+  return activityByClientId;
+}
+
+async function loadLatestActivityForClient(
+  clientId: string
+): Promise<LatestActivityRow | undefined> {
   const rows = await prisma.$queryRaw<LatestActivityRow[]>(Prisma.sql`
     WITH combined AS (
       SELECT
@@ -494,7 +574,7 @@ async function loadLatestActivitiesByClientId(
         u.email AS user_email
       FROM "Interaction" i
       INNER JOIN "User" u ON u.id = i."userId"
-      WHERE i."clientId" IN (${Prisma.join(clientIds)})
+      WHERE i."clientId" = ${clientId}
       UNION ALL
       SELECT
         cal.client_id AS client_id,
@@ -506,16 +586,7 @@ async function loadLatestActivitiesByClientId(
         u.email AS user_email
       FROM client_activity_logs cal
       LEFT JOIN "User" u ON u.id = cal.user_id
-      WHERE cal.client_id IN (${Prisma.join(clientIds)})
-    ),
-    ranked AS (
-      SELECT
-        combined.*,
-        ROW_NUMBER() OVER (
-          PARTITION BY combined.client_id
-          ORDER BY combined.activity_date DESC
-        ) AS row_number
-      FROM combined
+      WHERE cal.client_id = ${clientId}
     )
     SELECT
       client_id,
@@ -525,25 +596,28 @@ async function loadLatestActivitiesByClientId(
       activity_source,
       user_name,
       user_email
-    FROM ranked
-    WHERE row_number = 1
+    FROM combined
+    ORDER BY activity_date DESC
+    LIMIT 1
   `);
 
-  const activityByClientId = new Map<string, LatestActivityRow>();
-  for (const row of rows) {
-    activityByClientId.set(row.client_id, row);
-  }
-
-  return activityByClientId;
+  return rows[0];
 }
 
+type SourceRecordLike = {
+  source: LeadSourceType | string;
+  receivedAt: Date;
+  externalId?: string | null;
+};
+
 function buildSourcePresentation(
-  sourceRecords: ClientWithRelations['sourceRecords'],
-  leadSource: string | null
+  sourceRecords: SourceRecordLike[],
+  leadSource: string | null,
+  sourceRecordCount = sourceRecords.length
 ) {
   const sources: LeadCommandCenterSource[] = sourceRecords.map((record) => ({
-    source: record.source,
-    externalId: record.externalId,
+    source: String(record.source),
+    externalId: record.externalId ?? null,
     receivedAt: record.receivedAt.toISOString(),
   }));
 
@@ -576,8 +650,20 @@ function buildSourcePresentation(
     firstSourceLabel,
     latestSourceLabel,
     latestSourceReceivedAt,
-    sourceRecordCount: sourceRecords.length,
+    sourceRecordCount,
   };
+}
+
+function mapAssignedUsers(
+  clientAssignments: InboxClientWithRelations['clientAssignments']
+): LeadCommandCenterAssignedUser[] {
+  return clientAssignments.map((assignment) => ({
+    assignmentId: assignment.assignmentId,
+    userId: assignment.user.id,
+    name: assignment.user.name ?? assignment.user.email,
+    email: assignment.user.email,
+    role: assignment.role,
+  }));
 }
 
 function buildDataQualityWarnings(input: {
@@ -786,20 +872,73 @@ function sortRows(rows: LeadCommandCenterRow[]) {
   });
 }
 
-function mapClientToRow(
-  client: ClientWithRelations,
+function mapInboxClientToRow(
+  client: InboxClientWithRelations,
+  duplicateClientIds: DuplicateClientIds,
+  lastActivityAt: string | null
+): LeadCommandCenterRow {
+  const assignedUsers = mapAssignedUsers(client.clientAssignments);
+
+  const sourcePresentation = buildSourcePresentation(
+    client.sourceRecords,
+    client.leadSource,
+    client._count.sourceRecords
+  );
+
+  const dataQualityWarnings = buildDataQualityWarnings({
+    email: client.email,
+    phone: client.phone,
+    company: client.company,
+    assignedUserCount: assignedUsers.length,
+    sourceRecordCount: sourcePresentation.sourceRecordCount,
+  });
+
+  const duplicateWarnings = buildDuplicateWarnings(client.id, duplicateClientIds);
+
+  const { attentionScore, attentionReasons } = computeAttention({
+    status: client.status,
+    email: client.email,
+    phone: client.phone,
+    assignedUserCount: assignedUsers.length,
+    sourceRecordCount: sourcePresentation.sourceRecordCount,
+    latestSourceReceivedAt: sourcePresentation.latestSourceReceivedAt,
+    lastActivityAt,
+    lastModified: client.lastModified.toISOString(),
+    duplicateWarnings,
+    nextAction: client.nextAction,
+    nextFollowUpAt: client.nextFollowUpAt?.toISOString() ?? null,
+  });
+
+  return {
+    clientId: client.id,
+    name: client.name,
+    company: client.company,
+    email: client.email,
+    phone: client.phone,
+    status: client.status,
+    leadSource: client.leadSource,
+    createdAt: client.createdAt.toISOString(),
+    lastModified: client.lastModified.toISOString(),
+    assignedUsers,
+    sourceLabels: sourcePresentation.sourceLabels,
+    latestSourceReceivedAt: sourcePresentation.latestSourceReceivedAt,
+    sourceRecordCount: sourcePresentation.sourceRecordCount,
+    attentionScore,
+    attentionReasons,
+    dataQualityWarnings,
+    duplicateWarnings,
+    priority: client.priority,
+    nextAction: client.nextAction,
+    nextFollowUpAt: client.nextFollowUpAt?.toISOString() ?? null,
+  };
+}
+
+function mapPreviewClientToDetail(
+  client: PreviewClientWithRelations,
   duplicateClientIds: DuplicateClientIds,
   latestActivity: LatestActivityRow | undefined
-): LeadCommandCenterRow {
-  const assignedUsers: LeadCommandCenterAssignedUser[] = client.clientAssignments.map(
-    (assignment) => ({
-      assignmentId: assignment.assignmentId,
-      userId: assignment.user.id,
-      name: assignment.user.name ?? assignment.user.email,
-      email: assignment.user.email,
-      role: assignment.role,
-    })
-  );
+): LeadCommandCenterPreview {
+  const assignedUsers = mapAssignedUsers(client.clientAssignments);
 
   const sourcePresentation = buildSourcePresentation(
     client.sourceRecords,
@@ -908,22 +1047,23 @@ export async function fetchLeadCommandCenterRows(
   const [clients, duplicateClientIds] = await Promise.all([
     prisma.client.findMany({
       where,
-      select: leadCommandCenterClientSelect,
+      select: leadCommandCenterInboxSelect,
     }),
     loadDuplicateClientIds(),
   ]);
 
-  const latestActivities = await loadLatestActivitiesByClientId(
+  const latestActivityTimestamps = await loadLatestActivityTimestampsByClientId(
     clients.map((client) => client.id)
   );
 
-  const rows = clients.map((client) =>
-    mapClientToRow(
+  const rows = clients.map((client) => {
+    const activityDate = latestActivityTimestamps.get(client.id);
+    return mapInboxClientToRow(
       client,
       duplicateClientIds,
-      latestActivities.get(client.id)
-    )
-  );
+      activityDate?.toISOString() ?? null
+    );
+  });
 
   const filteredRows = applyPostFilters(rows, filters);
   sortRows(filteredRows);
@@ -936,6 +1076,30 @@ export async function fetchLeadCommandCenterRows(
   }
 
   return filteredRows.slice(offset, offset + limit);
+}
+
+export async function fetchLeadCommandCenterPreview(
+  clientId: string
+): Promise<LeadCommandCenterPreview | null> {
+  const trimmedId = clientId.trim();
+  if (!trimmedId) {
+    return null;
+  }
+
+  const [client, duplicateClientIds, latestActivity] = await Promise.all([
+    prisma.client.findUnique({
+      where: { id: trimmedId },
+      select: leadCommandCenterPreviewSelect,
+    }),
+    loadDuplicateClientIds(),
+    loadLatestActivityForClient(trimmedId),
+  ]);
+
+  if (!client) {
+    return null;
+  }
+
+  return mapPreviewClientToDetail(client, duplicateClientIds, latestActivity);
 }
 
 const SEARCH_CANDIDATE_LIMIT = 100;
@@ -987,7 +1151,7 @@ export async function searchClients(options: {
       where,
       take: SEARCH_CANDIDATE_LIMIT,
       orderBy: { lastModified: 'desc' },
-      select: leadCommandCenterClientSelect,
+      select: leadCommandCenterInboxSelect,
     }),
     loadDuplicateClientIds(),
   ]);
@@ -996,17 +1160,18 @@ export async function searchClients(options: {
     return [];
   }
 
-  const latestActivities = await loadLatestActivitiesByClientId(
+  const latestActivityTimestamps = await loadLatestActivityTimestampsByClientId(
     clients.map((client) => client.id)
   );
 
-  const rows = clients.map((client) =>
-    mapClientToRow(
+  const rows = clients.map((client) => {
+    const activityDate = latestActivityTimestamps.get(client.id);
+    return mapInboxClientToRow(
       client,
       duplicateClientIds,
-      latestActivities.get(client.id)
-    )
-  );
+      activityDate?.toISOString() ?? null
+    );
+  });
 
   sortRows(rows);
 
