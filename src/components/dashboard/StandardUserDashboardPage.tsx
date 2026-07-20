@@ -35,6 +35,14 @@ const AddLeadModal = dynamic(() => import('@/components/dashboard/AddLeadModal')
 
 type AssignmentSummary = {
   hasDoctorRole: boolean;
+  hasRelationshipRole: boolean;
+  assignments: Array<{
+    assignment_id: string;
+    client_id: string;
+    clientName: string;
+    clientStatus: string;
+    role: string;
+  }>;
 };
 
 type WidgetRequestState<T> = {
@@ -275,9 +283,14 @@ export default function StandardUserDashboardPage() {
       const assignments = await assignmentsResult.value.json();
       setAssignmentSummary({
         hasDoctorRole: assignments.hasDoctorRole === true,
+        hasRelationshipRole: assignments.hasRelationshipRole === true,
+        assignments: Array.isArray(assignments.assignments)
+          ? assignments.assignments
+          : [],
       });
       setAssignmentsError(null);
     } else {
+      setAssignmentSummary(null);
       setAssignmentsError('Failed to load assignment data');
     }
     setAssignmentsLoading(false);
@@ -522,7 +535,18 @@ export default function StandardUserDashboardPage() {
           description="Important dates for your clients and leads this month"
           collapsible
         >
-          <ImportantDatesCalendarWidget />
+          <ImportantDatesCalendarWidget
+            assignmentAccess={
+              isSuperAdmin
+                ? undefined
+                : {
+                    loading: assignmentsLoading,
+                    hasRelationshipRole:
+                      assignmentSummary?.hasRelationshipRole === true,
+                    assignments: assignmentSummary?.assignments ?? [],
+                  }
+            }
+          />
         </SectionCard>
 
         <SectionCard

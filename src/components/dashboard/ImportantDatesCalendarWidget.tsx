@@ -98,8 +98,24 @@ type CalendarApiResponse = {
   events: ImportantDatesCalendarEvent[];
 };
 
+export type CalendarAssignmentOption = {
+  assignment_id: string;
+  client_id: string;
+  clientName: string;
+  clientStatus: string;
+  role: string;
+};
+
+/** When provided by the dashboard page, skips a second `/api/me/assignments` fetch. */
+export type CalendarAssignmentAccess = {
+  loading: boolean;
+  hasRelationshipRole: boolean;
+  assignments: CalendarAssignmentOption[];
+};
+
 type ImportantDatesCalendarWidgetProps = {
   refreshKey?: number;
+  assignmentAccess?: CalendarAssignmentAccess;
 };
 
 function EventChip({
@@ -153,6 +169,7 @@ function EventChip({
 
 export default function ImportantDatesCalendarWidget({
   refreshKey = 0,
+  assignmentAccess,
 }: ImportantDatesCalendarWidgetProps) {
   const { density } = useDisplayDensity();
   const widgetPaddingClass = getWidgetPaddingClass(density);
@@ -171,7 +188,12 @@ export default function ImportantDatesCalendarWidget({
   const [selectedEvent, setSelectedEvent] =
     useState<ImportantDatesCalendarEvent | null>(null);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
-  const [hasRelationshipRole, setHasRelationshipRole] = useState(false);
+  const [fetchedHasRelationshipRole, setFetchedHasRelationshipRole] =
+    useState(false);
+  const usesParentAssignmentAccess = assignmentAccess !== undefined;
+  const hasRelationshipRole = usesParentAssignmentAccess
+    ? assignmentAccess.hasRelationshipRole
+    : fetchedHasRelationshipRole;
   const canCreateImportantDates = Boolean(isSuperAdmin || hasRelationshipRole);
 
   const [recordType, setRecordType] =
@@ -183,7 +205,7 @@ export default function ImportantDatesCalendarWidget({
   const [adminUsersLoading, setAdminUsersLoading] = useState(false);
 
   useEffect(() => {
-    if (isSuperAdmin || !profile) {
+    if (isSuperAdmin || !profile || usesParentAssignmentAccess) {
       return;
     }
 
@@ -201,11 +223,11 @@ export default function ImportantDatesCalendarWidget({
         }
         const data = await response.json();
         if (!cancelled) {
-          setHasRelationshipRole(Boolean(data.hasRelationshipRole));
+          setFetchedHasRelationshipRole(Boolean(data.hasRelationshipRole));
         }
       } catch {
         if (!cancelled) {
-          setHasRelationshipRole(false);
+          setFetchedHasRelationshipRole(false);
         }
       }
     })();
@@ -213,7 +235,7 @@ export default function ImportantDatesCalendarWidget({
     return () => {
       cancelled = true;
     };
-  }, [isSuperAdmin, profile]);
+  }, [isSuperAdmin, profile, usesParentAssignmentAccess]);
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
@@ -772,6 +794,9 @@ export default function ImportantDatesCalendarWidget({
       <AddImportantDateFromCalendarModal
         isOpen={isAddModalOpen}
         isSuperAdmin={isSuperAdmin}
+        assignments={
+          usesParentAssignmentAccess ? assignmentAccess.assignments : undefined
+        }
         onClose={() => setIsAddModalOpen(false)}
         onCreated={() => setRetryToken((value) => value + 1)}
       />

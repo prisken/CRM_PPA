@@ -1577,10 +1577,10 @@ Per merge (pairwise step or full `mergeClients` call), in a **single Prisma tran
 |--------|------|------|-------------|
 | GET | `/api/dashboard/standard` | Any authenticated user (Bearer or session) | **Legacy** monolithic payload — loads shared context once, then all widget builders in parallel (tests/backward compatibility). Live UI uses per-widget routes |
 | GET | `/api/dashboard/widgets/assigned-clients` | Bearer or session | Assigned clients table data |
-| GET | `/api/dashboard/widgets/open-tasks` | Bearer or session | Open tasks for current user on assigned clients |
+| GET | `/api/dashboard/widgets/open-tasks` | Bearer or session | Open tasks for current user on assigned clients. DB `take` **20**. Payload category `dashboard-widget` (50KB warn) |
 | GET | `/api/dashboard/widgets/activity-feed` | Bearer or session | Grouped recent activity (~15 items) on assigned clients |
 | GET | `/api/dashboard/widgets/performance-metrics` | Bearer or session | `hasAnyAssignment`, `performanceMetrics` (incl. `mySecuredCommission` with role-pool splits) |
-| GET | `/api/dashboard/widgets/deal-participation` | Bearer or session | Deals where current user is a participant |
+| GET | `/api/dashboard/widgets/deal-participation` | Bearer or session | Deals where current user is a participant (up to **20** after status sort). Payload category `dashboard-widget` |
 | GET | `/api/dashboard/widgets/important-dates-calendar` | Bearer or session | Important Dates month/range events (see Important Dates section) |
 | GET | `/api/dashboard/superadmin` | Super admin (Bearer or session) | System-wide grouped recent activity (last ~100 items) |
 | GET | `/api/me/assignments` | Any authenticated user (Bearer or session) | User's client assignments. Returns `roles`, `hasAnyAssignment`, `hasDoctorRole`, `hasRelationshipRole`, and per-assignment `clientStatus` (for calendar create picker) |
@@ -2038,7 +2038,7 @@ See `docs/deal-participant-migration.md` for full migration runbook.
 
 **Command palette:** `⌘K` / `Ctrl+K` opens global client search (`CommandPalette` via `Providers.tsx`). Enabled on `/dashboard`, `/admin/*`, `/clients/*`, `/my-statements`.
 
-**Data loading:** Page shell (header + widget grid) renders immediately once profile is ready. Each widget fetches its own endpoint **in parallel**; dimension-matched **skeleton loaders** display until data arrives. Also fetches `/api/me/assignments` for doctor-role visibility (non-blocking).
+**Data loading:** Page shell (header + widget grid) renders immediately once profile is ready. Each widget fetches its own endpoint **in parallel**; dimension-matched **skeleton loaders** display until data arrives. Fetches `/api/me/assignments` once for doctor/relationship flags and passes assignment bootstrap into `ImportantDatesCalendarWidget` (avoids a second assignments round-trip on standard dashboard).
 
 **Refresh:** `AddLeadModal` `onCreated` soft-refetches only assigned clients + recent activity (lead create auto-assigns RELATIONSHIP; no deals/dates/returnables). Other widgets stay as loaded.
 

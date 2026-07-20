@@ -36,6 +36,11 @@ type AddImportantDateFromCalendarModalProps = {
   isSuperAdmin: boolean;
   /** Prefill date (YYYY-MM-DD) when opening from calendar. */
   initialDate?: string;
+  /**
+   * When provided (standard dashboard), skip `/api/me/assignments` and use
+   * these RELATIONSHIP-capable owner options from the page bootstrap.
+   */
+  assignments?: AssignmentOption[];
   onClose: () => void;
   onCreated: () => void;
 };
@@ -64,6 +69,7 @@ export default function AddImportantDateFromCalendarModal({
   isOpen,
   isSuperAdmin,
   initialDate,
+  assignments,
   onClose,
   onCreated,
 }: AddImportantDateFromCalendarModalProps) {
@@ -76,6 +82,7 @@ export default function AddImportantDateFromCalendarModal({
       key={`${initialDate ?? 'today'}-${isSuperAdmin ? 'sa' : 'std'}`}
       isSuperAdmin={isSuperAdmin}
       initialDate={initialDate}
+      initialAssignments={assignments}
       onClose={onClose}
       onCreated={onCreated}
     />
@@ -85,11 +92,13 @@ export default function AddImportantDateFromCalendarModal({
 function AddImportantDateFromCalendarModalInner({
   isSuperAdmin,
   initialDate,
+  initialAssignments,
   onClose,
   onCreated,
 }: {
   isSuperAdmin: boolean;
   initialDate?: string;
+  initialAssignments?: AssignmentOption[];
   onClose: () => void;
   onCreated: () => void;
 }) {
@@ -98,8 +107,12 @@ function AddImportantDateFromCalendarModalInner({
   const [ownerQuery, setOwnerQuery] = useState('');
   const [searchResults, setSearchResults] = useState<ClientSearchResult[]>([]);
   const [searchLoading, setSearchLoading] = useState(false);
-  const [assignments, setAssignments] = useState<AssignmentOption[]>([]);
-  const [assignmentsLoading, setAssignmentsLoading] = useState(false);
+  const [assignments, setAssignments] = useState<AssignmentOption[]>(
+    () => initialAssignments ?? []
+  );
+  const [assignmentsLoading, setAssignmentsLoading] = useState(
+    () => !isSuperAdmin && initialAssignments === undefined
+  );
   const [label, setLabel] = useState('');
   const [date, setDate] = useState(initialDate || todayYmd());
   const [time, setTime] = useState('');
@@ -110,7 +123,7 @@ function AddImportantDateFromCalendarModalInner({
   const [ownerError, setOwnerError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (isSuperAdmin) {
+    if (isSuperAdmin || initialAssignments !== undefined) {
       return;
     }
 
@@ -147,7 +160,7 @@ function AddImportantDateFromCalendarModalInner({
     return () => {
       cancelled = true;
     };
-  }, [isSuperAdmin]);
+  }, [isSuperAdmin, initialAssignments]);
 
   useEffect(() => {
     if (!isSuperAdmin) {

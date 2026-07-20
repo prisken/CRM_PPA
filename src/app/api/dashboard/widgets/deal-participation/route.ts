@@ -1,7 +1,10 @@
 import { NextResponse } from 'next/server';
 import { getAuthenticatedUserFromRequest } from '@/lib/authHelpers';
 import { timeRouteHandler } from '@/lib/performance';
-import { buildDealParticipationWidget } from '@/lib/standardDashboardWidgets';
+import {
+  buildDealParticipationWidget,
+  DEAL_PARTICIPATION_LIMIT,
+} from '@/lib/standardDashboardWidgets';
 
 export const dynamic = 'force-dynamic';
 
@@ -14,7 +17,13 @@ export async function GET(request: Request) {
   const data = await timeRouteHandler(
     'GET /api/dashboard/widgets/deal-participation',
     () => buildDealParticipationWidget(auth.user.id),
-    { payloadCategory: 'dashboard-widget' }
+    {
+      payloadCategory: 'dashboard-widget',
+      getMeta: (result) => ({
+        dealCount: result.deals.length,
+        take: DEAL_PARTICIPATION_LIMIT,
+      }),
+    }
   );
 
   return NextResponse.json(data);

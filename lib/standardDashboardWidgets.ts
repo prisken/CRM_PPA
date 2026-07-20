@@ -31,6 +31,10 @@ import {
 
 const RECENT_ACTIVITY_LIMIT = 15;
 const DEAL_PARTICIPATION_LIMIT = 20;
+/** Matches prior in-memory slice; applied at DB `take`. */
+const OPEN_TASKS_LIMIT = 20;
+
+export { DEAL_PARTICIPATION_LIMIT, OPEN_TASKS_LIMIT };
 
 const DEAL_STATUS_SORT_ORDER: Record<DealStatus, number> = {
   [DealStatus.WON]: 0,
@@ -257,64 +261,62 @@ export async function buildDealParticipationWidget(userId: string) {
   return timeAsync(
     'widget:buildDealParticipationWidget',
     async () => {
-      const participantRows = await prisma.dealParticipant.findMany({
-        where: { userId },
+      // Bound at Deal level (not participant rows) so multi-role deals stay complete.
+      const dealRows = await prisma.deal.findMany({
+        where: {
+          participants: {
+            some: { userId },
+          },
+        },
         select: {
-          role: true,
-          commissionPercent: true,
-          commissionAmount: true,
-          isCommissionable: true,
-          deal: {
+          id: true,
+          name: true,
+          status: true,
+          dealType: true,
+          updatedAt: true,
+          totalCommission: true,
+          clientId: true,
+          client: {
             select: {
-              id: true,
               name: true,
-              status: true,
-              dealType: true,
-              updatedAt: true,
-              totalCommission: true,
-              clientId: true,
-              client: {
-                select: {
-                  name: true,
-                  company: true,
-                },
-              },
+              company: true,
+            },
+          },
+          participants: {
+            where: { userId },
+            select: {
+              role: true,
+              commissionPercent: true,
+              commissionAmount: true,
+              isCommissionable: true,
             },
           },
         },
+        // Candidate pool for status-priority sort; final slice keeps UI limit.
+        orderBy: { updatedAt: 'desc' },
+        take: DEAL_PARTICIPATION_LIMIT * 5,
       });
 
-      if (participantRows.length === 0) {
+      if (dealRows.length === 0) {
         return { deals: [] };
       }
 
-      type DealParticipationGroup = {
-        dealId: string;
-        dealName: string;
-        clientId: string;
-        clientName: string;
-        status: DealStatus;
-        dealType: string;
-        updatedAt: Date;
-        myRoles: Set<DealParticipantRole>;
-        myCommissionPercent: number;
-        myCommissionAmount: number;
-      };
+      const deals = dealRows
+        .map((deal) => {
+          let myCommissionPercent = 0;
+          let myCommissionAmount = 0;
+          const myRoles = new Set<DealParticipantRole>();
 
-      const groupedDeals = new Map<string, DealParticipationGroup>();
+          for (const row of deal.participants) {
+            myRoles.add(row.role);
+            myCommissionPercent += Number(row.commissionPercent);
+            myCommissionAmount += calculateDealParticipantAmount(
+              deal.totalCommission,
+              row
+            );
+          }
 
-      for (const row of participantRows) {
-        const deal = row.deal;
-        const existing = groupedDeals.get(deal.id);
-
-        const participantAmount = calculateDealParticipantAmount(
-          deal.totalCommission,
-          row
-        );
-        const participantPercent = Number(row.commissionPercent);
-
-        if (!existing) {
-          groupedDeals.set(deal.id, {
+          return {
             dealId: deal.id,
             dealName: deal.name,
             clientId: deal.clientId,
@@ -322,23 +324,11 @@ export async function buildDealParticipationWidget(userId: string) {
             status: deal.status,
             dealType: deal.dealType,
             updatedAt: deal.updatedAt,
-            myRoles: new Set([row.role]),
-            myCommissionPercent: participantPercent,
-            myCommissionAmount: participantAmount,
-          });
-          continue;
-        }
-
-        existing.myRoles.add(row.role);
-        existing.myCommissionPercent += participantPercent;
-        existing.myCommissionAmount += participantAmount;
-
-        if (deal.updatedAt > existing.updatedAt) {
-          existing.updatedAt = deal.updatedAt;
-        }
-      }
-
-      const deals = Array.from(groupedDeals.values())
+            myRoles,
+            myCommissionPercent,
+            myCommissionAmount,
+          };
+        })
         .sort((left, right) => {
           const statusDiff =
             DEAL_STATUS_SORT_ORDER[left.status] -
@@ -368,6 +358,7 @@ export async function buildDealParticipationWidget(userId: string) {
     (result) => ({
       userId,
       dealCount: result.deals.length,
+      take: DEAL_PARTICIPATION_LIMIT,
     })
   );
 }
@@ -402,6 +393,7 @@ export async function buildOpenTasksWidget(
           },
         },
         orderBy: [{ dueDate: 'asc' }, { createdAt: 'asc' }],
+        take: OPEN_TASKS_LIMIT,
       });
 
       return {
@@ -417,6 +409,7 @@ export async function buildOpenTasksWidget(
     (result) => ({
       userId,
       taskCount: result.openTasks.length,
+      take: OPEN_TASKS_LIMIT,
     })
   );
 }

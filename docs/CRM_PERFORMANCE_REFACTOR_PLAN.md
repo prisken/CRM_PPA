@@ -83,7 +83,7 @@ Confirmed against `prisma/schema.prisma` + migrations (July 21, 2026):
 | **Client 360 refresh** | Typed slice keys + `refreshClient360Slices`; details skip workspace; stage/merge/archive/team still `all` | `client360Refresh.tsx`, `Client360PageClient` |
 | **Client 360 deals** | Slim list (`DealListItem`, no notes); full detail on `GET …/deals/[dealId]` | `listClientDealsForClient360`, `getClientDealDetail` |
 | **Admin / dashboard commission** | Hydrate WON deals + participants (cached 10 min for admin; per-request for standard context) | `adminAnalyticsCache`, `fetchWonDealsWithParticipants*`, `standardDashboardContext` |
-| **Dashboard widgets** | Unbounded findMany then `.slice(0, 20)` (deal participation); open tasks lack DB `take`; **duplicate** `/api/me/assignments` (page + calendar) | `buildDealParticipationWidget`, `buildOpenTasksWidget`, `ImportantDatesCalendarWidget` |
+| **Dashboard widgets** | Open-tasks / deal-participation use DB `take` (20). Standard dashboard passes assignments into calendar (no duplicate `/api/me/assignments`) | `buildOpenTasksWidget`, `buildDealParticipationWidget`, `StandardUserDashboardPage` |
 | **Strategy Planner** | Full plan include for every view (fat DTO); mega-components remain | `strategyPlanDetailInclude`, `StrategyPlanDetailView`, `StrategyPlannerBoard` |
 | **Background jobs (ops)** | Durable queue exists, but **production/staging must run** `npm run jobs:process` or `POST /api/tasks/process-background-jobs` or PENDING rows sit | ops / cron / runbook |
 | **Legacy paths** | Old dashboard monolith routes; `Strategy`/`Document` models | Docs known limitations |
@@ -98,7 +98,7 @@ Ordered by leverage (final performance review). No new measurements invented —
 |-------|------|---------|
 | **1** | **LCC duplicate optimization + SQL pagination preparation** | ✅ Phase 1: candidate peer lookup. ✅ Phase A (partial): Prisma `skip`/`take` + `lastModified` order when post-filters idle; fallback path for dup/needsAttention/latest-source. Still open: precompute attention/dup flags for full SQL path |
 | **2** | **Client 360 scoped refresh + deal summary DTO** | ✅ Slice refresh controller + details save migration. Still open: team/stage stay on `all`; deal summary DTO; avoid RSC on pure client slices |
-| **3** | **Dashboard `take` + assignment dedupe** | DB `take` on open-tasks / deal-participation; pass assignments into Important Dates calendar (kill second `/api/me/assignments`) |
+| **3** | **Dashboard `take` + assignment dedupe** | ✅ DB `take` on open-tasks / deal-participation (20). ✅ Standard dashboard passes assignment bootstrap into Important Dates calendar / add-date modal |
 | **4** | **Admin pipeline bounded API** | Server status/search filters + `limit`/cursor; stop unbounded all-clients hydrate |
 | **5** | **Jobs processing ops** | Ensure staging/prod cron or scheduled `jobs:process`; log/alert PENDING/FAILED; runbook for replay |
 | **6** | **Re-baseline timings** | Re-run `PERF_LOGGING_ENABLED` + `profile-api-routes` (and extend coverage: LCC, preview, pipeline, Client 360 refresh, strategy GET, search, calendar); update UI reference June 24 table |
@@ -118,7 +118,7 @@ Use `PERF_LOGGING_ENABLED=true` and extend `[perf]` tags where missing (Client 3
 | Client 360 RSC (`/clients/[id]`) | Full core+deals+hierarchy on every `router.refresh` | Targeted revalidation / client-only widget refresh |
 | `GET /api/clients/[id]/strategy-plans/[planId]` | Deep include (steps, expenses, milestones, sources, deals) | View-specific selects (board vs list vs projection) |
 | `GET /api/dashboard/widgets/*` | Some widgets still hydrate large deal graphs; missing DB `take` | Prefer SQL aggregates; cap list widgets at DB |
-| `GET /api/me/assignments` | Called twice on dashboard load | Share from page → calendar props |
+| `GET /api/me/assignments` | Standard `/dashboard` loads once and passes into calendar | Admin Schedule still self-fetches only if needed (super admin skips) |
 | Admin funnel/KPIs/leaderboards | Cold miss hydrates all/YTD WON deals | Keep cache; add summary tables or narrower aggregates |
 | `GET /api/admin/all-commission-returnable` | Full reconciliation list (~220–250 ms warm, June 24 doc) | Pagination + filters server-side |
 | Activity feed APIs | Assignment-scoped correlated SQL — OK at moderate scale | Monitor; ensure LIMIT always applied |
@@ -289,10 +289,10 @@ GROUP BY client_id, role HAVING COUNT(*) > 1;
 
 **Current (docs):** Per-widget APIs; shared `standardDashboardContext`; SQL deal aggregates; skeletons on standard dashboard; admin analytics cached 600s.
 
-### Phase A — Quick wins — **OPEN** (architecture shipped; caps/dedupe not)
+### Phase A — Quick wins — **PARTIAL**
 
-1. Deduplicate `/api/me/assignments` (page loads once; pass CLIENT/LEAD visibility into `ImportantDatesCalendarWidget`).
-2. Add `take` to `buildDealParticipationWidget` and `buildOpenTasksWidget`.
+1. ✅ Deduplicate `/api/me/assignments` on standard dashboard (page → calendar + add-date modal).
+2. ✅ Add `take` to `buildDealParticipationWidget` and `buildOpenTasksWidget` (limit 20; deal participation uses Deal `take` candidate pool then status sort).
 3. Ensure all live widgets use shared context or aggregates — no accidental standalone full hydrates in hot paths.
 
 ### Phase B — Admin surfaces — **OPEN** (pipeline unbounded)
@@ -452,9 +452,9 @@ Prefer **§3 Next Sprint Hot Paths** for the immediate sprint. Waves below remai
 - [x] Migration: `Client(status)` (and composites) — **phase 3 shipped**
 - [x] Migration: `Notification(recipientUserId, isRead, …)` — **phase 3 shipped**
 - [x] Migration: `Client(company)`, `Task(clientId)`, `ClientDocument(clientId)`, source/participant composites + `pg_trgm` — **phase 3 shipped**
-- [ ] Cap deal-participation and open-tasks queries with `take` — **OPEN**
+- [x] Cap deal-participation and open-tasks queries with `take` — **shipped** (limit 20)
 - [ ] Cap hierarchy colleagues with `take` — **OPEN**
-- [ ] Deduplicate dashboard `/api/me/assignments` — **OPEN**
+- [x] Deduplicate dashboard `/api/me/assignments` — **PARTIAL** (standard `/dashboard`; admin calendar is super-admin and skips)
 
 ### Wave 2 — Mobile viewport & code-splitting (low risk)
 
@@ -576,7 +576,7 @@ Prefer **§3 Next Sprint Hot Paths** for the immediate sprint. Waves below remai
 |-------------|--------|
 | Phase 1–3 indexes | **Shipped** (W1 migrations) |
 | BackgroundJob durability | **Shipped** (W8 code); ops cron still open |
-| Dashboard over-fetch / duplicate assignments | Next sprint #3 / W1 remaining |
+| Dashboard over-fetch / duplicate assignments | ✅ Next sprint #3 shipped (take + standard dashboard dedupe) |
 | Modal `dvh` + DealEdit dynamic import | W2 remaining |
 | Client 360 `router.refresh` fan-out + deals DTO | Next sprint #2 / W3 |
 | LCC post-filter load-all + attention sort not in SQL | Next sprint #1 remaining / W4 |
