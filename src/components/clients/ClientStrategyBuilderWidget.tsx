@@ -37,8 +37,6 @@ type StrategyPlanSummary = StrategyPlanEditValues & {
 type ClientStrategyBuilderWidgetProps = {
   clientId: string;
   canManage?: boolean;
-  /** When bumped by parent (Client 360 refresh), reload plan list / open detail. */
-  refreshKey?: number;
 };
 
 const STATUS_LABELS: Record<string, string> = {
@@ -203,7 +201,6 @@ function StrategyPlanDetailSkeleton({
 export default memo(function ClientStrategyBuilderWidget({
   clientId,
   canManage = false,
-  refreshKey = 0,
 }: ClientStrategyBuilderWidgetProps) {
   const { density } = useDisplayDensity();
   const listSpacingClass = getTightStackSpacingClass(density);
@@ -273,7 +270,7 @@ export default memo(function ClientStrategyBuilderWidget({
     return () => {
       cancelled = true;
     };
-  }, [clientId, plansReloadKey, refreshKey]);
+  }, [clientId, plansReloadKey]);
 
   useEffect(() => {
     if (!selectedPlanId) {
@@ -330,7 +327,7 @@ export default memo(function ClientStrategyBuilderWidget({
     return () => {
       cancelled = true;
     };
-  }, [clientId, selectedPlanId, detailReloadKey, refreshKey]);
+  }, [clientId, selectedPlanId, detailReloadKey]);
 
   function reloadPlans() {
     setPlansReloadKey((current) => current + 1);

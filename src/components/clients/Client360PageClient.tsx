@@ -373,8 +373,7 @@ export default function Client360PageClient({
             currentUser={workspaceCurrentUser}
             assignedUsers={client.assignedUsers}
             canPostNote={hasClientAccess}
-            refreshKey={refreshKey}
-            onMutationSuccess={triggerDataRefresh}
+            pageRefreshKey={refreshKey}
             strategyAccess={strategyAccess}
           />
         </div>

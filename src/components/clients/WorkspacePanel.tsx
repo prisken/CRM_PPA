@@ -21,8 +21,11 @@ type WorkspacePanelProps = {
   currentUser: StrategyCurrentUser | null;
   assignedUsers: { user_id: string; name: string; role: string }[];
   canPostNote?: boolean;
-  refreshKey?: number;
-  onMutationSuccess?: () => void;
+  /**
+   * Bumped by Client 360 page-level refreshes (stage/merge/archive/team/details).
+   * Invalidates workspace tab caches only — does not come from tab mutations.
+   */
+  pageRefreshKey?: number;
   strategyAccess?: {
     canView: boolean;
     canManage: boolean;
@@ -36,6 +39,7 @@ const BASE_TABS = [
 ] as const;
 
 type TabId = (typeof BASE_TABS)[number]['id'];
+type WorkspaceApiTab = 'strategy-tasks' | 'activity-notes';
 
 type StrategyTasksData = {
   strategyText: string;
@@ -43,14 +47,12 @@ type StrategyTasksData = {
 };
 
 type TabDataCache = {
-  refreshKey: number;
+  pageRefreshKey: number;
   strategyTasks: StrategyTasksData | null;
   activityNotes: ActivityLogEntry[] | null;
 };
 
-function isWorkspaceApiTab(
-  tabId: TabId
-): tabId is 'strategy-tasks' | 'activity-notes' {
+function isWorkspaceApiTab(tabId: TabId): tabId is WorkspaceApiTab {
   return tabId === 'strategy-tasks' || tabId === 'activity-notes';
 }
 
@@ -74,8 +76,7 @@ export default function WorkspacePanel({
   currentUser,
   assignedUsers,
   canPostNote = false,
-  refreshKey = 0,
-  onMutationSuccess,
+  pageRefreshKey = 0,
   strategyAccess = { canView: false, canManage: false },
 }: WorkspacePanelProps) {
   const { density } = useDisplayDensity();
@@ -101,8 +102,10 @@ export default function WorkspacePanel({
   const [activityLog, setActivityLog] = useState<ActivityLogEntry[]>([]);
   const [loadingTab, setLoadingTab] = useState<TabId | null>('strategy-tasks');
   const [error, setError] = useState<string | null>(null);
+  const [strategyTasksReloadKey, setStrategyTasksReloadKey] = useState(0);
+  const [activityReloadKey, setActivityReloadKey] = useState(0);
   const tabDataCacheRef = useRef<TabDataCache>({
-    refreshKey: -1,
+    pageRefreshKey: -1,
     strategyTasks: null,
     activityNotes: null,
   });
@@ -153,8 +156,8 @@ export default function WorkspacePanel({
     }
 
     const cache = tabDataCacheRef.current;
-    if (cache.refreshKey !== refreshKey) {
-      cache.refreshKey = refreshKey;
+    if (cache.pageRefreshKey !== pageRefreshKey) {
+      cache.pageRefreshKey = pageRefreshKey;
       cache.strategyTasks = null;
       cache.activityNotes = null;
     }
@@ -226,16 +229,29 @@ export default function WorkspacePanel({
     return () => {
       cancelled = true;
     };
-  }, [resolvedTab, clientId, loadedTabs, refreshKey]);
+  }, [
+    resolvedTab,
+    clientId,
+    loadedTabs,
+    pageRefreshKey,
+    strategyTasksReloadKey,
+    activityReloadKey,
+  ]);
 
   const handleTabChange = useCallback((tabId: TabId) => {
     setActiveTab(tabId);
     setLoadedTabs((current) => new Set([...current, tabId]));
   }, []);
 
-  const handleMutationSuccess = useCallback(() => {
-    onMutationSuccess?.();
-  }, [onMutationSuccess]);
+  const reloadStrategyTasksTab = useCallback(() => {
+    tabDataCacheRef.current.strategyTasks = null;
+    setStrategyTasksReloadKey((current) => current + 1);
+  }, []);
+
+  const reloadActivityTab = useCallback(() => {
+    tabDataCacheRef.current.activityNotes = null;
+    setActivityReloadKey((current) => current + 1);
+  }, []);
 
   const activityLogCurrentUser = useMemo(
     () =>
@@ -327,7 +343,6 @@ export default function WorkspacePanel({
             <ClientStrategyBuilderWidget
               clientId={clientId}
               canManage={strategyAccess.canManage}
-              refreshKey={refreshKey}
             />
           </div>
         ) : null}
@@ -342,7 +357,7 @@ export default function WorkspacePanel({
               tasks={strategyTasksData?.tasks ?? []}
               currentUser={currentUser}
               assignedUsers={assignedUsers}
-              onUpdated={handleMutationSuccess}
+              onUpdated={reloadStrategyTasksTab}
             />
           ) : (
             <ActivityLog
@@ -350,7 +365,7 @@ export default function WorkspacePanel({
               activityLog={activityLog}
               currentUser={activityLogCurrentUser}
               canPostNote={canPostNote}
-              onNotePosted={handleMutationSuccess}
+              onNotePosted={reloadActivityTab}
             />
           )
         ) : null}
