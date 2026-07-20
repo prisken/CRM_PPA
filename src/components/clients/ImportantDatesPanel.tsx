@@ -1,7 +1,8 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ImportantDate } from '@/components/clients/ClientDetailsWidget';
+import { useClient360RefreshOptional } from '@/components/clients/client360Refresh';
 import {
   formatImportantDateCardParts,
 } from '@/components/clients/importantDateDisplay';
@@ -190,6 +191,11 @@ export default function ImportantDatesPanel({
     }
   }, [initialDates]);
 
+  const client360Refresh = useClient360RefreshOptional();
+  const importantDatesSliceKey =
+    client360Refresh?.sliceKeys.importantDates ?? 0;
+  const skipImportantDatesSliceEffectRef = useRef(true);
+
   const loadDates = useCallback(async () => {
     setIsLoading(true);
     setError(null);
@@ -217,6 +223,15 @@ export default function ImportantDatesPanel({
       setIsLoading(false);
     }
   }, [ownerId, ownerKind]);
+
+  useEffect(() => {
+    if (skipImportantDatesSliceEffectRef.current) {
+      skipImportantDatesSliceEffectRef.current = false;
+      return;
+    }
+
+    void loadDates();
+  }, [importantDatesSliceKey, loadDates]);
 
   useEffect(() => {
     if (initialDates !== undefined) {

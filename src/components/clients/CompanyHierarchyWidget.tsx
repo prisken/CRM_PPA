@@ -1,7 +1,8 @@
 'use client';
 
 import Link from 'next/link';
-import { memo, useEffect, useMemo, useState } from 'react';
+import { memo, useEffect, useMemo, useRef, useState } from 'react';
+import { useClient360RefreshOptional } from '@/components/clients/client360Refresh';
 import SectionCard from '@/components/ui/SectionCard';
 import StatusPill from '@/components/ui/StatusPill';
 import { authenticatedFetch } from '@/lib/authenticatedFetch';
@@ -75,6 +76,10 @@ export default memo(function CompanyHierarchyWidget({
     setHierarchyState(hierarchy);
   }, [hierarchy]);
 
+  const client360Refresh = useClient360RefreshOptional();
+  const hierarchySliceKey = client360Refresh?.sliceKeys.hierarchy ?? 0;
+  const skipHierarchySliceEffectRef = useRef(true);
+
   const hasColleagues = hierarchyState.colleagues.length > 0;
   const companyLabel = hierarchyState.company?.trim() || 'No company set';
   const visibleColleagues = showAllColleagues
@@ -126,6 +131,17 @@ export default memo(function CompanyHierarchyWidget({
       setIsRefreshing(false);
     }
   }
+
+  useEffect(() => {
+    if (skipHierarchySliceEffectRef.current) {
+      skipHierarchySliceEffectRef.current = false;
+      return;
+    }
+
+    void refreshHierarchy().catch(() => {
+      // Keep last known hierarchy; user can retry by reopening / mutating.
+    });
+  }, [hierarchySliceKey]);
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();

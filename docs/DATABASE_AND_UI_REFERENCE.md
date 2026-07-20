@@ -2209,7 +2209,9 @@ Responsive header — stacks on mobile (`flex-col`), horizontal from `sm` up; ac
 
 Unauthenticated users are redirected to `/login`. Missing client → `notFound()`.
 
-**Refresh after mutations:** `router.refresh()` re-runs server fetches; workspace tabs also use `refreshKey` for lazy tab reload.
+**Refresh after mutations:** `refreshClient360Slices([...])` bumps per-slice keys; `core` / `team` / `all` also call `router.refresh()` for RSC props. Workspace tabs reload when the `workspace` slice key changes.
+
+**Refresh coordination:** `Client360RefreshProvider` + `refreshClient360Slices`. Legacy full fan-out: `refreshClient360Slices(['all'])` (stage, merge, archive, team). Details save uses `['core', 'importantDates', 'hierarchy']` (skips workspace).
 
 **Header:** Logo, back to pipeline link, **More actions** menu (super admin: **Merge clients**, **Archive client**), client name, `LeadSourceBadges`, pipeline stage control:
 
@@ -2228,7 +2230,7 @@ Unauthenticated users are redirected to `/login`. Missing client → `notFound()
 - **Archive** — type client name → `POST /api/clients/[id]/archive` (sets `ARCHIVED`, refreshes page)
 - **Permanently Delete** — warning, client name + admin password → `DELETE /api/clients/[id]` (redirects to `/admin#master-pipeline`)
 
-**Refresh coordination:** `triggerDataRefresh()` calls `router.refresh()` plus increments `refreshKey` for workspace tab reloads.
+**Refresh coordination:** see slice refresh above (`refreshClient360Slices`).
 
 **Layout:** Responsive — stacks on mobile (`flex-col`), side-by-side from `md` up (`md:flex-row`, 2:1 ratio)
 

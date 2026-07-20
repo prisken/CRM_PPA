@@ -4,6 +4,7 @@ import { memo, useState } from 'react';
 import ClientDetailsEditModal from '@/components/clients/ClientDetailsEditModal';
 import ImportantDatesPanel from '@/components/clients/ImportantDatesPanel';
 import LeadSourceBadges from '@/components/clients/LeadSourceBadges';
+import { useClient360Refresh } from '@/components/clients/client360Refresh';
 import EmptyMuted from '@/components/ui/EmptyMuted';
 import { useDisplayDensity } from '@/components/ui/DisplayDensityProvider';
 import { getWidgetPaddingClass } from '@/components/ui/displayDensity';
@@ -35,7 +36,6 @@ type ClientDetailsWidgetProps = {
   importantDates: ImportantDate[];
   isSuperAdmin?: boolean;
   isRelationshipSpecialist?: boolean;
-  onMutationSuccess?: () => void;
 };
 
 function DetailField({ label, value }: { label: string; value: string }) {
@@ -101,10 +101,10 @@ export default memo(function ClientDetailsWidget({
   importantDates,
   isSuperAdmin = false,
   isRelationshipSpecialist = false,
-  onMutationSuccess,
 }: ClientDetailsWidgetProps) {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const { density } = useDisplayDensity();
+  const { refreshClient360Slices } = useClient360Refresh();
   const widgetPaddingClass = getWidgetPaddingClass(density);
   const canEditDetails = isSuperAdmin || isRelationshipSpecialist;
   const entityLabel = isLead ? 'Lead' : 'Client';
@@ -206,7 +206,10 @@ export default memo(function ClientDetailsWidget({
           initialImportantDates={importantDates}
           isOpen
           onClose={() => setIsEditModalOpen(false)}
-          onSaved={() => onMutationSuccess?.()}
+          onSaved={() => {
+            // Details + dates (+ company/count may affect hierarchy). Skip workspace.
+            refreshClient360Slices(['core', 'importantDates', 'hierarchy']);
+          }}
         />
       )}
     </>

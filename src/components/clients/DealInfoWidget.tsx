@@ -1,12 +1,13 @@
 'use client';
 
 import { DealParticipantRole } from '@prisma/client';
-import { memo, useEffect, useMemo, useState } from 'react';
+import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import DealEditModal from '@/components/clients/DealEditModal';
 import type {
   AssignedUser,
   CurrentUserInfo,
 } from '@/components/clients/AssignedTeamWidget';
+import { useClient360RefreshOptional } from '@/components/clients/client360Refresh';
 import CompactPill, { type CompactPillTone } from '@/components/ui/CompactPill';
 import { useDisplayDensity } from '@/components/ui/DisplayDensityProvider';
 import { getWidgetPaddingClass } from '@/components/ui/displayDensity';
@@ -484,6 +485,10 @@ export default memo(function DealInfoWidget({
     setDeals(initialDeals);
   }, [initialDeals]);
 
+  const client360Refresh = useClient360RefreshOptional();
+  const dealsSliceKey = client360Refresh?.sliceKeys.deals ?? 0;
+  const skipDealsSliceEffectRef = useRef(true);
+
   const committedValue = useMemo(
     () => calculateCommittedValue(deals),
     [deals]
@@ -525,6 +530,17 @@ export default memo(function DealInfoWidget({
       setIsRefreshing(false);
     }
   }
+
+  useEffect(() => {
+    if (skipDealsSliceEffectRef.current) {
+      skipDealsSliceEffectRef.current = false;
+      return;
+    }
+
+    void refreshDeals().catch(() => {
+      // Error already surfaced via refreshDeals → setError
+    });
+  }, [dealsSliceKey]);
 
   function openCreateModal() {
     setEditingDeal(null);

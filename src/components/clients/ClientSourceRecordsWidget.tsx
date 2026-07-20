@@ -2,6 +2,7 @@
 
 import { memo, useEffect, useMemo, useState } from 'react';
 import LeadSourceBadges from '@/components/clients/LeadSourceBadges';
+import { useClient360RefreshOptional } from '@/components/clients/client360Refresh';
 import SectionCard from '@/components/ui/SectionCard';
 import { useDisplayDensity } from '@/components/ui/DisplayDensityProvider';
 import { getTightStackSpacingClass } from '@/components/ui/displayDensity';
@@ -65,6 +66,9 @@ export default memo(function ClientSourceRecordsWidget({
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showAllRecords, setShowAllRecords] = useState(false);
+  const client360Refresh = useClient360RefreshOptional();
+  const sourceRecordsSliceKey =
+    client360Refresh?.sliceKeys.sourceRecords ?? 0;
 
   useEffect(() => {
     let cancelled = false;
@@ -111,7 +115,7 @@ export default memo(function ClientSourceRecordsWidget({
     return () => {
       cancelled = true;
     };
-  }, [clientId]);
+  }, [clientId, sourceRecordsSliceKey]);
 
   const uniqueSourceLabels = useMemo(
     () => [...new Set(records.map((record) => formatSourceLabel(record.source)))],

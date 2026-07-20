@@ -33,7 +33,7 @@ type WorkspacePanelProps = {
   assignedUsers: { user_id: string; name: string; role: string }[];
   canPostNote?: boolean;
   /**
-   * Bumped by Client 360 page-level refreshes (stage/merge/archive/team/details).
+   * Bumped by Client 360 `workspace` slice refreshes (and `all`).
    * Invalidates workspace tab caches only — does not come from tab mutations.
    */
   pageRefreshKey?: number;

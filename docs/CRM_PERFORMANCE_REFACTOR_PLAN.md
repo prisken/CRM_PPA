@@ -80,7 +80,7 @@ Confirmed against `prisma/schema.prisma` + migrations (July 21, 2026):
 | **Lead Command Center** | Default path: Prisma `skip`/`take` + `lastModified` order. Fallback still load-all for dup / needsAttention / latest-source. Dup flags: candidate peer lookup (not full-table) | `fetchLeadCommandCenterPage`, `loadDuplicateClientIdsForCandidates` |
 | **Lead preview** | Preview API is separate (good), but still runs **full dup scan** on open | `fetchLeadCommandCenterPreview` |
 | **Master Pipeline** | Unbounded `findMany` of all clients; filters in browser | `GET /api/admin/pipeline`, `fetchAdminPipelineClients`, `MasterPipelineView` |
-| **Client 360 refresh** | Every mutation → `router.refresh()` + `refreshKey++` (no scopes) | `Client360PageClient.triggerDataRefresh` |
+| **Client 360 refresh** | Typed slice keys + `refreshClient360Slices`; details skip workspace; stage/merge/archive/team still `all` | `client360Refresh.tsx`, `Client360PageClient` |
 | **Client 360 deals** | All deals × all participants in one payload | `getClient360DealsData`, `dealResponseSelect` |
 | **Admin / dashboard commission** | Hydrate WON deals + participants (cached 10 min for admin; per-request for standard context) | `adminAnalyticsCache`, `fetchWonDealsWithParticipants*`, `standardDashboardContext` |
 | **Dashboard widgets** | Unbounded findMany then `.slice(0, 20)` (deal participation); open tasks lack DB `take`; **duplicate** `/api/me/assignments` (page + calendar) | `buildDealParticipationWidget`, `buildOpenTasksWidget`, `ImportantDatesCalendarWidget` |
@@ -97,7 +97,7 @@ Ordered by leverage (final performance review). No new measurements invented —
 | Order | Task | Outcome |
 |-------|------|---------|
 | **1** | **LCC duplicate optimization + SQL pagination preparation** | ✅ Phase 1: candidate peer lookup. ✅ Phase A (partial): Prisma `skip`/`take` + `lastModified` order when post-filters idle; fallback path for dup/needsAttention/latest-source. Still open: precompute attention/dup flags for full SQL path |
-| **2** | **Client 360 scoped refresh + deal summary DTO** | Split `triggerDataRefresh` scopes; avoid full RSC on aside mutations; list deals without full participant trees (expand on edit) |
+| **2** | **Client 360 scoped refresh + deal summary DTO** | ✅ Slice refresh controller + details save migration. Still open: team/stage stay on `all`; deal summary DTO; avoid RSC on pure client slices |
 | **3** | **Dashboard `take` + assignment dedupe** | DB `take` on open-tasks / deal-participation; pass assignments into Important Dates calendar (kill second `/api/me/assignments`) |
 | **4** | **Admin pipeline bounded API** | Server status/search filters + `limit`/cursor; stop unbounded all-clients hydrate |
 | **5** | **Jobs processing ops** | Ensure staging/prod cron or scheduled `jobs:process`; log/alert PENDING/FAILED; runbook for replay |
@@ -181,12 +181,13 @@ GROUP BY client_id, role HAVING COUNT(*) > 1;
 
 **Current:** Core load then parallel deals + hierarchy (individual loaders); workspace tabs lazy; mutations call full `router.refresh()` via `triggerDataRefresh`. (UI reference still mentions unused `loadClient360PageData()` — see §2 mismatch note.)
 
-### Phase A — Refresh narrowing (high impact, medium risk) — **OPEN**
+### Phase A — Refresh narrowing (high impact, medium risk) — **PARTIAL**
 
-1. Split `triggerDataRefresh` into scopes: `core` | `deals` | `hierarchy` | `workspace` | `strategy` | `all`.
-2. Default aside mutations (details, team, hierarchy) to client refetch of that widget **or** soft state update — avoid full RSC refresh when possible.
-3. Keep `router.refresh()` for stage change, merge, archive, and true server-prop dependencies.
-4. Strategy widget: refetch plans/detail only when strategy mutations succeed — not on every `refreshKey` from unrelated widgets.
+1. ✅ Typed `refreshClient360Slices` + per-slice keys via `Client360RefreshProvider` (`core` | `deals` | `team` | `hierarchy` | `sourceRecords` | `workspace` | `importantDates` | `all`).
+2. ✅ Details save uses `['core', 'importantDates', 'hierarchy']` (no workspace fan-out). Stage / merge / archive / team still `['all']`.
+3. Keep `router.refresh()` for stage change, merge, archive, and true server-prop dependencies (`core`/`team`/`all`).
+4. Strategy widget: still independent of workspace slice; further: only refetch on strategy mutations — **OPEN**.
+5. Still open: migrate team → `['core','team']` (no workspace); deals mutations → `['deals']` only; hierarchy add → `['hierarchy']` only.
 
 ### Phase B — Payload slimming — **OPEN**
 
@@ -464,7 +465,7 @@ Prefer **§3 Next Sprint Hot Paths** for the immediate sprint. Waves below remai
 
 ### Wave 3 — Client 360 refresh & payloads (medium risk)
 
-- [ ] Scoped refresh API in `Client360PageClient` — **OPEN**
+- [x] Scoped refresh API in `Client360PageClient` — **PARTIAL** (`refreshClient360Slices`; details migrated; others still `all`)
 - [ ] Stop strategy refetch on unrelated mutations — **OPEN**
 - [ ] Slim deals list DTO; lazy-load full participants — **OPEN**
 - [ ] Request-scoped access resolution on Client 360 page — **OPEN**

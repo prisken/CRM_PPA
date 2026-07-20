@@ -12,6 +12,10 @@ import ClientSourceRecordsWidget from '@/components/clients/ClientSourceRecordsW
 import LeadSourceBadges from '@/components/clients/LeadSourceBadges';
 import DealInfoWidget, { type ClientDeal } from '@/components/clients/DealInfoWidget';
 import WorkspacePanel from '@/components/clients/WorkspacePanel';
+import {
+  Client360RefreshProvider,
+  useClient360Refresh,
+} from '@/components/clients/client360Refresh';
 import Logo from '@/components/Logo';
 import StatusPill from '@/components/ui/StatusPill';
 import { useDisplayDensity } from '@/components/ui/DisplayDensityProvider';
@@ -69,7 +73,15 @@ type Client360PageClientProps = {
   };
 };
 
-export default function Client360PageClient({
+export default function Client360PageClient(props: Client360PageClientProps) {
+  return (
+    <Client360RefreshProvider>
+      <Client360PageClientInner {...props} />
+    </Client360RefreshProvider>
+  );
+}
+
+function Client360PageClientInner({
   clientId,
   initialClient,
   initialDeals,
@@ -81,9 +93,10 @@ export default function Client360PageClient({
   const router = useRouter();
   const { profile } = useUserProfile();
   const { density } = useDisplayDensity();
+  const { sliceKeys, refreshClient360Slices } = useClient360Refresh();
   const asideSpacingClass = getStackSpacingClass(density);
-  // Mirror server props directly — mutations refresh via router.refresh(), which
-  // re-renders with new initial* props (no local copies / sync effect).
+  // Mirror server props directly — core/team/`all` slices call router.refresh(),
+  // which re-renders with new initial* props (no local copies / sync effect).
   const client = initialClient;
   const deals = initialDeals;
   const hierarchy = initialHierarchy;
@@ -94,12 +107,11 @@ export default function Client360PageClient({
   const [isMergePickerOpen, setIsMergePickerOpen] = useState(false);
   const [isMergeModalOpen, setIsMergeModalOpen] = useState(false);
   const [mergeClients, setMergeClients] = useState<DuplicateReviewClient[]>([]);
-  const [refreshKey, setRefreshKey] = useState(0);
 
+  /** Legacy full refresh — every slice key + router.refresh(). */
   const triggerDataRefresh = useCallback(() => {
-    setRefreshKey((prevKey) => prevKey + 1);
-    router.refresh();
-  }, [router]);
+    refreshClient360Slices(['all']);
+  }, [refreshClient360Slices]);
 
   async function handleStageChange(newStatus: string) {
     if (!client || newStatus === client.status) {
@@ -373,7 +385,7 @@ export default function Client360PageClient({
             currentUser={workspaceCurrentUser}
             assignedUsers={client.assignedUsers}
             canPostNote={hasClientAccess}
-            pageRefreshKey={refreshKey}
+            pageRefreshKey={sliceKeys.workspace}
             strategyAccess={strategyAccess}
           />
         </div>
@@ -397,7 +409,6 @@ export default function Client360PageClient({
             importantDates={client.importantDates}
             isSuperAdmin={isSuperAdmin}
             isRelationshipSpecialist={isRelationshipSpecialist}
-            onMutationSuccess={triggerDataRefresh}
           />
           {dealAccess.canView && (
             <DealInfoWidget
