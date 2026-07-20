@@ -219,7 +219,7 @@ function mapTasks(
 }
 
 export function buildStrategyTasksWorkspace(
-  client: Prisma.ClientGetPayload<{ include: typeof client360StrategyTasksInclude }>
+  client: Prisma.ClientGetPayload<{ select: typeof client360StrategyTasksSelect }>
 ) {
   return {
     tab: 'strategy-tasks' as const,
@@ -229,7 +229,7 @@ export function buildStrategyTasksWorkspace(
 }
 
 export function buildActivityNotesWorkspace(
-  client: Prisma.ClientGetPayload<{ include: typeof client360ActivityInclude }>
+  client: Prisma.ClientGetPayload<{ select: typeof client360ActivitySelect }>
 ) {
   return {
     tab: 'activity-notes' as const,
@@ -330,63 +330,111 @@ export function buildClient360Response(client: ClientWithRelations) {
   };
 }
 
-export const client360CoreInclude = {
-  clientAssignments: {
-    select: {
-      assignmentId: true,
-      role: true,
-      user: {
-        select: { id: true, name: true, email: true },
-      },
-    },
+const client360AssignmentSelect = {
+  assignmentId: true,
+  role: true,
+  user: {
+    select: { id: true, name: true, email: true },
   },
+} as const;
+
+const client360DocumentSelect = {
+  id: true,
+  fileName: true,
+  url: true,
+  uploadedAt: true,
+} as const;
+
+const client360StrategySelect = {
+  id: true,
+  name: true,
+  description: true,
+  status: true,
+  updatedAt: true,
+} as const;
+
+/** Scalars required by buildClient360CoreResponse / buildClient360Response. */
+const client360CoreScalarSelect = {
+  id: true,
+  name: true,
+  company: true,
+  contactInfo: true,
+  email: true,
+  phone: true,
+  leadSource: true,
+  roleInCompany: true,
+  employeeCount: true,
+  expectations: true,
+  importantDates: true,
+  equity: true,
+  status: true,
+  pendingNotifications: true,
+  createdAt: true,
+  lastModified: true,
+  strategyText: true,
+} as const;
+
+/**
+ * Full Client 360 core API select (assignments, contacts, dates, documents, legacy strategies).
+ * Prefer this over include so unused Client scalars are not fetched.
+ */
+export const client360CoreSelect = {
+  ...client360CoreScalarSelect,
+  clientAssignments: { select: client360AssignmentSelect },
   importantDateRecords: {
-    orderBy: { scheduledAt: 'asc' },
+    orderBy: { scheduledAt: 'asc' as const },
     select: importantDateRecordSelect,
   },
   contacts: {
-    orderBy: [{ isPrimary: 'desc' }, { sortOrder: 'asc' }],
+    orderBy: [{ isPrimary: 'desc' as const }, { sortOrder: 'asc' as const }],
     select: clientContactSelect,
   },
   documents: {
-    orderBy: { uploadedAt: 'desc' },
-    select: {
-      id: true,
-      fileName: true,
-      url: true,
-      uploadedAt: true,
-    },
+    orderBy: { uploadedAt: 'desc' as const },
+    select: client360DocumentSelect,
   },
   strategies: {
-    select: {
-      id: true,
-      name: true,
-      description: true,
-      status: true,
-      updatedAt: true,
-    },
-    orderBy: { updatedAt: 'desc' },
+    select: client360StrategySelect,
+    orderBy: { updatedAt: 'desc' as const },
   },
+} satisfies Prisma.ClientSelect;
+
+/** Lighter select for Client 360 server page load (no documents/strategies). */
+export const client360PageCoreSelect = {
+  ...client360CoreScalarSelect,
+  clientAssignments: client360CoreSelect.clientAssignments,
+  importantDateRecords: client360CoreSelect.importantDateRecords,
+  contacts: client360CoreSelect.contacts,
+} satisfies Prisma.ClientSelect;
+
+/** @deprecated Prefer client360CoreSelect. Kept for callers still using include. */
+export const client360CoreInclude = {
+  clientAssignments: client360CoreSelect.clientAssignments,
+  importantDateRecords: client360CoreSelect.importantDateRecords,
+  contacts: client360CoreSelect.contacts,
+  documents: client360CoreSelect.documents,
+  strategies: client360CoreSelect.strategies,
 } satisfies Prisma.ClientInclude;
 
-/** Lighter include for Client 360 server page load (no documents/strategies). */
+/** @deprecated Prefer client360PageCoreSelect. */
 export const client360PageCoreInclude = {
-  clientAssignments: client360CoreInclude.clientAssignments,
-  importantDateRecords: client360CoreInclude.importantDateRecords,
-  contacts: client360CoreInclude.contacts,
+  clientAssignments: client360CoreSelect.clientAssignments,
+  importantDateRecords: client360CoreSelect.importantDateRecords,
+  contacts: client360CoreSelect.contacts,
 } satisfies Prisma.ClientInclude;
 
-export const client360StrategyTasksInclude = {
+export const client360StrategyTasksSelect = {
+  strategyText: true,
   strategies: {
     select: {
       description: true,
       updatedAt: true,
     },
-    orderBy: { updatedAt: 'desc' },
+    orderBy: { updatedAt: 'desc' as const },
     take: 1,
   },
   tasks: {
-    orderBy: [{ status: 'asc' }, { dueDate: 'asc' }],
+    orderBy: [{ status: 'asc' as const }, { dueDate: 'asc' as const }],
     select: {
       id: true,
       title: true,
@@ -400,11 +448,17 @@ export const client360StrategyTasksInclude = {
       },
     },
   },
+} satisfies Prisma.ClientSelect;
+
+/** @deprecated Prefer client360StrategyTasksSelect. */
+export const client360StrategyTasksInclude = {
+  strategies: client360StrategyTasksSelect.strategies,
+  tasks: client360StrategyTasksSelect.tasks,
 } satisfies Prisma.ClientInclude;
 
-export const client360ActivityInclude = {
+export const client360ActivitySelect = {
   interactions: {
-    orderBy: { date: 'desc' },
+    orderBy: { date: 'desc' as const },
     take: CLIENT360_ACTIVITY_SOURCE_LIMIT,
     select: {
       id: true,
@@ -418,7 +472,7 @@ export const client360ActivityInclude = {
     },
   },
   activityLogs: {
-    orderBy: { createdAt: 'desc' },
+    orderBy: { createdAt: 'desc' as const },
     take: CLIENT360_ACTIVITY_SOURCE_LIMIT,
     select: {
       id: true,
@@ -430,76 +484,102 @@ export const client360ActivityInclude = {
       },
     },
   },
+} satisfies Prisma.ClientSelect;
+
+/** @deprecated Prefer client360ActivitySelect. */
+export const client360ActivityInclude = {
+  interactions: client360ActivitySelect.interactions,
+  activityLogs: client360ActivitySelect.activityLogs,
 } satisfies Prisma.ClientInclude;
 
 export const client360Include = {
   clientAssignments: {
-    include: {
-      user: {
-        select: { id: true, name: true, email: true },
-      },
-    },
+    select: client360AssignmentSelect,
   },
   importantDateRecords: {
-    orderBy: { scheduledAt: 'asc' },
+    orderBy: { scheduledAt: 'asc' as const },
     select: importantDateRecordSelect,
   },
   contacts: {
-    orderBy: [{ isPrimary: 'desc' }, { sortOrder: 'asc' }],
+    orderBy: [{ isPrimary: 'desc' as const }, { sortOrder: 'asc' as const }],
     select: clientContactSelect,
   },
   documents: {
-    orderBy: { uploadedAt: 'desc' },
+    orderBy: { uploadedAt: 'desc' as const },
+    select: client360DocumentSelect,
   },
   strategies: {
-    select: {
-      id: true,
-      name: true,
-      description: true,
-      status: true,
-      updatedAt: true,
-    },
-    orderBy: { updatedAt: 'desc' },
+    select: client360StrategySelect,
+    orderBy: { updatedAt: 'desc' as const },
   },
   tasks: {
-    orderBy: [{ status: 'asc' }, { dueDate: 'asc' }],
-    include: {
+    orderBy: [{ status: 'asc' as const }, { dueDate: 'asc' as const }],
+    select: {
+      id: true,
+      title: true,
+      description: true,
+      status: true,
+      dueDate: true,
+      createdAt: true,
+      updatedAt: true,
       assignee: {
         select: { id: true, name: true, email: true },
       },
     },
   },
   interactions: {
-    orderBy: { date: 'desc' },
-    include: {
+    orderBy: { date: 'desc' as const },
+    select: {
+      id: true,
+      type: true,
+      content: true,
+      date: true,
+      userId: true,
       user: {
         select: { name: true, email: true },
       },
     },
   },
   activityLogs: {
-    orderBy: { createdAt: 'desc' },
-    include: {
+    orderBy: { createdAt: 'desc' as const },
+    select: {
+      id: true,
+      type: true,
+      content: true,
+      createdAt: true,
       user: {
         select: { name: true, email: true },
       },
     },
   },
   deals: {
-    orderBy: { createdAt: 'asc' },
+    orderBy: { createdAt: 'asc' as const },
     select: dealResponseSelect,
   },
 } satisfies Prisma.ClientInclude;
 
 type Client360Record = Prisma.ClientGetPayload<{ include: typeof client360Include }>;
-type Client360CoreRecord = Prisma.ClientGetPayload<{ include: typeof client360CoreInclude }>;
+type Client360CoreRecord = Prisma.ClientGetPayload<{ select: typeof client360CoreSelect }>;
 type Client360PageCoreRecord = Prisma.ClientGetPayload<{
-  include: typeof client360PageCoreInclude;
+  select: typeof client360PageCoreSelect;
 }>;
 type Client360WorkspaceRecord = Prisma.ClientGetPayload<{
-  include: typeof client360StrategyTasksInclude & typeof client360ActivityInclude;
+  select: typeof client360StrategyTasksSelect & typeof client360ActivitySelect;
 }>;
 
+export function getClient360WorkspaceSelect(tab: string): Prisma.ClientSelect {
+  if (tab === 'strategy-tasks') {
+    return client360StrategyTasksSelect;
+  }
+
+  if (tab === 'activity' || tab === 'activity-notes') {
+    return client360ActivitySelect;
+  }
+
+  return {};
+}
+
+/** @deprecated Prefer getClient360WorkspaceSelect. */
 export function getClient360WorkspaceInclude(tab: string): Prisma.ClientInclude {
   if (tab === 'strategy-tasks') {
     return client360StrategyTasksInclude;
@@ -535,7 +615,7 @@ export async function getClient360CoreData(
     async () => {
       const client = await prisma.client.findUnique({
         where: { id: clientId },
-        include: client360PageCoreInclude,
+        select: client360PageCoreSelect,
       });
 
       if (!client) {

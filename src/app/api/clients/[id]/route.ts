@@ -2,7 +2,7 @@ import { ClientStatus } from '@prisma/client';
 import { NextResponse } from 'next/server';
 import {
   buildClient360CoreResponse,
-  client360CoreInclude,
+  client360CoreSelect,
 } from '@/lib/client360';
 import { replaceClientContacts } from '@/lib/clientContacts';
 import { prisma } from '@/lib/prisma';
@@ -48,7 +48,7 @@ export async function GET(
     async () => {
       const client = await prisma.client.findUnique({
         where: { id },
-        include: client360CoreInclude,
+        select: client360CoreSelect,
       });
 
       if (!client) {
@@ -182,7 +182,7 @@ export async function PATCH(
 
   const refreshedClient = await prisma.client.findUnique({
     where: { id: client.id },
-    include: client360CoreInclude,
+    select: client360CoreSelect,
   });
 
   if (!refreshedClient) {

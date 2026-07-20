@@ -1,9 +1,16 @@
 import { prisma } from '@/lib/prisma';
 
+const primaryDealSelect = {
+  id: true,
+  dealValue: true,
+  totalCommission: true,
+} as const;
+
 export async function getPrimaryDeal(clientId: string) {
   return prisma.deal.findFirst({
     where: { clientId },
     orderBy: { createdAt: 'asc' },
+    select: primaryDealSelect,
   });
 }
 
@@ -21,6 +28,7 @@ export async function upsertPrimaryDeal(
         dealValue,
         totalCommission,
       },
+      select: primaryDealSelect,
     });
   }
 
@@ -31,6 +39,7 @@ export async function upsertPrimaryDeal(
       dealValue,
       totalCommission,
     },
+    select: primaryDealSelect,
   });
 }
 

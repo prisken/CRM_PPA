@@ -7,6 +7,29 @@ export type ClientDealAggregates = {
   proposedDealValue: number;
 };
 
+/**
+ * Fields needed for secured-commission / company-earnings calcs.
+ * Omits nested participant.user (not used by those DTO builders).
+ */
+export const dashboardWonDealCommissionSelect = {
+  id: true,
+  clientId: true,
+  totalCommission: true,
+  participants: {
+    select: {
+      id: true,
+      userId: true,
+      role: true,
+      commissionPercent: true,
+      commissionAmount: true,
+      isCommissionable: true,
+    },
+  },
+} as const;
+
+/**
+ * Leaderboard path: needs dealValue + participant display names.
+ */
 export const dashboardWonDealSelect = {
   id: true,
   clientId: true,
@@ -29,6 +52,10 @@ export const dashboardWonDealSelect = {
     },
   },
 } as const;
+
+export type DashboardWonDealForCommission = Prisma.DealGetPayload<{
+  select: typeof dashboardWonDealCommissionSelect;
+}>;
 
 export type DashboardWonDealWithParticipants = Prisma.DealGetPayload<{
   select: typeof dashboardWonDealSelect;
@@ -94,7 +121,7 @@ export async function fetchDealAggregatesByClientIds(clientIds: string[]) {
  */
 export async function fetchWonDealsWithParticipantsByClientIds(
   clientIds: string[]
-): Promise<DashboardWonDealWithParticipants[]> {
+): Promise<DashboardWonDealForCommission[]> {
   if (clientIds.length === 0) {
     return [];
   }
@@ -104,7 +131,7 @@ export async function fetchWonDealsWithParticipantsByClientIds(
       clientId: { in: clientIds },
       status: DealStatus.WON,
     },
-    select: dashboardWonDealSelect,
+    select: dashboardWonDealCommissionSelect,
   });
 }
 
@@ -112,11 +139,11 @@ export async function fetchWonDealsWithParticipantsByClientIds(
  * All WON deals with participants (admin KPIs / analytics).
  */
 export async function fetchAllWonDealsWithParticipants(): Promise<
-  DashboardWonDealWithParticipants[]
+  DashboardWonDealForCommission[]
 > {
   return prisma.deal.findMany({
     where: { status: DealStatus.WON },
-    select: dashboardWonDealSelect,
+    select: dashboardWonDealCommissionSelect,
   });
 }
 

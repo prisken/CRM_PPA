@@ -2,8 +2,8 @@ import { NextResponse } from 'next/server';
 import {
   buildActivityNotesWorkspace,
   buildStrategyTasksWorkspace,
-  client360ActivityInclude,
-  client360StrategyTasksInclude,
+  client360ActivitySelect,
+  client360StrategyTasksSelect,
 } from '@/lib/client360';
 import { requireSuperAdminOrClientAccess } from '@/lib/authHelpers';
 import { prisma } from '@/lib/prisma';
@@ -34,7 +34,7 @@ export async function GET(
       async () => {
         const client = await prisma.client.findUnique({
           where: { id },
-          include: client360StrategyTasksInclude,
+          select: client360StrategyTasksSelect,
         });
 
         if (!client) {
@@ -58,7 +58,7 @@ export async function GET(
     async () => {
       const client = await prisma.client.findUnique({
         where: { id },
-        include: client360ActivityInclude,
+        select: client360ActivitySelect,
       });
 
       if (!client) {

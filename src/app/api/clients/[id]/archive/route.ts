@@ -2,7 +2,7 @@ import { ClientStatus } from '@prisma/client';
 import { NextResponse } from 'next/server';
 import {
   buildClient360CoreResponse,
-  client360CoreInclude,
+  client360CoreSelect,
 } from '@/lib/client360';
 import {
   logClientSystemEvent,
@@ -59,7 +59,7 @@ export async function POST(
 
   const refreshedClient = await prisma.client.findUnique({
     where: { id },
-    include: client360CoreInclude,
+    select: client360CoreSelect,
   });
 
   if (!refreshedClient) {

@@ -97,38 +97,58 @@ export type LeadCommandCenterFilters = {
   offset?: number;
 };
 
+export const leadCommandCenterClientSelect = {
+  id: true,
+  name: true,
+  company: true,
+  email: true,
+  phone: true,
+  status: true,
+  leadSource: true,
+  roleInCompany: true,
+  employeeCount: true,
+  expectations: true,
+  createdAt: true,
+  lastModified: true,
+  priority: true,
+  nextAction: true,
+  nextFollowUpAt: true,
+  clientAssignments: {
+    select: {
+      assignmentId: true,
+      role: true,
+      user: {
+        select: {
+          id: true,
+          name: true,
+          email: true,
+        },
+      },
+    },
+  },
+  sourceRecords: {
+    orderBy: { receivedAt: 'desc' as const },
+    select: {
+      source: true,
+      externalId: true,
+      receivedAt: true,
+    },
+  },
+  tags: {
+    select: {
+      tag: {
+        select: {
+          id: true,
+          name: true,
+          color: true,
+        },
+      },
+    },
+  },
+} satisfies Prisma.ClientSelect;
+
 type ClientWithRelations = Prisma.ClientGetPayload<{
-  include: {
-    clientAssignments: {
-      include: {
-        user: {
-          select: {
-            id: true;
-            name: true;
-            email: true;
-          };
-        };
-      };
-    };
-    sourceRecords: {
-      select: {
-        source: true;
-        externalId: true;
-        receivedAt: true;
-      };
-    };
-    tags: {
-      include: {
-        tag: {
-          select: {
-            id: true;
-            name: true;
-            color: true;
-          };
-        };
-      };
-    };
-  };
+  select: typeof leadCommandCenterClientSelect;
 }>;
 
 type LatestActivityRow = {
@@ -888,38 +908,7 @@ export async function fetchLeadCommandCenterRows(
   const [clients, duplicateClientIds] = await Promise.all([
     prisma.client.findMany({
       where,
-      include: {
-        clientAssignments: {
-          include: {
-            user: {
-              select: {
-                id: true,
-                name: true,
-                email: true,
-              },
-            },
-          },
-        },
-        sourceRecords: {
-          orderBy: { receivedAt: 'desc' },
-          select: {
-            source: true,
-            externalId: true,
-            receivedAt: true,
-          },
-        },
-        tags: {
-          include: {
-            tag: {
-              select: {
-                id: true,
-                name: true,
-                color: true,
-              },
-            },
-          },
-        },
-      },
+      select: leadCommandCenterClientSelect,
     }),
     loadDuplicateClientIds(),
   ]);
@@ -998,38 +987,7 @@ export async function searchClients(options: {
       where,
       take: SEARCH_CANDIDATE_LIMIT,
       orderBy: { lastModified: 'desc' },
-      include: {
-        clientAssignments: {
-          include: {
-            user: {
-              select: {
-                id: true,
-                name: true,
-                email: true,
-              },
-            },
-          },
-        },
-        sourceRecords: {
-          orderBy: { receivedAt: 'desc' },
-          select: {
-            source: true,
-            externalId: true,
-            receivedAt: true,
-          },
-        },
-        tags: {
-          include: {
-            tag: {
-              select: {
-                id: true,
-                name: true,
-                color: true,
-              },
-            },
-          },
-        },
-      },
+      select: leadCommandCenterClientSelect,
     }),
     loadDuplicateClientIds(),
   ]);

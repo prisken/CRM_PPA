@@ -3,7 +3,7 @@ import { buildRoleOccupancyMap } from '@/lib/commissionCalculations';
 import {
   fetchDealAggregatesByClientIds,
   fetchWonDealsWithParticipantsByClientIds,
-  type DashboardWonDealWithParticipants,
+  type DashboardWonDealForCommission,
 } from '@/lib/dashboardDealAggregates';
 import { prisma } from '@/lib/prisma';
 import { timeAsync } from '@/lib/performance';
@@ -19,7 +19,7 @@ export type StandardDashboardContext = {
   assignments: StandardDashboardAssignment[];
   clientIds: string[];
   dealAggregates: Awaited<ReturnType<typeof fetchDealAggregatesByClientIds>>;
-  wonDeals: DashboardWonDealWithParticipants[];
+  wonDeals: DashboardWonDealForCommission[];
   roleOccupancyMap: Map<string, number>;
 };
 
