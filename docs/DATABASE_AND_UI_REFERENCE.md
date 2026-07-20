@@ -46,6 +46,7 @@ This document describes the PostgreSQL database schema, API surface, and fronten
 | Performance — frontend render | ✅ `memo`/`useMemo`/`useCallback`; `next/dynamic` for charts, pipeline, modals |
 | Performance — route timing logs | ✅ Opt-in `[perf]` logs via `PERF_LOGGING_ENABLED=true` (`lib/performance.ts`) |
 | DB performance indexes (phase 2) | ✅ `20260624084311_add_performance_indexes_phase_2` — assignments, tasks, deals, returnables |
+| DB performance indexes (phase 3) | ✅ `20260721020000_add_performance_indexes_phase_3` — Client/assignment/deal/notification/task indexes + `pg_trgm` search; occupancy uniques deferred |
 | Query optimizations | ✅ Activity feed SQL `UNION ALL`; conditional deal aggregation SQL; narrower Prisma selects |
 | DB performance indexes (phase 1) | ✅ `20260617003208_add_performance_indexes` — deals, interactions, activity logs, read status |
 | Unified lead ingestion | ✅ `lib/leadIngestion.ts` — shared `ingestExternalLead()` for webhooks; match by source+externalId → email → phone; safe merge on update |
@@ -1135,6 +1136,7 @@ erDiagram
 | `20260617003208_add_performance_indexes` | Composite indexes: `Deal(clientId, status)`, `Interaction(clientId, date)`, `client_activity_logs(client_id, created_at)`, `activity_read_status(user_id)` |
 | `20260617120000_add_user_status` | `UserStatus` enum + `status` column on `User` (default `ACTIVE`) |
 | `20260624084311_add_performance_indexes_phase_2` | Non-destructive indexes: `client_assignments(userId)`, `tasks(assigneeId, status, dueDate)`, `Deal(status, updatedAt)`, `CommissionReturnable(userId, status, period)` |
+| `20260721020000_add_performance_indexes_phase_3` | Additive B-tree indexes (Client status/lastModified/company/createdAt, assignments by clientId, Deal/participant composites, tasks/documents/returnables/notifications/source records); `pg_trgm` + GIN on Client name/company/email/phone and `client_contacts.value`. **Deferred:** partial unique occupancy indexes for RELATIONSHIP/ACCOUNT_SERVICE (data may violate) |
 | `20260624184022_add_lead_source_records` | `LeadSourceType` enum; `client_source_records` (payload JSONB, unique `source+externalId`); `lead_merge_audits` |
 | `20260702034945_add_client_tags` | `Tag` + `ClientTag` tables; `@@unique([clientId, tagId])` |
 | `20260702035607_add_client_follow_up_fields` | `priority`, `next_action`, `next_follow_up_at` on `Client`; index on `next_follow_up_at` |

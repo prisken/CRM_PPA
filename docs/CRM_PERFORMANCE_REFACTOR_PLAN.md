@@ -108,22 +108,35 @@ Use `PERF_LOGGING_ENABLED=true` and extend `[perf]` tags where missing (Client 3
 |------------------|--------|
 | Phase 1 `20260617003208_add_performance_indexes` | Deals, interactions, activity logs, read status |
 | Phase 2 `20260624084311_add_performance_indexes_phase_2` | Assignments (`userId`), tasks (`assigneeId,status,dueDate`), deals, returnables |
+| Phase 3 `20260721020000_add_performance_indexes_phase_3` | Client filters, assignment `clientId`, notifications, tasks/documents/`dealId` returnables, source `(clientId, receivedAt)`, `pg_trgm` search GINs |
 | Strategy / contacts / important dates | Plan/milestone/contact indexes as in schema |
 
-### Recommended next indexes (additive)
+### Deferred (cleanup then unique)
+
+| Index | Why deferred |
+|-------|----------------|
+| Partial unique `client_assignments(client_id) WHERE role = RELATIONSHIP` | Existing data may have >1 row |
+| Partial unique `… WHERE role = ACCOUNT_SERVICE` | Same |
+| Unique `(client_id, user_id, role)` | Exact duplicate triples may exist |
+
+Preflight before enforcing:
+
+```sql
+SELECT client_id, role, COUNT(*) FROM client_assignments
+WHERE role IN ('RELATIONSHIP', 'ACCOUNT_SERVICE')
+GROUP BY client_id, role HAVING COUNT(*) > 1;
+```
+
+### Recommended next indexes (additive) — largely shipped in phase 3
 
 | Priority | Index | Why |
 |----------|-------|-----|
-| P0 | `ClientAssignment(clientId)` or `(clientId, userId)` | Auth, deal access, LCC owners, hierarchy — only `userId` exists today |
-| P0 | `Client(status)` or `(status, lastModified)` / `(status, createdAt)` | LCC exclude ARCHIVED; funnel; pipeline |
-| P1 | `Notification(recipientUserId, isRead)` (+ createdAt if sorted) | Model has **no** indexes |
-| P1 | `Client(company)` | Company hierarchy colleague lookup |
-| P1 | `Task(clientId)` or `(clientId, status)` | Client 360 + open-tasks `IN` lists |
-| P1 | `ClientDocument(clientId)` | Documents include |
-| P2 | `ClientSourceRecord(clientId, receivedAt)` | LCC latest-source ordering (only `clientId` today) |
-| P2 | `DealParticipant(userId, role)` composite | Doctor/manage checks + widgets |
-
-### Query patterns to fix (not only indexes)
+| Done | `ClientAssignment(clientId)` / composites | Auth, LCC, hierarchy |
+| Done | `Client(status)` / `(status, lastModified)` | LCC, funnel, pipeline |
+| Done | `Notification(recipientUserId, …)` | Inbox |
+| Done | `Task(clientId)`, `ClientDocument(clientId)`, `CommissionReturnable(dealId)` | Client 360 / returnables |
+| Done | `pg_trgm` on Client + contact value | ILIKE search |
+| Later | Occupancy partial uniques | After data cleanup |
 
 1. LCC: push `LIMIT` into Prisma/`findMany` before post-filters where post-filters allow; otherwise materialize attention/dup flags.
 2. Duplicate detection: avoid full-table scan per LCC request — use `GET /api/admin/leads/duplicates` path + short TTL cache or nightly snapshot.
