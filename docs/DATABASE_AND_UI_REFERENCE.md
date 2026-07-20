@@ -1455,7 +1455,17 @@ Also editable as a full replace via `PUT /api/clients/[id]/details` (`importantD
 - Indexes: `scheduled_at`, `(client_id, scheduled_at)` — sufficient for month-range queries
 - Caps: max ~366-day range; max 1000 events per response
 
-**Tests:** `npm run test:important-dates`, `npm run test:important-dates-calendar` (both included in `npm run test:all`).
+**Tests** (see Local Development §14 for unit / integration / HTTP splits):
+
+| Script | Needs |
+|--------|--------|
+| `npm run test:unit` | No DB server beyond local Node (pure helper math) |
+| `npm run test:integration` | `DATABASE_URL` / Prisma (no Next.js `dev` server) |
+| `npm run test:http` | Running app (`npm run dev`, default `http://localhost:3000`; override with `TEST_BASE_URL`) |
+| `npm run test:all` | Unit + integration only (includes strategy-timeline; **does not** require `npm run dev`) |
+| `npm run test:all:with-http` | `test:all` then `test:http` (requires running server) |
+
+Important Dates: `npm run test:important-dates`, `npm run test:important-dates-calendar` (both in `test:integration` / `test:all`).
 
 ### External lead ingestion (`lib/leadIngestion.ts`)
 
@@ -2605,7 +2615,7 @@ npm run find:duplicate-clients
 | `SUPABASE_SECRET_KEY` | Service role (registration, uploads) |
 | `NEXTAUTH_SECRET` | JWT signing secret (`lib/jwt.ts`) |
 | `SUPABASE_CLIENT_DOCUMENTS_BUCKET` | Supabase Storage bucket for client uploads (default: `client-documents`) |
-| `TEST_BASE_URL` | Optional override for integration test scripts (default: `http://localhost:3000`) |
+| `TEST_BASE_URL` | Base URL for **HTTP** test scripts (`test:http`). Default in scripts: `http://localhost:3000` (match `npm run dev`) |
 | `PERF_LOGGING_ENABLED` | Set to `true` to log structured `[perf]` route/builder timings, payload size warnings, and (with Prisma) slow queries ≥200ms to the server console. Slow Prisma queries also log in `NODE_ENV=development` without this flag. Dev/staging only. |
 | `GOOGLE_FORMS_WEBHOOK_SECRET` | Shared secret for `POST /api/integrations/google-forms/leads` (`x-webhook-secret` header). **Required** for Google Forms webhook |
 | `GOOGLE_FORMS_DEFAULT_RELATIONSHIP_USER_ID` | Optional CRM user `id` — auto-assign new Google Form leads as `RELATIONSHIP` |
@@ -2621,36 +2631,52 @@ npx prisma migrate deploy
 PERF_LOGGING_ENABLED=true npm run dev   # http://localhost:3000
 ```
 
-**Integration tests:**
+**Tests:**
 
 ```bash
-npx tsx scripts/test-activity-apis.ts       # Activity feed + dashboard APIs
-npx tsx scripts/test-commission-system.ts   # Commission engine + returnables (incl. multi-role credit unit tests)
-npx tsx scripts/test-user-management.ts     # User deactivate/delete + auth status checks
-npx tsx scripts/test-lead-ingestion.ts      # ingestExternalLead integration (no webhooks/secrets)
-npx tsx scripts/test-lead-command-center.ts # Lead Command Center lib smoke test
-npm run test:merge-custom-fields            # mergeClients + fieldOverrides integration test
-npm run test:client-access                  # Client 360 access helpers
-npm run test:client-strategy                # Strategy Builder API integration
-npm run test:strategy-projection            # Projection Journey helper math / sort / badges
-npm run test:strategy-timeline              # Timeline economics helpers (MONTHLY×12, inclusive years, source suggestions)
-npm run test:strategy-report                # Client Strategy Overview report helpers
-npm run test:important-dates                # Important Dates CRUD + permissions + activity log
-npm run test:important-dates-calendar       # Calendar visibility + range filters
-npm run test:all                            # Full suite (includes HTTP tests — needs running server)
-npx tsx scripts/find-duplicate-clients.ts   # Report duplicate email/phone client groups
-npm run manuals:pdf                         # Generate USER_MANUAL_*.pdf from markdown
-npx tsx scripts/profile-api-routes.ts       # Client round-trip timings; pair with PERF_LOGGING for server `[perf]` logs
-npx tsx scripts/recalculate-commission-returnables.ts  # Backfill/correct returnable amounts after formula changes
-npm run jobs:process                                  # Process pending BackgroundJob rows (local/ops)
-npm run audit:legacy-commission                       # Read-only report of deals without DealParticipant rows
-npm run backfill:deal-participants:dry                # Preview DealParticipant backfill for legacy deals
-npm run backfill:deal-participants                    # Write DealParticipant rows from client assignments
-npm run verify:deal-participants                      # Read-only participant validation report
-npm run test:deal-participants                        # Unit tests: templates, secured commission, company earnings
-npm run test:deal-participant-api                     # Integration test: create deal → WON → returnables (dev DB)
-npm run test:deal-returnables                         # Unit tests: explicit doctor returnable fields
+# --- No Next.js server required ---
+npm run test:unit              # Pure helpers: deal participants/returnables, strategy projection/timeline/report
+npm run test:integration       # Prisma/DB: deals API libs, client access, strategy API, important dates,
+                               # contacts, merge, lead ingestion, LCC smoke (+ verify:deal-participants)
+npm run test:all               # test:unit && test:integration  ← default full feature suite
+
+# Individual scripts (also covered by the suites above)
+npm run test:deal-participants
+npm run test:deal-returnables
+npm run test:deal-participant-api
+npm run test:client-access
+npm run test:client-strategy
+npm run test:strategy-projection
+npm run test:strategy-timeline
+npm run test:strategy-report
+npm run test:important-dates
+npm run test:important-dates-calendar
+npm run test:client-contacts
+npm run test:merge-custom-fields
+npm run test:lead-ingestion
+npm run test:lead-command-center
+
+# --- Requires running app (npm run dev) ---
+# Default base URL: http://localhost:3000 (override: TEST_BASE_URL=http://localhost:PORT)
+npm run test:http              # commission-system HTTP probes + activity APIs + user management
+npm run test:all:with-http     # test:all then test:http
+npx tsx scripts/test-commission-system.ts   # includes lib unit checks + HTTP against TEST_BASE_URL
+npx tsx scripts/test-activity-apis.ts
+npx tsx scripts/test-user-management.ts
+
+# Ops / one-off (not part of test:all)
+npx tsx scripts/find-duplicate-clients.ts
+npm run manuals:pdf
+npx tsx scripts/profile-api-routes.ts
+npx tsx scripts/recalculate-commission-returnables.ts
+npm run jobs:process
+npm run audit:legacy-commission
+npm run backfill:deal-participants:dry
+npm run backfill:deal-participants
+npm run verify:deal-participants
 ```
+
+> **`test:all` vs HTTP:** `npm run test:all` does **not** start or require `npm run dev`. Only `test:http` / `test:all:with-http` need a listening Next.js server. Integration tests need a reachable Postgres via `DATABASE_URL`.
 
 > **Source of truth:** Prefer this document (`docs/DATABASE_AND_UI_REFERENCE.md`) for schema, APIs, permissions, and UI. User manuals under `docs/USER_MANUAL_*` are end-user guides. One-off migration notes (e.g. `deal-participant-migration.md`) are operational supplements — do not treat them as replacing this reference.
 

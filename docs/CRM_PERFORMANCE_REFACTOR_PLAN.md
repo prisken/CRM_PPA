@@ -376,7 +376,7 @@ npx tsx scripts/profile-api-routes.ts
 | Merge | `npm run test:merge-custom-fields` |
 | Important dates | `npm run test:important-dates`, `test:important-dates-calendar` |
 | Deals / returnables | `npm run test:deal-participants`, `test:deal-participant-api`, `test:deal-returnables` |
-| Full | `npm run test:all` (needs running server) |
+| Full | `npm run test:all` (unit + integration; no Next server). HTTP: `npm run test:all:with-http` after `npm run dev` |
 | Typecheck / build | `npx tsc --noEmit`, `npm run build` |
 
 ### New / extended tests (as phases land)

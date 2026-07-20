@@ -931,17 +931,19 @@ export async function mergeClients({
     throw new Error('Duplicate client not found.');
   }
 
-  const summary = await prisma.$transaction((tx) =>
-    executeClientMergeInTransaction(tx, {
-      canonical,
-      duplicate,
-      canonicalClientId,
-      duplicateClientId,
-      mergedByUserId,
-      fieldChoices,
-      fieldOverrides,
-      reason,
-    })
+  const summary = await prisma.$transaction(
+    (tx) =>
+      executeClientMergeInTransaction(tx, {
+        canonical,
+        duplicate,
+        canonicalClientId,
+        duplicateClientId,
+        mergedByUserId,
+        fieldChoices,
+        fieldOverrides,
+        reason,
+      }),
+    { maxWait: 10_000, timeout: 60_000 }
   );
 
   await recalculateReturnablesForCanonical(
@@ -982,6 +984,7 @@ export async function mergeMultipleClients({
   // One transaction: pairwise merges without fieldOverrides, then apply overrides once.
   // fieldOverrides are intentionally excluded from pairwise merges so later duplicates
   // cannot overwrite custom final values.
+  // Remote DB latency can exceed Prisma's 5s default interactive-tx timeout (P2028).
   const summary = await prisma.$transaction(async (tx) => {
     let currentCanonical = clientMap.get(canonicalClientId)!;
     const auditIds: string[] = [];
@@ -1079,7 +1082,7 @@ export async function mergeMultipleClients({
       fieldChanges: aggregateFieldChanges,
       affectedUserIds,
     };
-  });
+  }, { maxWait: 10_000, timeout: 60_000 });
 
   await recalculateReturnablesForCanonical(
     canonicalClientId,
