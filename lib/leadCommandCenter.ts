@@ -1,4 +1,5 @@
 import {
+  ClientContactKind,
   ClientStatus,
   LeadSourceType,
   Prisma,
@@ -13,6 +14,13 @@ import { prisma } from '@/lib/prisma';
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 const MS_PER_HOUR = 60 * 60 * 1000;
+
+/** Defensive caps for candidate-based duplicate peer lookups (no full-table scan). */
+const MAX_DUP_CANDIDATE_CLIENTS = 2_000;
+const MAX_DUP_KEYS_PER_KIND = 500;
+const MAX_DUP_CONTACT_PEER_ROWS = 10_000;
+const MAX_DUP_SCALAR_PEER_ROWS = 2_000;
+const MAX_CONTACTS_LOADED_FOR_CANDIDATES = 10_000;
 
 const LEAD_SOURCE_LABELS: Record<LeadSourceType, string> = {
   [LeadSourceType.GOOGLE_FORMS]: 'Google Forms',
@@ -236,6 +244,242 @@ type DuplicateClientIds = {
   phoneDuplicates: Set<string>;
 };
 
+type DuplicateCandidateContact = {
+  kind: ClientContactKind;
+  normalizedValue: string;
+};
+
+type DuplicateCandidate = {
+  id: string;
+  email: string | null;
+  phone: string | null;
+  contacts?: DuplicateCandidateContact[];
+};
+
+function addClientToDupGroup(
+  map: Map<string, string[]>,
+  key: string,
+  clientId: string
+) {
+  const group = map.get(key) ?? [];
+  if (!group.includes(clientId)) {
+    group.push(clientId);
+  }
+  map.set(key, group);
+}
+
+function finalizeDuplicateSets(
+  emailGroups: Map<string, string[]>,
+  phoneGroups: Map<string, string[]>
+): DuplicateClientIds {
+  const emailDuplicates = new Set<string>();
+  const phoneDuplicates = new Set<string>();
+
+  for (const clientIds of emailGroups.values()) {
+    if (clientIds.length > 1) {
+      for (const clientId of clientIds) {
+        emailDuplicates.add(clientId);
+      }
+    }
+  }
+
+  for (const clientIds of phoneGroups.values()) {
+    if (clientIds.length > 1) {
+      for (const clientId of clientIds) {
+        phoneDuplicates.add(clientId);
+      }
+    }
+  }
+
+  return { emailDuplicates, phoneDuplicates };
+}
+
+/**
+ * Candidate-based duplicate detection for LCC inbox / preview.
+ *
+ * Seeds keys from the provided clients (scalar email/phone + their contacts),
+ * then peer-looks up matching ClientContact rows and scalar Client email/phone
+ * for those keys only — does not scan all clients/contacts.
+ *
+ * Exact peers via contact.normalizedValue or scalar email (case-insensitive key)
+ * / scalar phone equal to a candidate raw phone. May miss scalar-only peers with
+ * differently formatted phones and no contact row. /api/admin/leads/duplicates
+ * remains the full/exact grouping path.
+ */
+async function loadDuplicateClientIdsForCandidates(
+  candidates: DuplicateCandidate[]
+): Promise<DuplicateClientIds> {
+  if (candidates.length === 0) {
+    return { emailDuplicates: new Set(), phoneDuplicates: new Set() };
+  }
+
+  const cappedCandidates =
+    candidates.length > MAX_DUP_CANDIDATE_CLIENTS
+      ? candidates.slice(0, MAX_DUP_CANDIDATE_CLIENTS)
+      : candidates;
+
+  const emailGroups = new Map<string, string[]>();
+  const phoneGroups = new Map<string, string[]>();
+  const emailKeys = new Set<string>();
+  const phoneKeys = new Set<string>();
+  const rawPhones = new Set<string>();
+
+  for (const client of cappedCandidates) {
+    const normalizedEmail = normalizeEmail(client.email);
+    if (normalizedEmail) {
+      emailKeys.add(normalizedEmail);
+      addClientToDupGroup(emailGroups, normalizedEmail, client.id);
+    }
+
+    const normalizedPhone = normalizePhone(client.phone);
+    if (normalizedPhone) {
+      phoneKeys.add(normalizedPhone);
+      addClientToDupGroup(phoneGroups, normalizedPhone, client.id);
+    }
+
+    if (client.phone?.trim()) {
+      rawPhones.add(client.phone.trim());
+    }
+
+    for (const contact of client.contacts ?? []) {
+      if (!contact.normalizedValue) {
+        continue;
+      }
+
+      if (contact.kind === ClientContactKind.EMAIL) {
+        emailKeys.add(contact.normalizedValue);
+        addClientToDupGroup(emailGroups, contact.normalizedValue, client.id);
+      } else if (contact.kind === ClientContactKind.PHONE) {
+        phoneKeys.add(contact.normalizedValue);
+        addClientToDupGroup(phoneGroups, contact.normalizedValue, client.id);
+      }
+    }
+  }
+
+  const emailKeyList = [...emailKeys].slice(0, MAX_DUP_KEYS_PER_KIND);
+  const phoneKeyList = [...phoneKeys].slice(0, MAX_DUP_KEYS_PER_KIND);
+  const rawPhoneList = [...rawPhones].slice(0, MAX_DUP_KEYS_PER_KIND);
+
+  const contactOr: Prisma.ClientContactWhereInput[] = [];
+  if (emailKeyList.length > 0) {
+    contactOr.push({
+      kind: ClientContactKind.EMAIL,
+      normalizedValue: { in: emailKeyList },
+    });
+  }
+  if (phoneKeyList.length > 0) {
+    contactOr.push({
+      kind: ClientContactKind.PHONE,
+      normalizedValue: { in: phoneKeyList },
+    });
+  }
+
+  const scalarOr: Prisma.ClientWhereInput[] = [];
+  if (emailKeyList.length > 0) {
+    scalarOr.push({
+      email: { in: emailKeyList, mode: 'insensitive' },
+    });
+  }
+  if (rawPhoneList.length > 0) {
+    scalarOr.push({
+      phone: { in: rawPhoneList },
+    });
+  }
+
+  const [contactPeers, scalarPeers] = await Promise.all([
+    contactOr.length === 0
+      ? Promise.resolve(
+          [] as Array<{
+            clientId: string;
+            kind: ClientContactKind;
+            normalizedValue: string;
+          }>
+        )
+      : prisma.clientContact.findMany({
+          where: { OR: contactOr },
+          select: {
+            clientId: true,
+            kind: true,
+            normalizedValue: true,
+          },
+          take: MAX_DUP_CONTACT_PEER_ROWS,
+        }),
+    scalarOr.length === 0
+      ? Promise.resolve(
+          [] as Array<{ id: string; email: string | null; phone: string | null }>
+        )
+      : prisma.client.findMany({
+          where: { OR: scalarOr },
+          select: {
+            id: true,
+            email: true,
+            phone: true,
+          },
+          take: MAX_DUP_SCALAR_PEER_ROWS,
+        }),
+  ]);
+
+  for (const contact of contactPeers) {
+    if (contact.kind === ClientContactKind.EMAIL) {
+      addClientToDupGroup(emailGroups, contact.normalizedValue, contact.clientId);
+    } else if (contact.kind === ClientContactKind.PHONE) {
+      addClientToDupGroup(phoneGroups, contact.normalizedValue, contact.clientId);
+    }
+  }
+
+  for (const peer of scalarPeers) {
+    const normalizedEmail = normalizeEmail(peer.email);
+    if (normalizedEmail && emailKeys.has(normalizedEmail)) {
+      addClientToDupGroup(emailGroups, normalizedEmail, peer.id);
+    }
+
+    const normalizedPhone = normalizePhone(peer.phone);
+    if (normalizedPhone && phoneKeys.has(normalizedPhone)) {
+      addClientToDupGroup(phoneGroups, normalizedPhone, peer.id);
+    }
+  }
+
+  return finalizeDuplicateSets(emailGroups, phoneGroups);
+}
+
+async function loadContactsForClientIds(
+  clientIds: string[]
+): Promise<Map<string, DuplicateCandidateContact[]>> {
+  const byClient = new Map<string, DuplicateCandidateContact[]>();
+  if (clientIds.length === 0) {
+    return byClient;
+  }
+
+  const cappedIds =
+    clientIds.length > MAX_DUP_CANDIDATE_CLIENTS
+      ? clientIds.slice(0, MAX_DUP_CANDIDATE_CLIENTS)
+      : clientIds;
+
+  const rows = await prisma.clientContact.findMany({
+    where: {
+      clientId: { in: cappedIds },
+      kind: { in: [ClientContactKind.EMAIL, ClientContactKind.PHONE] },
+    },
+    select: {
+      clientId: true,
+      kind: true,
+      normalizedValue: true,
+    },
+    take: MAX_CONTACTS_LOADED_FOR_CANDIDATES,
+  });
+
+  for (const row of rows) {
+    const list = byClient.get(row.clientId) ?? [];
+    list.push({
+      kind: row.kind,
+      normalizedValue: row.normalizedValue,
+    });
+    byClient.set(row.clientId, list);
+  }
+
+  return byClient;
+}
+
 function formatSourceLabel(source: LeadSourceType | string): string {
   if (source in LEAD_SOURCE_LABELS) {
     return LEAD_SOURCE_LABELS[source as LeadSourceType];
@@ -452,80 +696,6 @@ function buildClientWhere(filters: LeadCommandCenterFilters): Prisma.ClientWhere
   }
 
   return { AND: and };
-}
-
-async function loadDuplicateClientIds(): Promise<DuplicateClientIds> {
-  const [scalarClients, contacts] = await Promise.all([
-    prisma.client.findMany({
-      select: {
-        id: true,
-        email: true,
-        phone: true,
-      },
-    }),
-    prisma.clientContact.findMany({
-      select: {
-        clientId: true,
-        kind: true,
-        normalizedValue: true,
-      },
-    }),
-  ]);
-
-  const emailGroups = new Map<string, string[]>();
-  const phoneGroups = new Map<string, string[]>();
-
-  function addToGroup(
-    map: Map<string, string[]>,
-    key: string,
-    clientId: string
-  ) {
-    const group = map.get(key) ?? [];
-    if (!group.includes(clientId)) {
-      group.push(clientId);
-    }
-    map.set(key, group);
-  }
-
-  for (const client of scalarClients) {
-    const normalizedEmail = normalizeEmail(client.email);
-    if (normalizedEmail) {
-      addToGroup(emailGroups, normalizedEmail, client.id);
-    }
-    const normalizedPhone = normalizePhone(client.phone);
-    if (normalizedPhone) {
-      addToGroup(phoneGroups, normalizedPhone, client.id);
-    }
-  }
-
-  for (const contact of contacts) {
-    if (contact.kind === 'EMAIL') {
-      addToGroup(emailGroups, contact.normalizedValue, contact.clientId);
-    } else if (contact.kind === 'PHONE') {
-      addToGroup(phoneGroups, contact.normalizedValue, contact.clientId);
-    }
-  }
-
-  const emailDuplicates = new Set<string>();
-  const phoneDuplicates = new Set<string>();
-
-  for (const clientIds of emailGroups.values()) {
-    if (clientIds.length > 1) {
-      for (const clientId of clientIds) {
-        emailDuplicates.add(clientId);
-      }
-    }
-  }
-
-  for (const clientIds of phoneGroups.values()) {
-    if (clientIds.length > 1) {
-      for (const clientId of clientIds) {
-        phoneDuplicates.add(clientId);
-      }
-    }
-  }
-
-  return { emailDuplicates, phoneDuplicates };
 }
 
 function formatActivitySummary(
@@ -1064,13 +1234,23 @@ export async function fetchLeadCommandCenterPage(
 ): Promise<LeadCommandCenterPageResult> {
   const where = buildClientWhere(filters);
 
-  const [clients, duplicateClientIds] = await Promise.all([
-    prisma.client.findMany({
-      where,
-      select: leadCommandCenterInboxSelect,
-    }),
-    loadDuplicateClientIds(),
-  ]);
+  const clients = await prisma.client.findMany({
+    where,
+    select: leadCommandCenterInboxSelect,
+  });
+
+  const contactsByClientId = await loadContactsForClientIds(
+    clients.map((client) => client.id)
+  );
+
+  const duplicateClientIds = await loadDuplicateClientIdsForCandidates(
+    clients.map((client) => ({
+      id: client.id,
+      email: client.email,
+      phone: client.phone,
+      contacts: contactsByClientId.get(client.id) ?? [],
+    }))
+  );
 
   const latestActivityTimestamps = await loadLatestActivityTimestampsByClientId(
     clients.map((client) => client.id)
@@ -1137,18 +1317,27 @@ export async function fetchLeadCommandCenterPreview(
     return null;
   }
 
-  const [client, duplicateClientIds, latestActivity] = await Promise.all([
+  const [client, latestActivity] = await Promise.all([
     prisma.client.findUnique({
       where: { id: trimmedId },
       select: leadCommandCenterPreviewSelect,
     }),
-    loadDuplicateClientIds(),
     loadLatestActivityForClient(trimmedId),
   ]);
 
   if (!client) {
     return null;
   }
+
+  const contactsByClientId = await loadContactsForClientIds([client.id]);
+  const duplicateClientIds = await loadDuplicateClientIdsForCandidates([
+    {
+      id: client.id,
+      email: client.email,
+      phone: client.phone,
+      contacts: contactsByClientId.get(client.id) ?? [],
+    },
+  ]);
 
   return mapPreviewClientToDetail(client, duplicateClientIds, latestActivity);
 }

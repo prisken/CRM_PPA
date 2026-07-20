@@ -1514,9 +1514,11 @@ Super-admin inbox at `/admin/leads`. Entry point: `fetchLeadCommandCenterRows(fi
 
 **Global search** (`searchClients()`): used by `GET /api/search/clients?q=` — name/company/`Client.email`/`Client.phone`/`client_contacts.value` (+ normalized contact values) via `ILIKE` / trigram GINs; ranked exact contact → name prefix → company prefix → contains; super admin searches all clients; standard users scoped to assignments; max 10 results; slim select (no full duplicate/activity scan).
 
-### Duplicate detection (`lib/leadDuplicates.ts`)
+### Duplicate detection (`lib/leadDuplicates.ts` + LCC inbox)
 
-`findDuplicateClientGroups()` groups clients by normalized email or phone (excluding empty values). Used by `GET /api/admin/leads/duplicates` and `npm run find:duplicate-clients`. Duplicate flags on inbox rows use the same normalization.
+`fetchLeadDuplicateGroups()` (`lib/leadDuplicates.ts`) groups clients by normalized email or phone (excluding empty values). Used by `GET /api/admin/leads/duplicates` and `npm run find:duplicate-clients` — **full/exact** grouping for the Duplicates panel.
+
+**LCC inbox / preview flags** (`duplicateWarnings` on list + preview): candidate-based peer lookup from the filtered inbox client set (or the single preview client) — scalar email/phone + `ClientContact` keys, then bounded queries for peers with those keys. Same warning strings (`Duplicate email` / `Duplicate phone`). Does **not** full-table-scan all clients. May miss a scalar-only peer with differently formatted phone and no contact row; use the duplicates endpoint for exact review. Name/company are **not** duplicate keys.
 
 ### Manual client merge (`lib/clientMerge.ts`)
 

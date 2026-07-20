@@ -96,7 +96,7 @@ Ordered by leverage (final performance review). No new measurements invented —
 
 | Order | Task | Outcome |
 |-------|------|---------|
-| **1** | **LCC duplicate optimization + SQL pagination preparation** | Remove/cache/precompute `loadDuplicateClientIds` on list **and** preview; document which post-filters block pure SQL `take`/`skip`; push DB limit where safe |
+| **1** | **LCC duplicate optimization + SQL pagination preparation** | ✅ Phase 1: candidate peer lookup on list/preview (no full-table dup scan). Still open: precompute/TTL, SQL pagination for load-all-then-slice |
 | **2** | **Client 360 scoped refresh + deal summary DTO** | Split `triggerDataRefresh` scopes; avoid full RSC on aside mutations; list deals without full participant trees (expand on edit) |
 | **3** | **Dashboard `take` + assignment dedupe** | DB `take` on open-tasks / deal-participation; pass assignments into Important Dates calendar (kill second `/api/me/assignments`) |
 | **4** | **Admin pipeline bounded API** | Server status/search filters + `limit`/cursor; stop unbounded all-clients hydrate |
@@ -229,13 +229,13 @@ GROUP BY client_id, role HAVING COUNT(*) > 1;
 
 **Partial (offset UX):** default `limit=50`, response `meta.total` / `hasMore`, UI Load more + debounce/abort. Cursor / true DB pagination still blocked by post-filters (**load-all-then-slice remains**).
 
-### Phase B — Duplicate detection — **OPEN**
+### Phase B — Duplicate detection — **PARTIAL (phase 1 shipped)**
 
-1. Remove full-table `loadDuplicateClientIds` from every **list and preview** request.
-2. Options (pick one):
-   - Short TTL in-memory/Redis/unstable_cache of duplicate client ID set
+1. ✅ LCC list/preview no longer call full-table `loadDuplicateClientIds`; use candidate key peer lookup (`loadDuplicateClientIdsForCandidates`) with defensive caps.
+2. Remaining options for stricter/exact + SQL pagination:
+   - Short TTL cache of duplicate client ID set
    - Precomputed `hasDuplicateContact` flag maintained on ingest/merge
-   - Dup panel only hits dedicated duplicates API (already exists)
+   - Dup panel only hits dedicated duplicates API (already exact via `leadDuplicates.ts`)
 3. Keep `npm run find:duplicate-clients` / smoke tests green.
 
 ### Phase C — API & UI
@@ -472,7 +472,7 @@ Prefer **§3 Next Sprint Hot Paths** for the immediate sprint. Waves below remai
 ### Wave 4 — Lead Command Center (medium–high risk)
 
 - [ ] DB-level `take`/`skip` on primary list path — **OPEN** (offset UX only today)
-- [ ] Remove per-request full-table dup scan (list **and** preview); cache or precompute — **OPEN**
+- [x] Remove per-request full-table dup scan (list **and** preview); candidate peer lookup — **phase 1 shipped** (exact panel path unchanged; precompute/TTL still open)
 - [x] Narrow sourceRecords include (inbox sample) — **shipped**
 - [ ] Split LCC page components — **OPEN**
 - [ ] Extend LCC smoke tests for pagination — **OPEN**

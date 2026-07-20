@@ -103,7 +103,12 @@ async function main() {
       tagsReturned: preview.tags.length,
       lastActivitySummary: preview.lastActivitySummary,
       roleInCompany: preview.roleInCompany,
+      duplicateWarnings: preview.duplicateWarnings,
     });
+
+    if (!Array.isArray(preview.duplicateWarnings)) {
+      throw new Error('Preview missing duplicateWarnings array');
+    }
   }
 
   const filterCases = [
@@ -116,6 +121,26 @@ async function main() {
   for (const testCase of filterCases) {
     const rows = await fetchLeadCommandCenterRows(testCase.filters);
     printSection(testCase.title, rows);
+
+    if (testCase.title.startsWith('duplicateEmail')) {
+      for (const row of rows) {
+        if (!row.duplicateWarnings.includes('Duplicate email')) {
+          throw new Error(
+            `duplicateEmail filter returned ${row.clientId} without Duplicate email warning`
+          );
+        }
+      }
+    }
+
+    if (testCase.title.startsWith('duplicatePhone')) {
+      for (const row of rows) {
+        if (!row.duplicateWarnings.includes('Duplicate phone')) {
+          throw new Error(
+            `duplicatePhone filter returned ${row.clientId} without Duplicate phone warning`
+          );
+        }
+      }
+    }
   }
 
   console.log(`\n${'='.repeat(72)}`);
