@@ -77,7 +77,7 @@ Confirmed against `prisma/schema.prisma` + migrations (July 21, 2026):
 
 | Area | Bottleneck | Primary symbols |
 |------|------------|-----------------|
-| **Lead Command Center** | Load-all matching clients, then filter/sort/**slice**; full-table **`loadDuplicateClientIds()`** on every list | `fetchLeadCommandCenterPage` / `fetchLeadCommandCenterRows`, `loadDuplicateClientIds` |
+| **Lead Command Center** | Default path: Prisma `skip`/`take` + `lastModified` order. Fallback still load-all for dup / needsAttention / latest-source. Dup flags: candidate peer lookup (not full-table) | `fetchLeadCommandCenterPage`, `loadDuplicateClientIdsForCandidates` |
 | **Lead preview** | Preview API is separate (good), but still runs **full dup scan** on open | `fetchLeadCommandCenterPreview` |
 | **Master Pipeline** | Unbounded `findMany` of all clients; filters in browser | `GET /api/admin/pipeline`, `fetchAdminPipelineClients`, `MasterPipelineView` |
 | **Client 360 refresh** | Every mutation → `router.refresh()` + `refreshKey++` (no scopes) | `Client360PageClient.triggerDataRefresh` |
@@ -96,7 +96,7 @@ Ordered by leverage (final performance review). No new measurements invented —
 
 | Order | Task | Outcome |
 |-------|------|---------|
-| **1** | **LCC duplicate optimization + SQL pagination preparation** | ✅ Phase 1: candidate peer lookup on list/preview (no full-table dup scan). Still open: precompute/TTL, SQL pagination for load-all-then-slice |
+| **1** | **LCC duplicate optimization + SQL pagination preparation** | ✅ Phase 1: candidate peer lookup. ✅ Phase A (partial): Prisma `skip`/`take` + `lastModified` order when post-filters idle; fallback path for dup/needsAttention/latest-source. Still open: precompute attention/dup flags for full SQL path |
 | **2** | **Client 360 scoped refresh + deal summary DTO** | Split `triggerDataRefresh` scopes; avoid full RSC on aside mutations; list deals without full participant trees (expand on edit) |
 | **3** | **Dashboard `take` + assignment dedupe** | DB `take` on open-tasks / deal-participation; pass assignments into Important Dates calendar (kill second `/api/me/assignments`) |
 | **4** | **Admin pipeline bounded API** | Server status/search filters + `limit`/cursor; stop unbounded all-clients hydrate |
@@ -111,7 +111,7 @@ Use `PERF_LOGGING_ENABLED=true` and extend `[perf]` tags where missing (Client 3
 
 | Route / surface | Concern | Target direction |
 |-----------------|---------|------------------|
-| `GET /api/admin/leads` | In-memory pagination after full match set; dup scan | DB `take`/`skip` (or cursor); cached/precomputed dup flags |
+| `GET /api/admin/leads` | Default inbox DB-paginated (`skip`/`take`); post-filters still load-all | Persist attention/dup/latest-source for full SQL path; cursor later |
 | `GET /api/admin/leads/[id]/preview` | Dup scan on open | Share cached dup set / skip full scan |
 | `GET /api/admin/leads/duplicates` | Heavy email/phone grouping | Dedicated query + indexes; optional TTL cache |
 | `GET /api/admin/pipeline` | Unbounded client list | Server filters + cursor/limit |
@@ -221,13 +221,14 @@ GROUP BY client_id, role HAVING COUNT(*) > 1;
 3. `GET /api/admin/leads/[id]/preview` returns `LeadCommandCenterPreview`; drawer loads on open with loading/error/retry.
 4. Merge selected loads preview details per selected id before opening `MergeClientsModal`.
 
-### Phase A — Stop load-all-then-slice — **OPEN**
+### Phase A — Stop load-all-then-slice — **PARTIAL**
 
-1. Apply Prisma `take`/`skip` (or cursor) to the primary client query for the default inbox path.
-2. Document which post-filters (`needsAttention`, dup flags, latest-source) break pure SQL pagination — migrate those filters to indexed columns or computed fields over time.
+1. ✅ Apply Prisma `take`/`skip` + `orderBy lastModified desc, id desc` when only Prisma-native filters are active (default inbox, search, status, tags, follow-up, etc.).
+2. ✅ Fallback explicitly when `duplicateEmail` / `duplicatePhone` / `needsAttention` / `latestSourceFrom|To` (or `LCC_SQL_PAGINATION=false` / unlimited limit): load-all → hydrate → post-filter → attention sort → slice. Perf logs include `dbPaginated` + `fallbackReason`.
 3. Cap nested includes (e.g. sourceRecords: latest N only). ✅ (inbox sample + preview full history)
+4. Still open: materialize attention / dup / latest-source so default sort and remaining filters can stay on the DB path.
 
-**Partial (offset UX):** default `limit=50`, response `meta.total` / `hasMore`, UI Load more + debounce/abort. Cursor / true DB pagination still blocked by post-filters (**load-all-then-slice remains**).
+**Partial (offset UX):** default `limit=50`, response `meta.total` / `hasMore` / `dbPaginated`, UI Load more + debounce/abort. Cursor still deferred.
 
 ### Phase B — Duplicate detection — **PARTIAL (phase 1 shipped)**
 
@@ -471,11 +472,11 @@ Prefer **§3 Next Sprint Hot Paths** for the immediate sprint. Waves below remai
 
 ### Wave 4 — Lead Command Center (medium–high risk)
 
-- [ ] DB-level `take`/`skip` on primary list path — **OPEN** (offset UX only today)
+- [x] DB-level `take`/`skip` on primary list path — **PARTIAL** (Prisma-native filters; post-filter fallback remains)
 - [x] Remove per-request full-table dup scan (list **and** preview); candidate peer lookup — **phase 1 shipped** (exact panel path unchanged; precompute/TTL still open)
 - [x] Narrow sourceRecords include (inbox sample) — **shipped**
+- [x] Extend LCC smoke tests for pagination — **PARTIAL** (dbPaginated / fallback paths asserted)
 - [ ] Split LCC page components — **OPEN**
-- [ ] Extend LCC smoke tests for pagination — **OPEN**
 
 ### Wave 5 — Admin pipeline & dashboard depth (medium–high risk)
 
@@ -525,7 +526,7 @@ Prefer **§3 Next Sprint Hot Paths** for the immediate sprint. Waves below remai
 | W3.1 | Scoped Client 360 refresh | **Medium** | Stale server props if scope wrong |
 | W3.2 | Slim deals payload | **Medium** | Deal Info / edit must still get participants when needed |
 | W3.3 | Access resolve-once | **Low–Medium** | Permission bugs if cache too broad |
-| W4.1 | LCC SQL pagination | **Medium–High** | Post-filters can drop page fullness; UX count mismatch |
+| W4.1 | LCC SQL pagination | **Medium** (partial shipped) | Default path DB-paginated with lastModified sort; post-filter fallback still load-all; attention order differs on DB path |
 | W4.2 | Dup scan removal/cache | **Medium** | Stale duplicate badges |
 | W5.1 | Pipeline pagination | **Medium** | Kanban empty columns / drag assumptions |
 | W5.2 | Commission read models | **High** | Formula drift vs live calc |
@@ -577,7 +578,7 @@ Prefer **§3 Next Sprint Hot Paths** for the immediate sprint. Waves below remai
 | Dashboard over-fetch / duplicate assignments | Next sprint #3 / W1 remaining |
 | Modal `dvh` + DealEdit dynamic import | W2 remaining |
 | Client 360 `router.refresh` fan-out + deals DTO | Next sprint #2 / W3 |
-| LCC load-all + dup scan (list/preview) | Next sprint #1 / W4 |
+| LCC post-filter load-all + attention sort not in SQL | Next sprint #1 remaining / W4 |
 | Admin pipeline all-data | Next sprint #4 / W5 |
 | Strategy fat DTO | Next sprint (after #1–4) / W6 |
 | Mixed auth patterns | W7 |

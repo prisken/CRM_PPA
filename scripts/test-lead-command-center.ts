@@ -5,6 +5,7 @@
  * Run: npx tsx scripts/test-lead-command-center.ts
  */
 import {
+  decideLeadCommandCenterSqlPagination,
   fetchLeadCommandCenterPage,
   fetchLeadCommandCenterPreview,
   fetchLeadCommandCenterRows,
@@ -72,6 +73,23 @@ async function main() {
     throw new Error('meta.hasMore is inconsistent with total/offset/count');
   }
 
+  const sqlDecision = decideLeadCommandCenterSqlPagination({ limit: 10, offset: 0 });
+  if (sqlDecision.dbPaginated) {
+    if (page.meta.dbPaginated !== true) {
+      throw new Error('Expected dbPaginated=true for default Prisma-native filters');
+    }
+    if (page.meta.sortMode !== 'lastModified') {
+      throw new Error('Expected sortMode=lastModified on DB-paginated path');
+    }
+    if (page.meta.fallbackReason) {
+      throw new Error('DB-paginated path should not set fallbackReason');
+    }
+  } else if (page.meta.dbPaginated !== false) {
+    throw new Error(
+      `Expected dbPaginated=false when SQL pagination disabled (${sqlDecision.fallbackReason})`
+    );
+  }
+
   if (page.meta.hasMore) {
     const page2 = await fetchLeadCommandCenterPage({
       limit: 10,
@@ -119,10 +137,47 @@ async function main() {
   ] as const;
 
   for (const testCase of filterCases) {
-    const rows = await fetchLeadCommandCenterRows(testCase.filters);
+    const pageResult = await fetchLeadCommandCenterPage(testCase.filters);
+    const rows = pageResult.leads;
     printSection(testCase.title, rows);
+    console.log('meta:', {
+      dbPaginated: pageResult.meta.dbPaginated,
+      fallbackReason: pageResult.meta.fallbackReason,
+      sortMode: pageResult.meta.sortMode,
+      total: pageResult.meta.total,
+    });
+
+    if (testCase.title.startsWith('needsAttention')) {
+      if (pageResult.meta.dbPaginated !== false) {
+        throw new Error('needsAttention must use in-memory fallback');
+      }
+      if (!pageResult.meta.fallbackReason?.includes('needsAttention')) {
+        throw new Error(
+          `Unexpected fallbackReason for needsAttention: ${pageResult.meta.fallbackReason}`
+        );
+      }
+      for (const row of rows) {
+        if (row.attentionScore <= 0) {
+          throw new Error(
+            `needsAttention filter returned ${row.clientId} with attentionScore ${row.attentionScore}`
+          );
+        }
+      }
+    }
+
+    if (testCase.title.startsWith('missingPhone')) {
+      if (
+        pageResult.meta.dbPaginated !== true &&
+        process.env.LCC_SQL_PAGINATION !== 'false'
+      ) {
+        throw new Error('missingPhone should use DB pagination when SQL path enabled');
+      }
+    }
 
     if (testCase.title.startsWith('duplicateEmail')) {
+      if (pageResult.meta.dbPaginated !== false) {
+        throw new Error('duplicateEmail must use in-memory fallback');
+      }
       for (const row of rows) {
         if (!row.duplicateWarnings.includes('Duplicate email')) {
           throw new Error(
@@ -133,6 +188,9 @@ async function main() {
     }
 
     if (testCase.title.startsWith('duplicatePhone')) {
+      if (pageResult.meta.dbPaginated !== false) {
+        throw new Error('duplicatePhone must use in-memory fallback');
+      }
       for (const row of rows) {
         if (!row.duplicateWarnings.includes('Duplicate phone')) {
           throw new Error(

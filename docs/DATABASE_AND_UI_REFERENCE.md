@@ -1504,11 +1504,19 @@ Super-admin inbox at `/admin/leads`. Entry point: `fetchLeadCommandCenterRows(fi
 
 **Preview payload (`LeadCommandCenterPreview`):** fetched via `GET /api/admin/leads/[id]/preview` when the drawer opens (or when loading Merge selected candidates). Extends the row with full `sources[]`, `tags`, `lastActivityAt` / `lastActivitySummary`, `firstSourceLabel` / `latestSourceLabel`, `roleInCompany`, `employeeCount`, `expectations`.
 
-**Attention scoring** (higher = more urgent): overdue follow-up (+30), due today (+20), no next action on active lead (+15), unassigned (+25), missing email/phone (+10 each), duplicate email/phone (+20/+30), high priority (+30), recent ingest with no contact (+15–30), no relationship assignee (+10), etc. Rows sorted by `attentionScore` desc, then `lastModified` desc.
+**Attention scoring** (higher = more urgent): overdue follow-up (+30), due today (+20), no next action on active lead (+15), unassigned (+25), missing email/phone (+10 each), duplicate email/phone (+20/+30), high priority (+30), recent ingest with no contact (+15–30), no relationship assignee (+10), etc. Attention badges are always computed for the returned page.
+
+**Sort modes:**
+- **DB-paginated path** (`meta.dbPaginated=true`): Prisma `orderBy lastModified desc, id desc` + `skip`/`take`. Used when only Prisma-native filters are active (no dup / needsAttention / latest-source date filters) and a positive `limit` is set. Disable with `LCC_SQL_PAGINATION=false`.
+- **Fallback path** (`meta.dbPaginated=false`): load matching clients, hydrate, apply in-memory post-filters, sort by `attentionScore` desc → `latestSourceReceivedAt` → `lastModified`, then slice. `meta.fallbackReason` explains why.
 
 **Filters** (query params on `GET /api/admin/leads`): `search`, `status`, `source`, `assignedUserId`, `missingEmail`, `missingPhone`, `unassigned`, `duplicateEmail`, `duplicatePhone`, `needsAttention`, `overdueFollowUp`, `dueToday`, `noNextAction`, `createdFrom`/`createdTo`, `latestSourceFrom`/`latestSourceTo`, `tagIds`, `tagNames`, `limit` (default **50**, max 500), `offset`.
 
-**Pagination meta** (`{ leads, meta }`): `count` (page size returned), `limit`, `offset`, `total` (filtered match count after in-memory attention/dup/latest-source filters), `hasMore`. Offset pagination only — **cursor pagination deferred** until attention/dup filters can run in SQL (load-all-then-slice still applies server-side for correctness).
+**Prisma-native filters** (always in `where`): status (default exclude ARCHIVED), assignedUserId, unassigned, missingEmail/Phone (scalar), sources, tagIds/tagNames, overdueFollowUp, dueToday, noNextAction, createdFrom/To, search.
+
+**In-memory post-filters** (force fallback path): `duplicateEmail`, `duplicatePhone`, `needsAttention`, `latestSourceFrom`/`latestSourceTo`.
+
+**Pagination meta** (`{ leads, meta }`): `count`, `limit`, `offset`, `total`, `hasMore`, plus `dbPaginated`, optional `fallbackReason`, and `sortMode` (`lastModified` | `attention`). Offset pagination only — cursor deferred until attention/dup can run in SQL.
 
 **Inbox UI:** 300ms debounce on filter/search query string; `AbortController` cancels stale list requests; soft refresh keeps existing rows visible; **Load more** appends the next offset page.
 
@@ -1675,7 +1683,7 @@ Per merge (pairwise step or full `mergeClients` call), in a **single Prisma tran
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
-| GET | `/api/admin/leads` | Super admin (Bearer or session) | Slim inbox rows with attention scoring. Rich query filters (see [Lead Command Center](#lead-command-center-libleadcommandcenterts)). Default `limit=50`, max 500. Returns `{ leads, meta: { count, limit, offset, total, hasMore } }` |
+| GET | `/api/admin/leads` | Super admin (Bearer or session) | Slim inbox rows with attention scoring. Rich query filters (see [Lead Command Center](#lead-command-center-libleadcommandcenterts)). Default `limit=50`, max 500. Returns `{ leads, meta: { count, limit, offset, total, hasMore, dbPaginated, fallbackReason?, sortMode } }` |
 | GET | `/api/admin/leads/[id]/preview` | Super admin (Bearer or session) | Full lead preview detail for the drawer / merge mapping. Returns `{ lead }` (`LeadCommandCenterPreview`) or 404 |
 | GET | `/api/admin/leads/duplicates` | Super admin (Bearer or session) | Duplicate groups by email/phone. Query: `?type=email\|phone\|all` |
 | POST | `/api/admin/leads/merge` | Super admin (Bearer or session) | Pairwise manual merge via `mergeClients()`. Body: `canonicalClientId`, `duplicateClientId`, optional `fieldChoices`, `fieldOverrides`, `reason` |

@@ -172,6 +172,9 @@ export async function GET(request: Request) {
           offset: result.meta.offset,
           total: result.meta.total,
           hasMore: result.meta.hasMore,
+          dbPaginated: result.meta.dbPaginated,
+          fallbackReason: result.meta.fallbackReason,
+          sortMode: result.meta.sortMode,
         }),
       }
     );

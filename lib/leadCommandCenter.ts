@@ -123,15 +123,103 @@ export type LeadCommandCenterPageMeta = {
   count: number;
   limit: number;
   offset: number;
-  /** Total rows after filters/sort (available because list still hydrates the match set). */
+  /**
+   * Total matching rows for the active filter set.
+   * DB path: Prisma `count` on the same `where`.
+   * Fallback path: count after in-memory post-filters.
+   */
   total: number;
   hasMore: boolean;
+  /**
+   * True when Prisma `skip`/`take` + `orderBy lastModified` served this page
+   * (no in-memory post-filter / attention sort on the full match set).
+   */
+  dbPaginated: boolean;
+  /** Present when `dbPaginated` is false — why the load-all fallback ran. */
+  fallbackReason?: string;
+  /**
+   * `lastModified` when DB-paginated; `attention` when the fallback path
+   * sorts by attentionScore → latestSource → lastModified.
+   */
+  sortMode: 'lastModified' | 'attention';
 };
 
 export type LeadCommandCenterPageResult = {
   leads: LeadCommandCenterRow[];
   meta: LeadCommandCenterPageMeta;
 };
+
+/**
+ * Post-filters / sort that cannot run in Prisma without persisted columns.
+ * When any apply, the list loads the full match set, hydrates, filters, sorts,
+ * then slices (correctness over SQL pagination).
+ */
+export type LeadCommandCenterSqlPaginationDecision =
+  | { dbPaginated: true }
+  | { dbPaginated: false; fallbackReason: string };
+
+/** Set `LCC_SQL_PAGINATION=false` to force the load-all fallback path. */
+function isSqlPaginationEnvEnabled(): boolean {
+  return process.env.LCC_SQL_PAGINATION !== 'false';
+}
+
+/**
+ * Decide whether this request can use Prisma skip/take.
+ * Safe when only Prisma `where` filters are active and a positive page limit is set.
+ */
+export function decideLeadCommandCenterSqlPagination(
+  filters: LeadCommandCenterFilters
+): LeadCommandCenterSqlPaginationDecision {
+  if (!isSqlPaginationEnvEnabled()) {
+    return {
+      dbPaginated: false,
+      fallbackReason: 'LCC_SQL_PAGINATION=false',
+    };
+  }
+
+  if (filters.duplicateEmail === true) {
+    return {
+      dbPaginated: false,
+      fallbackReason: 'duplicateEmail requires in-memory duplicateWarnings',
+    };
+  }
+
+  if (filters.duplicatePhone === true) {
+    return {
+      dbPaginated: false,
+      fallbackReason: 'duplicatePhone requires in-memory duplicateWarnings',
+    };
+  }
+
+  if (filters.needsAttention === true) {
+    return {
+      dbPaginated: false,
+      fallbackReason: 'needsAttention requires computed attentionScore',
+    };
+  }
+
+  if (filters.latestSourceFrom?.trim() || filters.latestSourceTo?.trim()) {
+    return {
+      dbPaginated: false,
+      fallbackReason: 'latestSource date range requires computed latestSourceReceivedAt',
+    };
+  }
+
+  const requestedLimit = filters.limit;
+  if (requestedLimit === undefined || requestedLimit <= 0) {
+    return {
+      dbPaginated: false,
+      fallbackReason: 'unlimited fetch requested (no positive limit)',
+    };
+  }
+
+  return { dbPaginated: true };
+}
+
+const inboxSqlOrderBy = [
+  { lastModified: 'desc' as const },
+  { id: 'desc' as const },
+];
 
 const leadCommandCenterAssignmentSelect = {
   assignmentId: true,
@@ -1229,16 +1317,21 @@ function applyPostFilters(
   });
 }
 
-export async function fetchLeadCommandCenterPage(
-  filters: LeadCommandCenterFilters = {}
-): Promise<LeadCommandCenterPageResult> {
-  const where = buildClientWhere(filters);
+function resolvePageLimit(filters: LeadCommandCenterFilters): number | null {
+  const requestedLimit = filters.limit;
+  if (requestedLimit === undefined || requestedLimit <= 0) {
+    return null;
+  }
 
-  const clients = await prisma.client.findMany({
-    where,
-    select: leadCommandCenterInboxSelect,
-  });
+  return Math.min(
+    Math.max(requestedLimit, 1),
+    LEAD_COMMAND_CENTER_MAX_LIMIT
+  );
+}
 
+async function hydrateInboxRows(
+  clients: InboxClientWithRelations[]
+): Promise<LeadCommandCenterRow[]> {
   const contactsByClientId = await loadContactsForClientIds(
     clients.map((client) => client.id)
   );
@@ -1256,7 +1349,7 @@ export async function fetchLeadCommandCenterPage(
     clients.map((client) => client.id)
   );
 
-  const rows = clients.map((client) => {
+  return clients.map((client) => {
     const activityDate = latestActivityTimestamps.get(client.id);
     return mapInboxClientToRow(
       client,
@@ -1264,21 +1357,67 @@ export async function fetchLeadCommandCenterPage(
       activityDate?.toISOString() ?? null
     );
   });
+}
 
+async function fetchLeadCommandCenterPageDbPaginated(
+  where: Prisma.ClientWhereInput,
+  limit: number,
+  offset: number
+): Promise<LeadCommandCenterPageResult> {
+  const [clients, total] = await Promise.all([
+    prisma.client.findMany({
+      where,
+      select: leadCommandCenterInboxSelect,
+      orderBy: inboxSqlOrderBy,
+      skip: offset,
+      take: limit,
+    }),
+    prisma.client.count({ where }),
+  ]);
+
+  const leads = await hydrateInboxRows(clients);
+  const hasMore = offset + leads.length < total;
+
+  return {
+    leads,
+    meta: {
+      count: leads.length,
+      limit,
+      offset,
+      total,
+      hasMore,
+      dbPaginated: true,
+      sortMode: 'lastModified',
+    },
+  };
+}
+
+/**
+ * Fallback: load all Prisma matches, hydrate, apply in-memory post-filters,
+ * sort by attention, then slice. Used when dup / needsAttention / latest-source
+ * filters (or unlimited fetch / env disable) prevent SQL pagination.
+ */
+async function fetchLeadCommandCenterPageInMemoryFallback(
+  filters: LeadCommandCenterFilters,
+  where: Prisma.ClientWhereInput,
+  fallbackReason: string,
+  limit: number | null,
+  offset: number
+): Promise<LeadCommandCenterPageResult> {
+  const clients = await prisma.client.findMany({
+    where,
+    select: leadCommandCenterInboxSelect,
+  });
+
+  const rows = await hydrateInboxRows(clients);
   const filteredRows = applyPostFilters(rows, filters);
   sortRows(filteredRows);
 
-  const offset = Math.max(filters.offset ?? 0, 0);
-  const requestedLimit = filters.limit;
-  const limit =
-    requestedLimit === undefined || requestedLimit <= 0
-      ? filteredRows.length
-      : requestedLimit;
-
+  const pageLimit = limit ?? filteredRows.length;
   const leads =
-    requestedLimit === undefined || requestedLimit <= 0
+    limit === null
       ? filteredRows.slice(offset)
-      : filteredRows.slice(offset, offset + limit);
+      : filteredRows.slice(offset, offset + pageLimit);
 
   const total = filteredRows.length;
   const hasMore = offset + leads.length < total;
@@ -1287,15 +1426,41 @@ export async function fetchLeadCommandCenterPage(
     leads,
     meta: {
       count: leads.length,
-      limit:
-        requestedLimit === undefined || requestedLimit <= 0
-          ? leads.length
-          : requestedLimit,
+      limit: limit === null ? leads.length : pageLimit,
       offset,
       total,
       hasMore,
+      dbPaginated: false,
+      fallbackReason,
+      sortMode: 'attention',
     },
   };
+}
+
+export async function fetchLeadCommandCenterPage(
+  filters: LeadCommandCenterFilters = {}
+): Promise<LeadCommandCenterPageResult> {
+  const where = buildClientWhere(filters);
+  const offset = Math.max(filters.offset ?? 0, 0);
+  const limit = resolvePageLimit(filters);
+  const decision = decideLeadCommandCenterSqlPagination(filters);
+
+  if (decision.dbPaginated) {
+    // decideLeadCommandCenterSqlPagination only allows this when limit > 0.
+    return fetchLeadCommandCenterPageDbPaginated(
+      where,
+      limit ?? LEAD_COMMAND_CENTER_DEFAULT_LIMIT,
+      offset
+    );
+  }
+
+  return fetchLeadCommandCenterPageInMemoryFallback(
+    filters,
+    where,
+    decision.fallbackReason,
+    limit,
+    offset
+  );
 }
 
 /**
