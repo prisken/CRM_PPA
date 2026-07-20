@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { requireSuperAdminFromRequest } from '@/lib/authHelpers';
+import { requireCronSecretOrSuperAdmin } from '@/lib/authHelpers';
 import { processBackgroundJobs } from '@/lib/backgroundJobs';
 import { timeRouteHandler } from '@/lib/performance';
 
@@ -7,21 +7,17 @@ export const dynamic = 'force-dynamic';
 
 /**
  * Process due BackgroundJob rows (returnable recalculation and future types).
- * Auth: super admin session/Bearer, or Authorization: Bearer ${CRON_SECRET}.
+ *
+ * Auth (required — never open):
+ * - `Authorization: Bearer ${CRON_SECRET}` or `x-cron-secret: ${CRON_SECRET}`
+ * - OR super admin session / Bearer JWT
+ *
+ * Set `CRON_SECRET` in staging/production for HTTP cron callers.
  */
 export async function POST(request: Request) {
-  const cronSecret = process.env.CRON_SECRET?.trim();
-  const authHeader = request.headers.get('authorization');
-  const isCron =
-    Boolean(cronSecret) &&
-    (authHeader === `Bearer ${cronSecret}` ||
-      request.headers.get('x-cron-secret') === cronSecret);
-
-  if (!isCron) {
-    const auth = await requireSuperAdminFromRequest(request);
-    if (auth.error) {
-      return auth.error;
-    }
+  const gate = await requireCronSecretOrSuperAdmin(request);
+  if ('error' in gate && gate.error) {
+    return gate.error;
   }
 
   const body = await request.json().catch(() => ({}));
@@ -33,11 +29,15 @@ export async function POST(request: Request) {
   const result = await timeRouteHandler(
     'POST /api/tasks/process-background-jobs',
     () => processBackgroundJobs({ limit }),
-    (summary) => ({
-      claimed: summary.claimed,
-      succeeded: summary.succeeded,
-      failed: summary.failed,
-    })
+    {
+      getMeta: (summary) => ({
+        claimed: summary.claimed,
+        succeeded: summary.succeeded,
+        failed: summary.failed,
+        reclaimedStuck: summary.reclaimedStuck,
+        authVia: 'via' in gate ? gate.via : 'unknown',
+      }),
+    }
   );
 
   return NextResponse.json({ ok: true, ...result });

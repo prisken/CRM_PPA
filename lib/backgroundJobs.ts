@@ -28,10 +28,15 @@ export type ProcessBackgroundJobsResult = {
   succeeded: number;
   failed: number;
   jobIds: string[];
+  /** RUNNING rows older than {@link STUCK_RUNNING_MS} reset to PENDING before claim. */
+  reclaimedStuck: number;
 };
 
 const DEFAULT_BATCH_LIMIT = 10;
 const DEFAULT_MAX_ATTEMPTS = 5;
+
+/** RUNNING jobs with `updatedAt` older than this are treated as stuck (crash/timeout). */
+export const STUCK_RUNNING_MS = 15 * 60 * 1000;
 
 function isReturnableRecalcPayload(
   payload: unknown
@@ -205,11 +210,41 @@ async function markJobFailure(
 }
 
 /**
+ * Reset crash/timeout leftovers: RUNNING with stale `updatedAt` → PENDING.
+ * Does not change schema; safe to run on every processor tick.
+ */
+export async function reclaimStuckRunningJobs(
+  olderThanMs: number = STUCK_RUNNING_MS
+): Promise<number> {
+  const cutoff = new Date(Date.now() - olderThanMs);
+  const result = await prisma.backgroundJob.updateMany({
+    where: {
+      status: BackgroundJobStatus.RUNNING,
+      updatedAt: { lt: cutoff },
+    },
+    data: {
+      status: BackgroundJobStatus.PENDING,
+      runAfter: new Date(),
+      lastError: 'Reclaimed stuck RUNNING job (processor crash or timeout)',
+    },
+  });
+  return result.count;
+}
+
+/**
  * Claim and run a batch of due background jobs.
+ * Reclaims stuck RUNNING rows first, then claims PENDING with `runAfter <= now`.
  */
 export async function processBackgroundJobs(
   options: ProcessBackgroundJobsOptions = {}
 ): Promise<ProcessBackgroundJobsResult> {
+  const reclaimedStuck = await reclaimStuckRunningJobs();
+  if (reclaimedStuck > 0) {
+    console.warn(
+      `[background-jobs] Reclaimed ${reclaimedStuck} stuck RUNNING job(s)`
+    );
+  }
+
   const claimed = await claimPendingBackgroundJobs(options);
   let succeeded = 0;
   let failed = 0;
@@ -236,5 +271,6 @@ export async function processBackgroundJobs(
     succeeded,
     failed,
     jobIds: claimed.map((job) => job.id),
+    reclaimedStuck,
   };
 }

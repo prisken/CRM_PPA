@@ -1,3 +1,4 @@
+import { timingSafeEqual } from 'crypto';
 import { AssignmentRole, ClientStatus, DealParticipantRole, UserRole, UserStatus } from '@prisma/client';
 import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
@@ -130,6 +131,61 @@ export async function requireSuperAdminFromRequest(request?: Request) {
   }
 
   return auth;
+}
+
+function secretsEqual(provided: string, expected: string): boolean {
+  const providedBuffer = Buffer.from(provided);
+  const expectedBuffer = Buffer.from(expected);
+  if (providedBuffer.length !== expectedBuffer.length) {
+    return false;
+  }
+  return timingSafeEqual(providedBuffer, expectedBuffer);
+}
+
+/**
+ * True when the request presents a valid `CRON_SECRET` via
+ * `Authorization: Bearer <secret>` or `x-cron-secret: <secret>`.
+ * Returns false when `CRON_SECRET` is unset/empty (cron path disabled).
+ */
+export function requestMatchesCronSecret(request: Request): boolean {
+  const cronSecret = process.env.CRON_SECRET?.trim();
+  if (!cronSecret) {
+    return false;
+  }
+
+  const authHeader = request.headers.get('authorization');
+  if (authHeader) {
+    const match = authHeader.match(/^Bearer\s+(.+)$/i);
+    if (match && secretsEqual(match[1].trim(), cronSecret)) {
+      return true;
+    }
+  }
+
+  const headerSecret = request.headers.get('x-cron-secret')?.trim();
+  if (headerSecret && secretsEqual(headerSecret, cronSecret)) {
+    return true;
+  }
+
+  return false;
+}
+
+/**
+ * Background job processor gate: `CRON_SECRET` (staging/prod cron) **or**
+ * super admin session/Bearer. Always requires one of the two — never open.
+ */
+export async function requireCronSecretOrSuperAdmin(
+  request: Request
+): Promise<AuthResult | { ok: true; via: 'cron' | 'super_admin' }> {
+  if (requestMatchesCronSecret(request)) {
+    return { ok: true, via: 'cron' };
+  }
+
+  const auth = await requireSuperAdminFromRequest(request);
+  if (auth.error) {
+    return auth;
+  }
+
+  return { ok: true, via: 'super_admin' };
 }
 
 /**
