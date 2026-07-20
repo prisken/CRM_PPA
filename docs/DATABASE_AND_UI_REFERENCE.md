@@ -37,7 +37,7 @@ This document describes the PostgreSQL database schema, API surface, and fronten
 | Team occupancy limits | ✅ Max 1 Relationship, 1 Follow-up per client; legacy max 2 Doctors (no new doctor client assignments) |
 | Multi-deal system | ✅ CRUD per client; committed/potential value aggregation |
 | Commission returnables | ✅ Doctor liabilities on WON deals; multi-role credit sum; statements + reconciliation |
-| Assignment-triggered returnable recalculation | ✅ Fire-and-forget via `POST /api/tasks/recalculate-returnables` on assignment add/remove |
+| Assignment-triggered returnable recalculation | ✅ Durable `BackgroundJob` enqueue (+ best-effort in-process process); sync `POST /api/tasks/recalculate-returnables` kept for compat |
 | Role-based dashboard widgets | ✅ Secured commission + returnables by assignment role (all users) |
 | Performance — standard dashboard | ✅ Per-widget API endpoints; shared `loadStandardDashboardContext` for legacy monolith; SQL deal aggregates; skeleton loaders |
 | Performance — dashboard pass 2 | ✅ `lib/standardDashboardContext.ts` + `lib/dashboardDealAggregates.ts`; fewer duplicate DB round-trips; open tasks `clientId IN` filter |
@@ -1137,6 +1137,7 @@ erDiagram
 | `20260617120000_add_user_status` | `UserStatus` enum + `status` column on `User` (default `ACTIVE`) |
 | `20260624084311_add_performance_indexes_phase_2` | Non-destructive indexes: `client_assignments(userId)`, `tasks(assigneeId, status, dueDate)`, `Deal(status, updatedAt)`, `CommissionReturnable(userId, status, period)` |
 | `20260721020000_add_performance_indexes_phase_3` | Additive B-tree indexes (Client status/lastModified/company/createdAt, assignments by clientId, Deal/participant composites, tasks/documents/returnables/notifications/source records); `pg_trgm` + GIN on Client name/company/email/phone and `client_contacts.value`. **Deferred:** partial unique occupancy indexes for RELATIONSHIP/ACCOUNT_SERVICE (data may violate) |
+| `20260721030000_add_background_jobs` | `BackgroundJobStatus` enum; `background_jobs` table for durable async work (returnable recalculation first) |
 | `20260624184022_add_lead_source_records` | `LeadSourceType` enum; `client_source_records` (payload JSONB, unique `source+externalId`); `lead_merge_audits` |
 | `20260702034945_add_client_tags` | `Tag` + `ClientTag` tables; `@@unique([clientId, tagId])` |
 | `20260702035607_add_client_follow_up_fields` | `priority`, `next_action`, `next_follow_up_at` on `Client`; index on `next_follow_up_at` |
@@ -1313,11 +1314,12 @@ returnableAmount = max(0, baseLiability - userCredit)
 
 **Recalculate (bulk):** Run `npm run test:deal-returnables` for unit tests; `npx tsx scripts/recalculate-commission-returnables.ts` recalculates all WON deals (participant explicit fields or legacy fallback per deal).
 
-**Recalculate (per user/client):** `recalculateReturnablesForUserOnClient(userId, clientId)` updates existing `CommissionReturnable` rows for all WON deals on that client. Triggered in the background when assignments change:
+**Recalculate (per user/client):** `recalculateReturnablesForUserOnClient(userId, clientId)` updates existing `CommissionReturnable` rows for all WON deals on that client. Triggered when assignments change:
 
-1. `POST` / `DELETE` `/api/clients/[id]/assignments` call `scheduleReturnableRecalculation(userId, clientId, request)` (fire-and-forget, no `await`)
-2. That helper `fetch`es `POST /api/tasks/recalculate-returnables` with forwarded session cookies
-3. The task endpoint runs `recalculateReturnablesForUserOnClient` and returns when complete
+1. `POST` / `DELETE` `/api/clients/[id]/assignments` (and bulk relationship assign) call `scheduleReturnableRecalculation(userId, clientId)` (fire-and-forget, no `await`)
+2. That helper **enqueues** a durable `BackgroundJob` (`RECALCULATE_RETURNABLES_FOR_USER_CLIENT`, payload `{ userId, clientId }`), deduping while `PENDING`, then best-effort runs `processBackgroundJobs` in-process
+3. If the process dies before running, the row stays `PENDING` until `npm run jobs:process` or `POST /api/tasks/process-background-jobs`
+4. Sync compat: `POST /api/tasks/recalculate-returnables` still runs recalculation immediately (super admin)
 
 If the user is no longer a doctor on the client, existing returnables for that user are set to **0** (record retained for audit). Assignment APIs respond immediately without waiting for recalculation.
 
@@ -1690,7 +1692,8 @@ No CRM login required. All webhook routes validate header `x-webhook-secret` aga
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
-| POST | `/api/tasks/recalculate-returnables` | Super admin (session or Bearer) | Body: `{ userId, clientId }`. Runs `recalculateReturnablesForUserOnClient`. Called fire-and-forget from assignment APIs |
+| POST | `/api/tasks/recalculate-returnables` | Super admin (session or Bearer) | Body: `{ userId, clientId }`. Sync `recalculateReturnablesForUserOnClient` (compat). Assignment flows use durable jobs instead |
+| POST | `/api/tasks/process-background-jobs` | Super admin or `CRON_SECRET` | Claim/process due `BackgroundJob` rows. Optional body `{ limit }` |
 
 ### Reports (alternate endpoints — require `?format=pdf|csv`)
 
@@ -2382,7 +2385,8 @@ Mounted via `src/components/Providers.tsx` (wraps app with `DisplayDensityProvid
 | `constants.ts` | Commission pools, company overhead, role occupancy limits |
 | `commissionCalculations.ts` | Shared-role commission share + legacy secured commission math |
 | `commissionRates.ts` | Role label formatting (`formatAssignmentRole`) |
-| `commissionReturnables.ts` | Returnable generation (participant + legacy), `recalculateReturnablesForUserOnClient`, `scheduleReturnableRecalculation`, formatting |
+| `commissionReturnables.ts` | Returnable generation (participant + legacy), `recalculateReturnablesForUserOnClient`, `scheduleReturnableRecalculation` (durable enqueue) |
+| `backgroundJobs.ts` | `BackgroundJob` enqueue/claim/process; `RECALCULATE_RETURNABLES_FOR_USER_CLIENT` |
 | `dealCommissionTemplates.ts` | `DealType` labels, default commission templates, percent validation |
 | `dealParticipants.ts` | Participant normalization, validation, `buildDefaultParticipantsForDeal`, API payload parsing |
 | `dealParticipantsBackfill.ts` | Backfill participant rows from client assignments |
@@ -2490,8 +2494,9 @@ Mounted via `src/components/Providers.tsx` (wraps app with `DisplayDensityProvid
 ```
 /clients/[id] → Assigned Team widget → add or remove assignment
              → POST /api/clients/[id]/assignments or DELETE .../assignments/[assignmentId]
-             → scheduleReturnableRecalculation() → POST /api/tasks/recalculate-returnables
+             → scheduleReturnableRecalculation() → enqueue BackgroundJob (+ best-effort process)
              → returnables updated asynchronously (e.g. Doctor+Relationship 30% → add Account Service → 20%)
+             → pending leftovers: `npm run jobs:process` or POST /api/tasks/process-background-jobs
 ```
 
 ### Super admin workflow
@@ -2637,6 +2642,7 @@ npx tsx scripts/find-duplicate-clients.ts   # Report duplicate email/phone clien
 npm run manuals:pdf                         # Generate USER_MANUAL_*.pdf from markdown
 npx tsx scripts/profile-api-routes.ts       # Client round-trip timings; pair with PERF_LOGGING for server `[perf]` logs
 npx tsx scripts/recalculate-commission-returnables.ts  # Backfill/correct returnable amounts after formula changes
+npm run jobs:process                                  # Process pending BackgroundJob rows (local/ops)
 npm run audit:legacy-commission                       # Read-only report of deals without DealParticipant rows
 npm run backfill:deal-participants:dry                # Preview DealParticipant backfill for legacy deals
 npm run backfill:deal-participants                    # Write DealParticipant rows from client assignments
@@ -2829,7 +2835,7 @@ Related: `lib/pipelinePermissions.ts` exports `getNextPipelineStage`, `canUserAd
 | Participant returnables v1 | Explicit per-doctor fields; create/update validates caps/`userId`/commissionable; backfill still does not infer returnables — business review after migration |
 | Deal participant API integration tests | `test:deal-participant-api` uses Prisma + route libraries (deal routes use session auth, not Bearer-only HTTP) |
 | Returnable backfill | Historical WON deals may need `npx tsx scripts/recalculate-commission-returnables.ts` after configuring doctor returnables |
-| Background returnable tasks | Fire-and-forget `fetch` to `/api/tasks/recalculate-returnables`; no retry queue yet — suitable for future Inngest/Vercel Cron migration |
+| Background returnable tasks | Durable `BackgroundJob` queue (`PENDING`/`RUNNING`/`SUCCEEDED`/`FAILED`); assignment enqueue + best-effort process; retry with backoff; `npm run jobs:process` / `POST /api/tasks/process-background-jobs`. Sync recalculate route kept for compat |
 | Admin analytics cache | Funnel, revenue, leaderboards cached 10 min — new data may lag briefly after pipeline/deal changes |
 | Pipeline checklist in modal | Display-only reminders in `PipelineStageAdvanceModal`; not persisted or server-validated |
 | Admin route protection | `/admin/*` middleware checks session only; role enforced client-side + API 403 |

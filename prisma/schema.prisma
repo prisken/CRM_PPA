@@ -101,6 +101,13 @@ enum ClientContactKind {
   PHONE
 }
 
+enum BackgroundJobStatus {
+  PENDING
+  RUNNING
+  SUCCEEDED
+  FAILED
+}
+
 enum StrategyPlanStatus {
   DRAFT
   ACTIVE
@@ -761,4 +768,25 @@ model ClientStrategyProjectionMilestoneExpense {
   @@unique([milestoneId, expenseId])
   @@index([milestoneId])
   @@index([expenseId])
+}
+
+/**
+ * Durable async work queue (returnable recalculation first; other types later).
+ * Claim with status PENDING + runAfter <= now; processor marks RUNNING then SUCCEEDED/FAILED.
+ */
+model BackgroundJob {
+  id          String              @id @default(cuid())
+  type        String
+  status      BackgroundJobStatus @default(PENDING)
+  payload     Json                @db.JsonB
+  attempts    Int                 @default(0)
+  maxAttempts Int                 @default(5)
+  runAfter    DateTime            @default(now())
+  lastError   String?             @db.Text
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+
+  @@index([status, runAfter])
+  @@index([type, status])
+  @@map("background_jobs")
 }

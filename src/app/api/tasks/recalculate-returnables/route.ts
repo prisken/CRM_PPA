@@ -2,6 +2,13 @@ import { NextResponse } from 'next/server';
 import { requireSuperAdminFromRequest } from '@/lib/authHelpers';
 import { recalculateReturnablesForUserOnClient } from '@/lib/commissionReturnables';
 
+export const dynamic = 'force-dynamic';
+
+/**
+ * Synchronous recalculation (backward compatible).
+ * Assignment flows enqueue durable BackgroundJob rows instead; prefer
+ * `POST /api/tasks/process-background-jobs` or `npm run jobs:process` for the queue.
+ */
 export async function POST(request: Request) {
   const auth = await requireSuperAdminFromRequest(request);
   if (auth.error) {

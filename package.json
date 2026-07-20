@@ -27,6 +27,7 @@
     "test:client-contacts": "npx tsx scripts/test-client-contacts.ts",
     "manuals:pdf": "node scripts/generate-manual-pdfs.mjs",
     "test:commission-system": "npx tsx scripts/test-commission-system.ts",
+    "jobs:process": "npx tsx scripts/process-background-jobs.ts",
     "test:http": "TEST_BASE_URL=http://localhost:3001 npm run test:commission-system && TEST_BASE_URL=http://localhost:3001 npx tsx scripts/test-activity-apis.ts && TEST_BASE_URL=http://localhost:3001 npx tsx scripts/test-user-management.ts",
     "test:all": "npm run test:deal-participants && npm run test:deal-returnables && npm run verify:deal-participants && npm run test:deal-participant-api && npm run test:client-access && npm run test:client-strategy && npm run test:strategy-projection && npm run test:strategy-report && npm run test:important-dates && npm run test:important-dates-calendar && npm run test:client-contacts && npm run test:merge-custom-fields && npm run test:lead-ingestion && npx tsx scripts/test-lead-command-center.ts && npm run test:http",
     "postinstall": "prisma generate"

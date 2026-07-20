@@ -407,41 +407,27 @@ export async function recalculateReturnablesForUserOnClient(
 }
 
 /**
- * Schedules returnable recalculation via a background API call (fire-and-forget).
- * The assignment API can respond immediately while recalculation runs separately.
+ * Schedules durable returnable recalculation for (userId, clientId).
+ * Enqueues a BackgroundJob (deduped while PENDING), then best-effort processes
+ * a small batch in-process so assignment APIs can still return immediately.
  */
 export function scheduleReturnableRecalculation(
   userId: string,
   clientId: string,
-  request?: Request
+  _request?: Request
 ) {
-  const origin = request
-    ? new URL(request.url).origin
-    : process.env.VERCEL_URL
-      ? `https://${process.env.VERCEL_URL}`
-      : (process.env.TEST_BASE_URL ?? 'http://localhost:3000');
-
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-  };
-
-  if (request) {
-    const cookie = request.headers.get('cookie');
-    if (cookie) {
-      headers.cookie = cookie;
-    }
-
-    const authorization = request.headers.get('authorization');
-    if (authorization) {
-      headers.authorization = authorization;
-    }
-  }
-
-  void fetch(`${origin}/api/tasks/recalculate-returnables`, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify({ userId, clientId }),
-  }).catch((error) => {
+  void (async () => {
+    const {
+      BACKGROUND_JOB_TYPES,
+      enqueueReturnableRecalculationJob,
+      processBackgroundJobs,
+    } = await import('@/lib/backgroundJobs');
+    await enqueueReturnableRecalculationJob(userId, clientId);
+    await processBackgroundJobs({
+      limit: 5,
+      types: [BACKGROUND_JOB_TYPES.RECALCULATE_RETURNABLES_FOR_USER_CLIENT],
+    });
+  })().catch((error) => {
     console.error(
       `Failed to schedule returnable recalculation for user ${userId} on client ${clientId}.`,
       error
