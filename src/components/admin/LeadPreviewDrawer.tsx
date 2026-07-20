@@ -439,7 +439,7 @@ function LeadPreviewDrawer({
                     value={priority}
                     onChange={(event) => setPriority(event.target.value)}
                     disabled={isSavingFollowUp}
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-700 disabled:opacity-60"
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 disabled:opacity-60 bg-white placeholder:text-gray-500 caret-gray-900"
                   >
                     {PRIORITY_OPTIONS.map((option) => (
                       <option key={option.value || 'none'} value={option.value}>
@@ -463,7 +463,7 @@ function LeadPreviewDrawer({
                     disabled={isSavingFollowUp}
                     rows={3}
                     placeholder="What should happen next?"
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:opacity-60"
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:opacity-60 bg-white text-gray-900 placeholder:text-gray-500 caret-gray-900"
                   />
                 </div>
 
@@ -480,7 +480,7 @@ function LeadPreviewDrawer({
                     value={nextFollowUpAt}
                     onChange={(event) => setNextFollowUpAt(event.target.value)}
                     disabled={isSavingFollowUp}
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:opacity-60"
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:opacity-60 bg-white text-gray-900 placeholder:text-gray-500 caret-gray-900"
                   />
                 </div>
 

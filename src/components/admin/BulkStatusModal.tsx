@@ -125,7 +125,7 @@ function BulkStatusModal({
                 value={status}
                 onChange={(event) => setStatus(event.target.value as ClientStageValue)}
                 disabled={isSubmitting}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-700 disabled:opacity-60"
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 disabled:opacity-60 bg-white placeholder:text-gray-500 caret-gray-900"
               >
                 {CLIENT_STAGES.map((stage) => (
                   <option key={stage.value} value={stage.value}>

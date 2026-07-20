@@ -26,15 +26,76 @@ body {
 }
 
 /*
- * Fix for white text on white background in autofilled inputs on Safari/iPadOS.
- * This forces the text color to be dark and the background to be white when
- * the browser's autofill feature is active.
+ * Form control baseline — Safari/iPadOS readability.
+ * Typed text must not inherit light body color (e.g. prefers-color-scheme: dark)
+ * onto white fields. Buttons, checkboxes, radios, and file inputs are excluded.
+ */
+input:not([type='checkbox']):not([type='radio']):not([type='range']):not(
+    [type='button']
+  ):not([type='submit']):not([type='reset']):not([type='image']):not(
+    [type='file']
+  ):not([type='hidden']):not([type='color']),
+textarea,
+select {
+  color: #111827; /* gray-900 */
+  background-color: #ffffff;
+  caret-color: #111827;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: #6b7280; /* gray-500 */
+  opacity: 1;
+}
+
+input:disabled:not([type='checkbox']):not([type='radio']):not([type='range']):not(
+    [type='button']
+  ):not([type='submit']):not([type='reset']):not([type='image']):not(
+    [type='file']
+  ):not([type='hidden']):not([type='color']),
+textarea:disabled,
+select:disabled {
+  color: #374151; /* gray-700 */
+  background-color: #f9fafb; /* gray-50 */
+  -webkit-text-fill-color: #374151;
+  opacity: 1;
+}
+
+/*
+ * WebKit autofill — force dark text on white fill for input/textarea/select
+ * across hover, focus, and active (Safari/iPadOS otherwise paints white text).
  */
 input:-webkit-autofill,
 input:-webkit-autofill:hover,
 input:-webkit-autofill:focus,
-input:-webkit-autofill:active {
-  -webkit-text-fill-color: #1f2937;
+input:-webkit-autofill:active,
+textarea:-webkit-autofill,
+textarea:-webkit-autofill:hover,
+textarea:-webkit-autofill:focus,
+textarea:-webkit-autofill:active,
+select:-webkit-autofill,
+select:-webkit-autofill:hover,
+select:-webkit-autofill:focus,
+select:-webkit-autofill:active {
+  -webkit-text-fill-color: #111827;
+  caret-color: #111827;
   -webkit-box-shadow: 0 0 0px 1000px #ffffff inset;
+  box-shadow: 0 0 0px 1000px #ffffff inset;
   transition: background-color 5000s ease-in-out 0s;
+}
+
+/*
+ * iOS Safari zooms focused fields when font-size is under 16px.
+ * Beat utility classes (e.g. text-sm) on small viewports only.
+ */
+@media screen and (max-width: 767px) {
+  input:not([type='checkbox']):not([type='radio']):not([type='range']):not(
+      [type='button']
+    ):not([type='submit']):not([type='reset']):not([type='image']):not(
+      [type='file']
+    ):not([type='hidden']):not([type='color']),
+  textarea,
+  select {
+    font-size: 16px !important;
+  }
 }

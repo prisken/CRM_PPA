@@ -97,7 +97,7 @@ export default function AddClientModal({
                 value={formData.name}
                 onChange={(e) => updateField('name', e.target.value)}
                 required
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm bg-white text-gray-900 placeholder:text-gray-500 caret-gray-900"
                 placeholder="Client or lead name"
               />
             </div>
@@ -114,7 +114,7 @@ export default function AddClientModal({
                 type="text"
                 value={formData.company}
                 onChange={(e) => updateField('company', e.target.value)}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm bg-white text-gray-900 placeholder:text-gray-500 caret-gray-900"
                 placeholder="Company name"
               />
             </div>
@@ -152,7 +152,7 @@ export default function AddClientModal({
                 type="text"
                 value={formData.lead_source}
                 onChange={(e) => updateField('lead_source', e.target.value)}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm bg-white text-gray-900 placeholder:text-gray-500 caret-gray-900"
                 placeholder="e.g. Referral, Paid Ads"
               />
             </div>
@@ -169,7 +169,7 @@ export default function AddClientModal({
                 type="text"
                 value={formData.role_in_company}
                 onChange={(e) => updateField('role_in_company', e.target.value)}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm bg-white text-gray-900 placeholder:text-gray-500 caret-gray-900"
                 placeholder="e.g. CEO, HR Director"
               />
             </div>
@@ -188,7 +188,7 @@ export default function AddClientModal({
                 step={1}
                 value={formData.employee_count}
                 onChange={(e) => updateField('employee_count', e.target.value)}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm bg-white text-gray-900 placeholder:text-gray-500 caret-gray-900"
                 placeholder="Number of employees"
               />
             </div>
@@ -205,7 +205,7 @@ export default function AddClientModal({
                 value={formData.expectations}
                 onChange={(e) => updateField('expectations', e.target.value)}
                 rows={3}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm bg-white text-gray-900 placeholder:text-gray-500 caret-gray-900"
                 placeholder="Goals, priorities, or notes about what they expect"
               />
             </div>
@@ -221,7 +221,7 @@ export default function AddClientModal({
                 id="client-status"
                 value={formData.status}
                 onChange={(e) => updateField('status', e.target.value)}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm bg-white text-gray-900 placeholder:text-gray-500 caret-gray-900"
               >
                 {CLIENT_STAGES.map((stage) => (
                   <option key={stage.value} value={stage.value}>

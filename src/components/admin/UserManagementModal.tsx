@@ -174,7 +174,7 @@ export default function UserManagementModal({
                     value={confirmName}
                     onChange={(event) => setConfirmName(event.target.value)}
                     placeholder={userName}
-                    className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                    className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm bg-white text-gray-900 placeholder:text-gray-500 caret-gray-900"
                     autoComplete="off"
                   />
                 </label>
@@ -199,7 +199,7 @@ export default function UserManagementModal({
                     value={confirmName}
                     onChange={(event) => setConfirmName(event.target.value)}
                     placeholder={userName}
-                    className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                    className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm bg-white text-gray-900 placeholder:text-gray-500 caret-gray-900"
                     autoComplete="off"
                   />
                 </label>
@@ -209,7 +209,7 @@ export default function UserManagementModal({
                     type="password"
                     value={password}
                     onChange={(event) => setPassword(event.target.value)}
-                    className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                    className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm bg-white text-gray-900 placeholder:text-gray-500 caret-gray-900"
                     autoComplete="current-password"
                   />
                 </label>

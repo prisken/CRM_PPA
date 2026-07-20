@@ -142,7 +142,7 @@ function BulkNoteModal({
                 value={type}
                 onChange={(event) => setType(event.target.value as NoteType)}
                 disabled={isSubmitting}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-700 disabled:opacity-60"
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 disabled:opacity-60 bg-white placeholder:text-gray-500 caret-gray-900"
               >
                 {NOTE_TYPES.map((option) => (
                   <option key={option.value} value={option.value}>
@@ -166,7 +166,7 @@ function BulkNoteModal({
                 disabled={isSubmitting}
                 rows={5}
                 placeholder="Add a note to apply to all selected leads..."
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:opacity-60"
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:opacity-60 bg-white text-gray-900 placeholder:text-gray-500 caret-gray-900"
               />
             </div>
 

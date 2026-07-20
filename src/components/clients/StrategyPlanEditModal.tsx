@@ -151,7 +151,7 @@ function StrategyPlanEditModalForm({
                   value={title}
                   onChange={(event) => setTitle(event.target.value)}
                   placeholder="e.g. Retirement income plan"
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-1"
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-1 bg-white text-gray-900 placeholder:text-gray-500 caret-gray-900"
                   required
                   autoFocus
                 />
@@ -170,7 +170,7 @@ function StrategyPlanEditModalForm({
                   onChange={(event) => setClientGoal(event.target.value)}
                   rows={2}
                   placeholder="What does the client want to achieve?"
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-1"
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-1 bg-white text-gray-900 placeholder:text-gray-500 caret-gray-900"
                 />
                 <p className="mt-1.5 text-xs leading-relaxed text-gray-500">
                   Start with the client goal. You can add investments, expenses,
@@ -212,7 +212,7 @@ function StrategyPlanEditModalForm({
                     onChange={(event) => setDescription(event.target.value)}
                     rows={3}
                     placeholder="Optional notes about this plan"
-                    className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-1"
+                    className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-1 text-gray-900 placeholder:text-gray-500 caret-gray-900"
                   />
                 </div>
 
@@ -229,7 +229,7 @@ function StrategyPlanEditModalForm({
                     onChange={(event) => setExpectedOutcome(event.target.value)}
                     rows={2}
                     placeholder="What success looks like for the client"
-                    className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-1"
+                    className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-1 text-gray-900 placeholder:text-gray-500 caret-gray-900"
                   />
                 </div>
 
@@ -244,7 +244,7 @@ function StrategyPlanEditModalForm({
                     id="strategy-plan-status"
                     value={status}
                     onChange={(event) => setStatus(event.target.value)}
-                    className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-1"
+                    className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-1 text-gray-900 placeholder:text-gray-500 caret-gray-900"
                   >
                     {PLAN_STATUSES.map((option) => (
                       <option key={option.value} value={option.value}>

@@ -761,7 +761,7 @@ function DealEditModalForm({
                   value={name}
                   onChange={(event) => setName(event.target.value)}
                   required
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm bg-white text-gray-900 placeholder:text-gray-500 caret-gray-900"
                   placeholder="e.g. Annual retainer"
                 />
               </div>
@@ -782,7 +782,7 @@ function DealEditModalForm({
                     value={dealValue}
                     onChange={(event) => setDealValue(event.target.value)}
                     required
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm bg-white text-gray-900 placeholder:text-gray-500 caret-gray-900"
                   />
                 </div>
 
@@ -801,7 +801,7 @@ function DealEditModalForm({
                     value={totalCommission}
                     onChange={(event) => setTotalCommission(event.target.value)}
                     required
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm bg-white text-gray-900 placeholder:text-gray-500 caret-gray-900"
                   />
                 </div>
               </div>
@@ -820,7 +820,7 @@ function DealEditModalForm({
                     onChange={(event) =>
                       handleDealTypeChange(event.target.value as DealType)
                     }
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm bg-white text-gray-900 placeholder:text-gray-500 caret-gray-900"
                   >
                     {DEAL_TYPE_OPTIONS.map((option) => (
                       <option key={option.value} value={option.value}>
@@ -841,7 +841,7 @@ function DealEditModalForm({
                     id="deal-status"
                     value={status}
                     onChange={(event) => setStatus(event.target.value as DealStatus)}
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm bg-white text-gray-900 placeholder:text-gray-500 caret-gray-900"
                   >
                     {DEAL_STATUSES.map((option) => (
                       <option key={option.value} value={option.value}>
@@ -1121,7 +1121,7 @@ function ParticipantRowEditor({
           onChange={(event) =>
             handleRoleChange(event.target.value as DealParticipantRole)
           }
-          className="w-full min-w-[8rem] rounded border border-gray-300 px-2 py-1.5 text-xs"
+          className="w-full min-w-[8rem] rounded border border-gray-300 px-2 py-1.5 text-xs bg-white text-gray-900 placeholder:text-gray-500 caret-gray-900"
         >
           {PARTICIPANT_ROLE_OPTIONS.map((option) => (
             <option key={option.value} value={option.value}>
@@ -1143,7 +1143,7 @@ function ParticipantRowEditor({
                 ? EXTERNAL_PARTNER_NAME_PLACEHOLDER
                 : undefined
             }
-            className="w-full min-w-[12rem] rounded border border-gray-300 px-2 py-1.5 text-xs read-only:bg-gray-100"
+            className="w-full min-w-[12rem] rounded border border-gray-300 px-2 py-1.5 text-xs read-only:bg-gray-100 bg-white text-gray-900 placeholder:text-gray-500 caret-gray-900"
           />
         ) : (
           <ParticipantUserPicker
@@ -1162,7 +1162,7 @@ function ParticipantRowEditor({
           step="0.01"
           value={row.commissionPercent}
           onChange={(event) => onChange({ commissionPercent: event.target.value })}
-          className="w-20 rounded border border-gray-300 px-2 py-1.5 text-xs"
+          className="w-20 rounded border border-gray-300 px-2 py-1.5 text-xs bg-white text-gray-900 placeholder:text-gray-500 caret-gray-900"
         />
       </td>
 
@@ -1204,7 +1204,7 @@ function ParticipantRowEditor({
                     onChange({ returnablePercent: event.target.value })
                   }
                   placeholder="Returnable % of commission"
-                  className="w-full rounded border border-gray-300 px-2 py-1.5 text-xs"
+                  className="w-full rounded border border-gray-300 px-2 py-1.5 text-xs bg-white text-gray-900 placeholder:text-gray-500 caret-gray-900"
                 />
                 <input
                   type="number"
@@ -1215,7 +1215,7 @@ function ParticipantRowEditor({
                     onChange({ returnableAmount: event.target.value })
                   }
                   placeholder="Fixed returnable amount"
-                  className="w-full rounded border border-gray-300 px-2 py-1.5 text-xs"
+                  className="w-full rounded border border-gray-300 px-2 py-1.5 text-xs bg-white text-gray-900 placeholder:text-gray-500 caret-gray-900"
                 />
                 {hasBothReturnableInputs && (
                   <p className="text-[11px] text-amber-700">
@@ -1242,7 +1242,7 @@ function ParticipantRowEditor({
           value={row.notes}
           onChange={(event) => onChange({ notes: event.target.value })}
           placeholder="Optional"
-          className="w-full min-w-[8rem] rounded border border-gray-300 px-2 py-1.5 text-xs"
+          className="w-full min-w-[8rem] rounded border border-gray-300 px-2 py-1.5 text-xs bg-white text-gray-900 placeholder:text-gray-500 caret-gray-900"
         />
       </td>
 

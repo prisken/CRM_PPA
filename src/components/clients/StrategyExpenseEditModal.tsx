@@ -340,7 +340,7 @@ function StrategyExpenseEditModalForm({
   }
 
   const fieldClassName =
-    'w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-1';
+    'w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 caret-gray-900 placeholder:text-gray-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-1';
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto bg-black/40 p-4">

@@ -256,7 +256,7 @@ function BulkTagsModal({
                 onChange={(event) => setNewTagNamesInput(event.target.value)}
                 disabled={isSubmitting}
                 placeholder="e.g. VIP, Referral, Hot lead"
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:opacity-60"
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:opacity-60 bg-white text-gray-900 placeholder:text-gray-500 caret-gray-900"
               />
               <p className="mt-1 text-xs text-gray-500">
                 Separate multiple new tag names with commas.

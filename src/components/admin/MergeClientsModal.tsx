@@ -810,7 +810,7 @@ function MergeClientsModal(props: MergeClientsModalProps) {
                     }
                     disabled={isSubmitting}
                     rows={3}
-                    className="mt-3 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:opacity-60"
+                    className="mt-3 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:opacity-60 bg-white text-gray-900 placeholder:text-gray-500 caret-gray-900"
                   />
                 ) : (
                   <input
@@ -826,7 +826,7 @@ function MergeClientsModal(props: MergeClientsModalProps) {
                       }))
                     }
                     disabled={isSubmitting}
-                    className="mt-3 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:opacity-60"
+                    className="mt-3 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:opacity-60 bg-white text-gray-900 placeholder:text-gray-500 caret-gray-900"
                   />
                 ))}
             </fieldset>
@@ -952,7 +952,7 @@ function MergeClientsModal(props: MergeClientsModalProps) {
             disabled={isSubmitting}
             rows={3}
             placeholder="Why are these records being merged?"
-            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:opacity-60"
+            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:opacity-60 bg-white text-gray-900 placeholder:text-gray-500 caret-gray-900"
           />
         </div>
 
@@ -988,7 +988,7 @@ function MergeClientsModal(props: MergeClientsModalProps) {
               value={canonicalClientId}
               onChange={(event) => handleCanonicalChange(event.target.value)}
               disabled={isSubmitting}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-700 disabled:opacity-60"
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 disabled:opacity-60 bg-white placeholder:text-gray-500 caret-gray-900"
             >
               {clients.map((client) => (
                 <option key={client.clientId} value={client.clientId}>
@@ -1024,7 +1024,7 @@ function MergeClientsModal(props: MergeClientsModalProps) {
               value={duplicateClientId}
               onChange={(event) => handleDuplicateChange(event.target.value)}
               disabled={isSubmitting}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-700 disabled:opacity-60"
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 disabled:opacity-60 bg-white placeholder:text-gray-500 caret-gray-900"
             >
               {duplicateOptions.map((client) => (
                 <option key={client.clientId} value={client.clientId}>
@@ -1095,7 +1095,7 @@ function MergeClientsModal(props: MergeClientsModalProps) {
             disabled={isSubmitting}
             rows={3}
             placeholder="Why are these records being merged?"
-            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:opacity-60"
+            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:opacity-60 bg-white text-gray-900 placeholder:text-gray-500 caret-gray-900"
           />
         </div>
 

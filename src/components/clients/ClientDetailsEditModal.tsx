@@ -288,7 +288,7 @@ function ClientDetailsEditModalForm({
               onChange={(event) => setName(event.target.value)}
               required
               disabled={isSubmitting}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60"
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60 bg-white text-gray-900 placeholder:text-gray-500 caret-gray-900"
             />
           </div>
 
@@ -305,7 +305,7 @@ function ClientDetailsEditModalForm({
               value={company}
               onChange={(event) => setCompany(event.target.value)}
               disabled={isSubmitting}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60"
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60 bg-white text-gray-900 placeholder:text-gray-500 caret-gray-900"
             />
           </div>
 
@@ -346,7 +346,7 @@ function ClientDetailsEditModalForm({
               }}
             >
               <ComboboxInput
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60"
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60 bg-white text-gray-900 placeholder:text-gray-500 caret-gray-900"
                 displayValue={() => leadSourceQuery}
                 onChange={(event) => {
                   const value = event.target.value;
@@ -383,7 +383,7 @@ function ClientDetailsEditModalForm({
               onChange={(event) => setRoleInCompany(event.target.value)}
               placeholder="e.g. CEO, Founder"
               disabled={isSubmitting}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60"
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60 bg-white text-gray-900 placeholder:text-gray-500 caret-gray-900"
             />
           </div>
 
@@ -403,7 +403,7 @@ function ClientDetailsEditModalForm({
               onChange={(event) => setEmployeeCount(event.target.value)}
               placeholder="e.g. 50"
               disabled={isSubmitting}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60"
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60 bg-white text-gray-900 placeholder:text-gray-500 caret-gray-900"
             />
           </div>
 
@@ -421,7 +421,7 @@ function ClientDetailsEditModalForm({
               rows={4}
               placeholder="What does the client expect from this engagement?"
               disabled={isSubmitting}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60"
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60 bg-white text-gray-900 placeholder:text-gray-500 caret-gray-900"
             />
           </div>
 
@@ -470,7 +470,7 @@ function ClientDetailsEditModalForm({
                           placeholder="e.g. Contract renewal"
                           required
                           disabled={isSubmitting}
-                          className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60"
+                          className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60 bg-white text-gray-900 placeholder:text-gray-500 caret-gray-900"
                         />
                       </div>
                       <div>
@@ -485,7 +485,7 @@ function ClientDetailsEditModalForm({
                           }
                           required
                           disabled={isSubmitting}
-                          className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60"
+                          className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60 bg-white text-gray-900 placeholder:text-gray-500 caret-gray-900"
                         />
                       </div>
                       <div>
@@ -499,7 +499,7 @@ function ClientDetailsEditModalForm({
                             updateImportantDate(index, 'time', event.target.value)
                           }
                           disabled={isSubmitting}
-                          className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60"
+                          className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60 bg-white text-gray-900 placeholder:text-gray-500 caret-gray-900"
                         />
                         {!entry.time?.toString().trim() ? (
                           <p className="mt-1 text-[11px] text-gray-400">
@@ -519,7 +519,7 @@ function ClientDetailsEditModalForm({
                           rows={2}
                           placeholder="Details for this date"
                           disabled={isSubmitting}
-                          className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60"
+                          className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-60 bg-white text-gray-900 placeholder:text-gray-500 caret-gray-900"
                         />
                       </div>
                     </div>

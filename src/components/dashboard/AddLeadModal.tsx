@@ -95,7 +95,7 @@ export default function AddLeadModal({ onClose, onCreated }: AddLeadModalProps) 
                 value={formData.name}
                 onChange={(event) => updateField('name', event.target.value)}
                 required
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm bg-white text-gray-900 placeholder:text-gray-500 caret-gray-900"
                 placeholder="Lead or contact name"
               />
             </div>
@@ -112,7 +112,7 @@ export default function AddLeadModal({ onClose, onCreated }: AddLeadModalProps) 
                 type="text"
                 value={formData.company}
                 onChange={(event) => updateField('company', event.target.value)}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm bg-white text-gray-900 placeholder:text-gray-500 caret-gray-900"
                 placeholder="Company name"
               />
             </div>
@@ -150,7 +150,7 @@ export default function AddLeadModal({ onClose, onCreated }: AddLeadModalProps) 
                 type="text"
                 value={formData.lead_source}
                 onChange={(event) => updateField('lead_source', event.target.value)}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm bg-white text-gray-900 placeholder:text-gray-500 caret-gray-900"
                 placeholder="e.g. Referral, Paid Ads"
               />
             </div>
@@ -169,7 +169,7 @@ export default function AddLeadModal({ onClose, onCreated }: AddLeadModalProps) 
                 onChange={(event) =>
                   updateField('role_in_company', event.target.value)
                 }
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm bg-white text-gray-900 placeholder:text-gray-500 caret-gray-900"
                 placeholder="e.g. CEO, HR Director"
               />
             </div>
@@ -190,7 +190,7 @@ export default function AddLeadModal({ onClose, onCreated }: AddLeadModalProps) 
                 onChange={(event) =>
                   updateField('employee_count', event.target.value)
                 }
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm bg-white text-gray-900 placeholder:text-gray-500 caret-gray-900"
                 placeholder="Number of employees"
               />
             </div>
@@ -207,7 +207,7 @@ export default function AddLeadModal({ onClose, onCreated }: AddLeadModalProps) 
                 value={formData.expectations}
                 onChange={(event) => updateField('expectations', event.target.value)}
                 rows={3}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm bg-white text-gray-900 placeholder:text-gray-500 caret-gray-900"
                 placeholder="Goals, priorities, or notes about what they expect"
               />
             </div>
