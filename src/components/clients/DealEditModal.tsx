@@ -7,7 +7,6 @@ import {
 } from '@prisma/client';
 import { useEffect, useMemo, useState } from 'react';
 import type { AssignedUser, CurrentUserInfo } from '@/components/clients/AssignedTeamWidget';
-import type { ClientDeal } from '@/components/clients/DealInfoWidget';
 import {
   calculateParticipantAmount,
   DEAL_PARTICIPANT_ROLE_LABELS,
@@ -15,6 +14,7 @@ import {
   getDealCommissionTemplate,
   sumParticipantPercents,
 } from '@/lib/dealCommissionTemplates';
+import type { DealResponse } from '@/lib/dealCalculations';
 import {
   buildDefaultParticipantsForDeal,
   COMPANY_EXTERNAL_NAME,
@@ -84,7 +84,7 @@ const EMPTY_RETURNABLE_FIELDS = {
 
 type DealEditModalProps = {
   clientId: string;
-  deal?: ClientDeal | null;
+  deal?: DealResponse | null;
   assignedUsers?: AssignedUser[];
   currentUser?: CurrentUserInfo | null;
   isOpen: boolean;
@@ -139,7 +139,7 @@ function normalizedToParticipantRow(
 }
 
 function dealParticipantsToRows(
-  participants: ClientDeal['participants']
+  participants: DealResponse['participants']
 ): ParticipantRow[] {
   return participants.map((participant, index) => ({
     clientKey: participant.id ?? `existing-${index}`,
@@ -166,7 +166,7 @@ function dealParticipantsToRows(
 
 function buildUserOptions(
   assignedUsers: AssignedUser[],
-  dealParticipants: ClientDeal['participants'] | undefined,
+  dealParticipants: DealResponse['participants'] | undefined,
   fetchedUsers: UserOption[]
 ) {
   const options = new Map<string, string>();
@@ -194,7 +194,7 @@ function buildUserOptions(
 }
 
 function getDoctorSources(
-  deal: ClientDeal | null | undefined,
+  deal: DealResponse | null | undefined,
   assignedUsers: AssignedUser[]
 ) {
   const existingDoctors = (deal?.participants ?? []).filter(
@@ -223,7 +223,7 @@ function getParticipantUserFromRows(
 
 function getDoctorSourcesFromRows(
   currentRows: ParticipantRow[],
-  deal: ClientDeal | null | undefined,
+  deal: DealResponse | null | undefined,
   assignedUsers: AssignedUser[]
 ) {
   const currentDoctors = currentRows
@@ -258,7 +258,7 @@ function buildTemplateParticipantRows({
   dealType: DealType;
   totalCommission: number;
   assignedUsers: AssignedUser[];
-  deal?: ClientDeal | null;
+  deal?: DealResponse | null;
   currentRows?: ParticipantRow[];
 }) {
   const relationshipUserId =
@@ -292,7 +292,7 @@ function initializeParticipantRows({
   totalCommission,
   assignedUsers,
 }: {
-  deal?: ClientDeal | null;
+  deal?: DealResponse | null;
   dealType: DealType;
   totalCommission: number;
   assignedUsers: AssignedUser[];

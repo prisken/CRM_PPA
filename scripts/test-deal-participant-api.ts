@@ -18,6 +18,10 @@ import {
 } from '@prisma/client';
 import { createCommissionReturnablesForWonDeal } from '../lib/commissionReturnables';
 import {
+  getClientDealDetail,
+  listClientDealsForClient360,
+} from '../lib/clientDeals';
+import {
   dealResponseSelect,
   formatDealResponse,
 } from '../lib/dealCalculations';
@@ -163,13 +167,7 @@ async function createDealViaLibraries({
 }
 
 async function getDealsViaLibraries(clientId: string) {
-  const deals = await prisma.deal.findMany({
-    where: { clientId },
-    orderBy: { createdAt: 'asc' },
-    select: dealResponseSelect,
-  });
-
-  return deals.map(formatDealResponse);
+  return listClientDealsForClient360(clientId);
 }
 
 async function markDealWonViaLibraries(dealId: string, clientId: string) {
@@ -403,8 +401,26 @@ async function main() {
       fetchedDeal.participants.every((participant) => participant.id),
       'GET deals participants should include ids'
     );
+    assert(
+      fetchedDeal.participantCount === 5,
+      'Slim list should include participantCount'
+    );
+    assert(
+      fetchedDeal.participants.every(
+        (participant) => !('notes' in participant) || participant.notes === undefined
+      ),
+      'Slim list participants should omit notes'
+    );
 
-    console.log('PASS GET deals returns participants');
+    const detail = await getClientDealDetail(client.id, createdDeal.id);
+    assert(detail !== null, 'GET deal detail should return deal');
+    assert(
+      detail!.participants.length === 5 &&
+        detail!.participants.every((participant) => 'notes' in participant),
+      'Deal detail should include notes field on participants'
+    );
+
+    console.log('PASS GET deals returns slim participants + detail has notes');
 
     const wonDeal = await markDealWonViaLibraries(createdDeal.id, client.id);
     assert(wonDeal.status === DealStatus.WON, 'Deal should be WON after update');

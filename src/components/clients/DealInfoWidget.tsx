@@ -14,7 +14,8 @@ import { getWidgetPaddingClass } from '@/components/ui/displayDensity';
 import {
   calculateCommittedValue,
   calculatePotentialValue,
-  type DealParticipantResponse,
+  type DealListItem,
+  type DealListParticipant,
   type DealResponse,
 } from '@/lib/dealCalculations';
 import {
@@ -33,7 +34,8 @@ function formatDealMoney(value: number) {
   return formatMoneyRequired(value, DEAL_MONEY_OPTIONS);
 }
 
-export type ClientDeal = DealResponse;
+/** Slim list row from GET /deals (edit loads full DealResponse). */
+export type ClientDeal = DealListItem;
 
 type DealInfoWidgetProps = {
   clientId: string;
@@ -98,7 +100,7 @@ function participantPillTone(role: DealParticipantRole): CompactPillTone {
   }
 }
 
-function getParticipantDisplayName(participant: DealParticipantResponse) {
+function getParticipantDisplayName(participant: DealListParticipant) {
   return (
     participant.userName ??
     participant.externalName ??
@@ -164,7 +166,7 @@ type ParticipantSummaryLine = {
 };
 
 function formatDoctorReturnableSummary(
-  participant: DealParticipantResponse,
+  participant: DealListParticipant,
   totalCommission: number
 ) {
   const commissionAmount =
@@ -192,7 +194,7 @@ function formatDoctorReturnableSummary(
 }
 
 function buildParticipantSummaryLines(
-  participants: DealParticipantResponse[],
+  participants: DealListParticipant[],
   totalCommission: number
 ): ParticipantSummaryLine[] {
   const lines: ParticipantSummaryLine[] = [];
@@ -264,7 +266,7 @@ function DealParticipantSummary({
   participants,
   totalCommission,
 }: {
-  participants: DealParticipantResponse[];
+  participants: DealListParticipant[];
   totalCommission: number;
 }) {
   const lines = buildParticipantSummaryLines(participants, totalCommission);
@@ -289,7 +291,7 @@ function DealParticipantPills({
   expanded,
   onToggle,
 }: {
-  participants: DealParticipantResponse[];
+  participants: DealListParticipant[];
   expanded: boolean;
   onToggle: () => void;
 }) {
@@ -336,6 +338,7 @@ type DealCardProps = {
   canManage: boolean;
   deletingDealId: string | null;
   participantsExpanded: boolean;
+  editDisabled?: boolean;
   onToggleParticipants: () => void;
   onEdit: () => void;
   onDelete: () => void;
@@ -346,6 +349,7 @@ function DealCard({
   canManage,
   deletingDealId,
   participantsExpanded,
+  editDisabled = false,
   onToggleParticipants,
   onEdit,
   onDelete,
@@ -379,9 +383,10 @@ function DealCard({
                 <button
                   type="button"
                   onClick={onEdit}
-                  className="rounded px-1.5 py-0.5 text-left text-[11px] font-medium text-gray-700 hover:bg-gray-50"
+                  disabled={editDisabled}
+                  className="rounded px-1.5 py-0.5 text-left text-[11px] font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-60"
                 >
-                  Edit
+                  {editDisabled ? 'Loading…' : 'Edit'}
                 </button>
                 <button
                   type="button"
@@ -474,7 +479,8 @@ export default memo(function DealInfoWidget({
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
-  const [editingDeal, setEditingDeal] = useState<ClientDeal | null>(null);
+  const [editingDeal, setEditingDeal] = useState<DealResponse | null>(null);
+  const [isLoadingDealDetail, setIsLoadingDealDetail] = useState(false);
   const [deletingDealId, setDeletingDealId] = useState<string | null>(null);
   const [showAllDeals, setShowAllDeals] = useState(false);
   const [expandedParticipantDeals, setExpandedParticipantDeals] = useState<
@@ -547,9 +553,32 @@ export default memo(function DealInfoWidget({
     setModalOpen(true);
   }
 
-  function openEditModal(deal: ClientDeal) {
-    setEditingDeal(deal);
-    setModalOpen(true);
+  async function openEditModal(deal: ClientDeal) {
+    setError(null);
+    setIsLoadingDealDetail(true);
+
+    try {
+      const res = await authenticatedFetch(
+        `/api/clients/${clientId}/deals/${deal.id}`
+      );
+      const data = (await res.json().catch(() => ({}))) as {
+        deal?: DealResponse;
+        error?: string;
+      };
+
+      if (!res.ok || !data.deal) {
+        throw new Error(
+          typeof data.error === 'string' ? data.error : 'Failed to load deal'
+        );
+      }
+
+      setEditingDeal(data.deal);
+      setModalOpen(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load deal');
+    } finally {
+      setIsLoadingDealDetail(false);
+    }
   }
 
   function closeModal() {
@@ -663,7 +692,7 @@ export default memo(function DealInfoWidget({
             <button
               type="button"
               onClick={openCreateModal}
-              disabled={isRefreshing}
+              disabled={isRefreshing || isLoadingDealDetail}
               className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
             >
               + Add Deal
@@ -681,6 +710,9 @@ export default memo(function DealInfoWidget({
         </dl>
 
         {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
+        {isLoadingDealDetail ? (
+          <p className="mt-2 text-xs text-gray-500">Loading deal details…</p>
+        ) : null}
 
         {isRefreshing && deals.length === 0 ? (
           <div className="mt-3 space-y-3" aria-busy="true" aria-label="Loading deals">
@@ -704,9 +736,14 @@ export default memo(function DealInfoWidget({
                 canManage={canManageDeal(deal.id)}
                 deletingDealId={deletingDealId}
                 participantsExpanded={Boolean(expandedParticipantDeals[deal.id])}
+                editDisabled={isLoadingDealDetail}
                 onToggleParticipants={() => toggleDealParticipants(deal.id)}
-                onEdit={() => openEditModal(deal)}
-                onDelete={() => handleDeleteDeal(deal.id)}
+                onEdit={() => {
+                  void openEditModal(deal);
+                }}
+                onDelete={() => {
+                  void handleDeleteDeal(deal.id);
+                }}
               />
             ))}
 

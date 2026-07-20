@@ -13,6 +13,7 @@ import {
 import {
   createCommissionReturnablesForWonDeal,
 } from '@/lib/commissionReturnables';
+import { listClientDealsForClient360 } from '@/lib/clientDeals';
 import {
   dealResponseSelect,
   formatDealResponse,
@@ -98,20 +99,19 @@ export async function GET(
   const payload = await timeRouteHandler(
     `GET /api/clients/${clientId}/deals`,
     async () => {
-      const deals = await prisma.deal.findMany({
-        where: { clientId },
-        orderBy: { createdAt: 'asc' },
-        select: dealResponseSelect,
-      });
+      const deals = await listClientDealsForClient360(clientId);
 
       return {
         client_id: clientId,
-        deals: deals.map(formatDealResponse),
+        deals,
       };
     },
     {
       payloadCategory: 'deals',
-      getMeta: (result) => ({ dealCount: result.deals.length }),
+      getMeta: (result) => ({
+        dealCount: result.deals.length,
+        dealListView: 'summary',
+      }),
     }
   );
 

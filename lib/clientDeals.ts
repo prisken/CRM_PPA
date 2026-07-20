@@ -1,4 +1,12 @@
 import { prisma } from '@/lib/prisma';
+import {
+  dealListResponseSelect,
+  dealResponseSelect,
+  formatDealListItem,
+  formatDealResponse,
+  type DealListItem,
+  type DealResponse,
+} from '@/lib/dealCalculations';
 
 const primaryDealSelect = {
   id: true,
@@ -54,4 +62,34 @@ export async function resolveClientTotalCommission(
 
   const deal = await getPrimaryDeal(clientId);
   return deal ? Number(deal.totalCommission) : 0;
+}
+
+/** Slim Client 360 / list API deals (no participant notes). */
+export async function listClientDealsForClient360(
+  clientId: string
+): Promise<DealListItem[]> {
+  const deals = await prisma.deal.findMany({
+    where: { clientId },
+    orderBy: { createdAt: 'asc' },
+    select: dealListResponseSelect,
+  });
+
+  return deals.map(formatDealListItem);
+}
+
+/** Full deal detail for edit modal / mutations. */
+export async function getClientDealDetail(
+  clientId: string,
+  dealId: string
+): Promise<DealResponse | null> {
+  const deal = await prisma.deal.findFirst({
+    where: { id: dealId, clientId },
+    select: dealResponseSelect,
+  });
+
+  if (!deal) {
+    return null;
+  }
+
+  return formatDealResponse(deal);
 }

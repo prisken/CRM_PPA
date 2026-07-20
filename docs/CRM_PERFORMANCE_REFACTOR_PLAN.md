@@ -81,7 +81,7 @@ Confirmed against `prisma/schema.prisma` + migrations (July 21, 2026):
 | **Lead preview** | Preview API is separate (good), but still runs **full dup scan** on open | `fetchLeadCommandCenterPreview` |
 | **Master Pipeline** | Unbounded `findMany` of all clients; filters in browser | `GET /api/admin/pipeline`, `fetchAdminPipelineClients`, `MasterPipelineView` |
 | **Client 360 refresh** | Typed slice keys + `refreshClient360Slices`; details skip workspace; stage/merge/archive/team still `all` | `client360Refresh.tsx`, `Client360PageClient` |
-| **Client 360 deals** | All deals × all participants in one payload | `getClient360DealsData`, `dealResponseSelect` |
+| **Client 360 deals** | Slim list (`DealListItem`, no notes); full detail on `GET …/deals/[dealId]` | `listClientDealsForClient360`, `getClientDealDetail` |
 | **Admin / dashboard commission** | Hydrate WON deals + participants (cached 10 min for admin; per-request for standard context) | `adminAnalyticsCache`, `fetchWonDealsWithParticipants*`, `standardDashboardContext` |
 | **Dashboard widgets** | Unbounded findMany then `.slice(0, 20)` (deal participation); open tasks lack DB `take`; **duplicate** `/api/me/assignments` (page + calendar) | `buildDealParticipationWidget`, `buildOpenTasksWidget`, `ImportantDatesCalendarWidget` |
 | **Strategy Planner** | Full plan include for every view (fat DTO); mega-components remain | `strategyPlanDetailInclude`, `StrategyPlanDetailView`, `StrategyPlannerBoard` |
@@ -189,10 +189,10 @@ GROUP BY client_id, role HAVING COUNT(*) > 1;
 4. Strategy widget: still independent of workspace slice — **OPEN** for further isolation.
 5. Still open: migrate team → `['core','team']` (client-fetch assignments, no workspace); stage → `['core','workspace']`.
 
-### Phase B — Payload slimming — **OPEN**
+### Phase B — Payload slimming — **PARTIAL**
 
-1. Deals list: summary DTO (id, name, status, type, totals, participant count) without full participant trees.
-2. Expand participants on deal edit / single-deal GET only.
+1. ✅ Deals list: `DealListItem` via `listClientDealsForClient360` / `GET …/deals` (no participant `notes`/`dealId`); full tree on `GET …/deals/[dealId]` for edit.
+2. Still open: further drop list participant trees to count/preview-only; expand-on-demand for card split UI.
 3. Activity workspace: keep caps (300/300); consider content truncation for list rows.
 4. Hierarchy: limit colleagues; paginate if needed.
 5. Avoid legacy `client360Include` unbounded paths in any live route.
@@ -467,7 +467,7 @@ Prefer **§3 Next Sprint Hot Paths** for the immediate sprint. Waves below remai
 
 - [x] Scoped refresh API in `Client360PageClient` — **PARTIAL** (`refreshClient360Slices`; details migrated; others still `all`)
 - [ ] Stop strategy refetch on unrelated mutations — **OPEN**
-- [ ] Slim deals list DTO; lazy-load full participants — **OPEN**
+- [x] Slim deals list DTO; lazy-load full participants — **PARTIAL** (list omits notes; edit fetches full detail)
 - [ ] Request-scoped access resolution on Client 360 page — **OPEN**
 - [ ] Optional Client 360 skeletons — **OPEN**
 

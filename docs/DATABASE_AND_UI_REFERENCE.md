@@ -1633,9 +1633,10 @@ Per merge (pairwise step or full `mergeClients` call), in a **single Prisma tran
 | PUT/PATCH | `/api/clients/[id]/strategy-plans/[planId]/projection-milestones/[milestoneId]` | Manage | Update milestone |
 | DELETE | `/api/clients/[id]/strategy-plans/[planId]/projection-milestones/[milestoneId]` | Manage | Delete milestone |
 | PUT | `/api/clients/[id]/strategy-plans/[planId]/projection-milestones/reorder` | Manage | Body `{ orderedIds }` — same-year Move up/down only |
-| GET | `/api/clients/[id]/deals` | Deal view access (Bearer or session) — super admin, relationship/follow-up assignee, legacy doctor, or deal-level doctor participant | List deals. Response: `{ client_id, deals: DealResponse[] }` each with `participants` array |
-| POST | `/api/clients/[id]/deals` | Deal create access (Bearer or session) | Create deal. Body: `name`, `dealValue`, `totalCommission`, `status`, optional `dealType`, optional `participants[]`. Without `participants`, builds defaults from client assignments + `dealType`. Creates returnables if `WON` |
-| PUT | `/api/clients/[id]/deals/[dealId]` | Deal manage access (Bearer or session) | Update deal. Body may include `dealType`, `participants[]` (replaces all rows). Participant-backed WON deals require 100% split + amount/returnable validation (`Validation failed` + `details`). Triggers returnable generation on transition to `WON` |
+| GET | `/api/clients/[id]/deals` | Deal view access (Bearer or session) — super admin, relationship/follow-up assignee, legacy doctor, or deal-level doctor participant | **Slim list** (`DealListItem[]`): deal scalars + participants **without** `notes`/`dealId`, plus `participantCount`. Payload category `deals` (150KB warn). Perf meta includes `dealListView=summary` |
+| POST | `/api/clients/[id]/deals` | Deal create access (Bearer or session) | Create deal. Body: `name`, `dealValue`, `totalCommission`, `status`, optional `dealType`, optional `participants[]`. Without `participants`, builds defaults from client assignments + `dealType`. Creates returnables if `WON`. Returns **full** `DealResponse` |
+| GET | `/api/clients/[id]/deals/[dealId]` | Same view access as list | **Full** `DealResponse` (incl. participant `notes`) for edit modal |
+| PUT | `/api/clients/[id]/deals/[dealId]` | Deal manage access (Bearer or session) | Update deal. Body may include `dealType`, `participants[]` (replaces all rows). Participant-backed WON deals require 100% split + amount/returnable validation (`Validation failed` + `details`). Triggers returnable generation on transition to `WON`. Returns **full** `DealResponse` |
 | DELETE | `/api/clients/[id]/deals/[dealId]` | Deal manage access (Bearer or session) | Delete deal |
 | GET | `/api/clients/[id]/deals/participant-users` | Deal picker access (session) | Active users for participant user picker (`{ users: [{ user_id, userName, email }] }`). Not super-admin-only |
 | PUT | `/api/clients/[id]/strategy` | Super admin or `DOCTOR` assignment (Bearer or session) | `strategyText` |
@@ -1856,6 +1857,10 @@ No CRM login required. All webhook routes validate header `x-webhook-secret` aga
 The monolithic payload (deals + tasks + activity in one response) is **no longer returned** by `GET /api/clients/[id]`. Use the split endpoints above: core `GET /api/clients/[id]`, `GET /api/clients/[id]/workspace?tab=...`, and `GET /api/clients/[id]/deals`.
 
 ### Deal response shape (`GET/POST/PUT .../deals`)
+
+**List (`GET …/deals`):** `DealListItem` — same deal scalars as below, plus `participantCount`. Each list participant omits `dealId` and `notes` (commission/returnable display fields retained so Deal Info cards stay unchanged). Edit opens `GET …/deals/[dealId]` for the full tree.
+
+**Detail / mutations (`GET …/deals/[dealId]`, POST, PUT):** full `DealResponse`:
 
 ```json
 {

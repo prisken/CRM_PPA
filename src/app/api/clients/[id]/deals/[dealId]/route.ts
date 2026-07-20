@@ -4,10 +4,12 @@ import {
   getClientOr404,
   logClientSystemEvent,
   requireDealManageAccess,
+  requireDealViewAccess,
 } from '@/lib/authHelpers';
 import {
   createCommissionReturnablesForWonDeal,
 } from '@/lib/commissionReturnables';
+import { getClientDealDetail } from '@/lib/clientDeals';
 import { calculateParticipantAmount } from '@/lib/dealCommissionTemplates';
 import {
   dealResponseSelect,
@@ -20,6 +22,7 @@ import {
   toParticipantCreateInput,
   type NormalizedDealParticipant,
 } from '@/lib/dealParticipants';
+import { timeRouteHandler } from '@/lib/performance';
 import { prisma } from '@/lib/prisma';
 
 async function getDealForClient(clientId: string, dealId: string) {
@@ -39,6 +42,47 @@ async function getDealForClient(clientId: string, dealId: string) {
   }
 
   return { deal };
+}
+
+/** Full deal + participants (incl. notes) for edit modal. Same view ACL as list. */
+export async function GET(
+  request: Request,
+  { params }: { params: Promise<{ id: string; dealId: string }> }
+) {
+  const { id: clientId, dealId } = await params;
+  const auth = await requireDealViewAccess(clientId, request);
+  if (auth.error) {
+    return auth.error;
+  }
+
+  const clientCheck = await getClientOr404(clientId);
+  if (clientCheck.error) {
+    return clientCheck.error;
+  }
+
+  const payload = await timeRouteHandler(
+    `GET /api/clients/${clientId}/deals/${dealId}`,
+    async () => {
+      const deal = await getClientDealDetail(clientId, dealId);
+      if (!deal) {
+        return { error: 'not_found' as const };
+      }
+      return { client_id: clientId, deal };
+    },
+    {
+      payloadCategory: 'deals',
+      getMeta: (result) => ({
+        dealDetail: true,
+        found: !('error' in result),
+      }),
+    }
+  );
+
+  if ('error' in payload) {
+    return NextResponse.json({ error: 'Deal not found' }, { status: 404 });
+  }
+
+  return NextResponse.json(payload);
 }
 
 export async function PUT(

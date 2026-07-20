@@ -10,7 +10,9 @@ import {
   calculatePotentialValue,
   dealResponseSelect,
   formatDealResponse,
+  type DealListItem,
 } from '@/lib/dealCalculations';
+import { listClientDealsForClient360 } from '@/lib/clientDeals';
 import {
   resolveImportantDatesForClient,
   importantDateRecordSelect,
@@ -594,7 +596,7 @@ export function getClient360WorkspaceInclude(tab: string): Prisma.ClientInclude 
 
 export type Client360CoreData = ReturnType<typeof buildClient360CoreResponse>;
 
-export type Client360DealData = ReturnType<typeof formatDealResponse>;
+export type Client360DealData = DealListItem;
 
 export type Client360CompanyHierarchyData = {
   company: string | null;
@@ -639,15 +641,7 @@ export async function getClient360DealsData(
 ): Promise<Client360DealData[]> {
   return timeAsync(
     'client360:getClient360DealsData',
-    async () => {
-      const deals = await prisma.deal.findMany({
-        where: { clientId },
-        orderBy: { createdAt: 'asc' },
-        select: dealResponseSelect,
-      });
-
-      return deals.map(formatDealResponse);
-    },
+    async () => listClientDealsForClient360(clientId),
     {
       payloadCategory: 'deals',
       getMeta: (result) => ({

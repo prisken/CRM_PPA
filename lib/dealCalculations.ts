@@ -51,6 +51,15 @@ export type DealParticipantResponse = {
   isReturnableRequired: boolean;
 };
 
+/**
+ * List/card participant row — omits `notes` and redundant `dealId` to slim
+ * Client 360 / GET deals payloads while preserving commission UI.
+ */
+export type DealListParticipant = Omit<
+  DealParticipantResponse,
+  'dealId' | 'notes'
+>;
+
 export type DealResponse = {
   id: string;
   name: string;
@@ -65,6 +74,12 @@ export type DealResponse = {
   /** Derived: PARTICIPANT when rows exist; LEGACY_FALLBACK when empty (client-assignment pools). */
   commissionModel: DealCommissionModel;
   usesLegacyCommissionFallback: boolean;
+};
+
+/** Slim deal row for Client 360 list + GET /deals (edit fetches full detail). */
+export type DealListItem = Omit<DealResponse, 'participants'> & {
+  participantCount: number;
+  participants: DealListParticipant[];
 };
 
 export function resolveDealCommissionModel(
@@ -113,6 +128,26 @@ export const dealParticipantResponseSelect = {
   },
 } as const;
 
+/** List select — same commission fields, no `notes` (edit modal loads full detail). */
+export const dealListParticipantSelect = {
+  id: true,
+  userId: true,
+  externalName: true,
+  role: true,
+  commissionPercent: true,
+  commissionAmount: true,
+  isCommissionable: true,
+  returnablePercent: true,
+  returnableAmount: true,
+  isReturnableRequired: true,
+  user: {
+    select: {
+      name: true,
+      email: true,
+    },
+  },
+} as const;
+
 export const dealResponseSelect = {
   id: true,
   name: true,
@@ -125,6 +160,21 @@ export const dealResponseSelect = {
   participants: {
     orderBy: { createdAt: 'asc' as const },
     select: dealParticipantResponseSelect,
+  },
+} as const;
+
+export const dealListResponseSelect = {
+  id: true,
+  name: true,
+  dealValue: true,
+  totalCommission: true,
+  dealType: true,
+  status: true,
+  createdAt: true,
+  updatedAt: true,
+  participants: {
+    orderBy: { createdAt: 'asc' as const },
+    select: dealListParticipantSelect,
   },
 } as const;
 
@@ -148,6 +198,55 @@ export function formatDealParticipantResponse(
         : null,
     isCommissionable: participant.isCommissionable,
     notes: participant.notes,
+    returnablePercent:
+      participant.returnablePercent !== null &&
+      participant.returnablePercent !== undefined
+        ? Number(participant.returnablePercent)
+        : null,
+    returnableAmount:
+      participant.returnableAmount !== null &&
+      participant.returnableAmount !== undefined
+        ? Number(participant.returnableAmount)
+        : null,
+    isReturnableRequired: participant.isReturnableRequired,
+  };
+}
+
+type DealListParticipantRecord = {
+  id: string;
+  userId: string | null;
+  externalName: string | null;
+  role: DealParticipantRole;
+  commissionPercent: { toString(): string };
+  commissionAmount: { toString(): string } | null;
+  isCommissionable: boolean;
+  returnablePercent: { toString(): string } | null;
+  returnableAmount: { toString(): string } | null;
+  isReturnableRequired: boolean;
+  user?: {
+    name: string | null;
+    email: string;
+  } | null;
+};
+
+export function formatDealListParticipant(
+  participant: DealListParticipantRecord
+): DealListParticipant {
+  return {
+    id: participant.id,
+    userId: participant.userId,
+    userName: participant.user?.name ?? null,
+    userEmail: participant.user?.email ?? null,
+    externalName: participant.externalName,
+    role: participant.role,
+    roleLabel: DEAL_PARTICIPANT_ROLE_LABELS[participant.role],
+    commissionPercent: Number(participant.commissionPercent),
+    commissionAmount:
+      participant.commissionAmount !== null &&
+      participant.commissionAmount !== undefined
+        ? Number(participant.commissionAmount)
+        : null,
+    isCommissionable: participant.isCommissionable,
     returnablePercent:
       participant.returnablePercent !== null &&
       participant.returnablePercent !== undefined
@@ -188,6 +287,37 @@ export function formatDealResponse(deal: {
     status: deal.status,
     createdAt: deal.createdAt.toISOString(),
     updatedAt: deal.updatedAt.toISOString(),
+    participants,
+    commissionModel,
+    usesLegacyCommissionFallback: commissionModel === 'LEGACY_FALLBACK',
+  };
+}
+
+export function formatDealListItem(deal: {
+  id: string;
+  name: string;
+  dealValue: { toString(): string };
+  totalCommission: { toString(): string };
+  dealType: DealType;
+  status: DealStatus;
+  createdAt: Date;
+  updatedAt: Date;
+  participants?: DealListParticipantRecord[];
+}): DealListItem {
+  const participants = (deal.participants ?? []).map(formatDealListParticipant);
+  const commissionModel = resolveDealCommissionModel(participants);
+
+  return {
+    id: deal.id,
+    name: deal.name,
+    dealValue: Number(deal.dealValue),
+    totalCommission: Number(deal.totalCommission),
+    dealType: deal.dealType,
+    dealTypeLabel: DEAL_TYPE_LABELS[deal.dealType],
+    status: deal.status,
+    createdAt: deal.createdAt.toISOString(),
+    updatedAt: deal.updatedAt.toISOString(),
+    participantCount: participants.length,
     participants,
     commissionModel,
     usesLegacyCommissionFallback: commissionModel === 'LEGACY_FALLBACK',
