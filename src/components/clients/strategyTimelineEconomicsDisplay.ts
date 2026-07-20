@@ -218,3 +218,25 @@ export function getExpenseEconomicsLabels(
     coveredBy,
   };
 }
+
+/** Precompute step economics keyed by id (pure; safe to memoize at view boundaries). */
+export function buildStepEconomicsById<T extends StepEconomicsSource & { id: string }>(
+  steps: T[]
+): Map<string, StepEconomicsLabels> {
+  const map = new Map<string, StepEconomicsLabels>();
+  for (const step of steps) {
+    map.set(step.id, getStepEconomicsLabels(step));
+  }
+  return map;
+}
+
+/** Precompute expense economics keyed by id (pure; safe to memoize at view boundaries). */
+export function buildExpenseEconomicsById<
+  T extends ExpenseEconomicsSource & { id: string },
+>(expenses: T[]): Map<string, ExpenseEconomicsLabels> {
+  const map = new Map<string, ExpenseEconomicsLabels>();
+  for (const expense of expenses) {
+    map.set(expense.id, getExpenseEconomicsLabels(expense));
+  }
+  return map;
+}

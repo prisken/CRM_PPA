@@ -10,8 +10,12 @@ import {
   type StrategyProjectionMilestone,
 } from '@/lib/clientStrategyProjectionHelpers';
 import {
+  buildExpenseEconomicsById,
+  buildStepEconomicsById,
   getExpenseEconomicsLabels,
   getStepEconomicsLabels,
+  type ExpenseEconomicsLabels,
+  type StepEconomicsLabels,
 } from '@/components/clients/strategyTimelineEconomicsDisplay';
 import { formatMoney } from '@/lib/formatMoney';
 
@@ -529,6 +533,7 @@ function BoardLane({
 
 function ExpenseWidget({
   expense,
+  economics: economicsProp,
   canManage,
   compact,
   dense,
@@ -538,6 +543,8 @@ function ExpenseWidget({
   onDelete,
 }: {
   expense: StrategyBoardExpense;
+  /** Precomputed labels from the board; falls back if omitted. */
+  economics?: ExpenseEconomicsLabels;
   canManage: boolean;
   compact?: boolean;
   dense?: boolean;
@@ -547,7 +554,7 @@ function ExpenseWidget({
   onEdit?: () => void;
   onDelete?: () => void;
 }) {
-  const economics = getExpenseEconomicsLabels(expense);
+  const economics = economicsProp ?? getExpenseEconomicsLabels(expense);
   const categoryLabel =
     humanizeEnum(expense.category) ?? expense.category;
   const priorityLabel =
@@ -875,6 +882,8 @@ function StepNode({
   index,
   stepCount,
   expenses,
+  economics: economicsProp,
+  expenseEconomicsById,
   projectionBadges = [],
   canManage,
   dense,
@@ -892,6 +901,8 @@ function StepNode({
   index: number;
   stepCount: number;
   expenses: StrategyBoardExpense[];
+  economics?: StepEconomicsLabels;
+  expenseEconomicsById?: Map<string, ExpenseEconomicsLabels>;
   projectionBadges?: StepProjectionBadge[];
   canManage: boolean;
   dense?: boolean;
@@ -908,7 +919,7 @@ function StepNode({
     direction: 'earlier' | 'later'
   ) => void;
 }) {
-  const economics = getStepEconomicsLabels(step);
+  const economics = economicsProp ?? getStepEconomicsLabels(step);
 
   const hasLinkedDeal = Boolean(step.linkedDealId || step.linkedDeal);
   const linkedDealId = step.linkedDeal?.id ?? step.linkedDealId ?? null;
@@ -1081,6 +1092,7 @@ function StepNode({
               <ExpenseWidget
                 key={expense.id}
                 expense={expense}
+                economics={expenseEconomicsById?.get(expense.id)}
                 canManage={canManage}
                 compact
                 dense={dense}
@@ -1217,6 +1229,16 @@ function StrategyPlannerBoard({
     return map;
   }, [plan.projectionMilestones, plan.steps]);
 
+  // Card economics once per plan change (Board renders each step twice: lg + mobile).
+  const stepEconomicsById = useMemo(
+    () => buildStepEconomicsById(plan.steps),
+    [plan.steps]
+  );
+  const expenseEconomicsById = useMemo(
+    () => buildExpenseEconomicsById(plan.expenses),
+    [plan.expenses]
+  );
+
   const {
     sortedSteps,
     adjacentByGap,
@@ -1291,6 +1313,7 @@ function StrategyPlannerBoard({
     deletingExpenseId,
     reorderingStepId,
     stepCount: sortedSteps.length,
+    expenseEconomicsById,
     onEditStep,
     onDeleteStep,
     onEditExpense,
@@ -1418,6 +1441,7 @@ function StrategyPlannerBoard({
                             step={step}
                             index={index}
                             expenses={expensesByStepId.get(step.id) ?? []}
+                            economics={stepEconomicsById.get(step.id)}
                             projectionBadges={
                               projectionBadgesByStepId.get(step.id) ?? []
                             }
@@ -1477,6 +1501,7 @@ function StrategyPlannerBoard({
                         step={step}
                         index={index}
                         expenses={expensesByStepId.get(step.id) ?? []}
+                        economics={stepEconomicsById.get(step.id)}
                         projectionBadges={
                           projectionBadgesByStepId.get(step.id) ?? []
                         }
@@ -1584,6 +1609,7 @@ function StrategyPlannerBoard({
                 <li key={expense.id} className="min-w-0 list-none">
                   <ExpenseWidget
                     expense={expense}
+                    economics={expenseEconomicsById.get(expense.id)}
                     canManage={canManage}
                     dense={isCompact}
                     deleting={deletingExpenseId === expense.id}

@@ -32,6 +32,8 @@ import type { StrategyProjectionMilestone } from '@/lib/clientStrategyProjection
 import { buildProjectionMilestoneReorderIds } from '@/lib/clientStrategyProjectionHelpers';
 import { formatMoney, formatMoneyRequired } from '@/lib/formatMoney';
 import {
+  buildExpenseEconomicsById,
+  buildStepEconomicsById,
   getExpenseEconomicsLabels,
   getStepEconomicsLabels,
 } from '@/components/clients/strategyTimelineEconomicsDisplay';
@@ -491,6 +493,59 @@ function StrategyPlanDetailView({
     [plan.steps, plan.expenses]
   );
   const coverageStyles = COVERAGE_STATUS_STYLES[outcomeSummary.coverageStatus];
+
+  // List cards: compute timeline labels once per plan change, not per row render.
+  const stepEconomicsById = useMemo(
+    () => buildStepEconomicsById(plan.steps),
+    [plan.steps]
+  );
+  const expenseEconomicsById = useMemo(
+    () => buildExpenseEconomicsById(plan.expenses),
+    [plan.expenses]
+  );
+
+  const connectionModalSteps = useMemo(
+    () =>
+      sortedSteps.map((step) => ({
+        id: step.id,
+        title: step.title,
+      })),
+    [sortedSteps]
+  );
+
+  const projectionModalSteps = useMemo(
+    () =>
+      sortedSteps.map((step) => ({
+        id: step.id,
+        title: step.title,
+        investmentAmount: step.investmentAmount ?? null,
+        plannedAmount: step.plannedAmount,
+        incomeAmount: step.incomeAmount ?? null,
+        expectedIncomeAmount: step.expectedIncomeAmount,
+        incomeFrequency: step.incomeFrequency ?? null,
+        expectedIncomeFrequency: step.expectedIncomeFrequency,
+        startYear: step.startYear ?? null,
+        endYear: step.endYear ?? null,
+        incomeStartYear: step.incomeStartYear ?? null,
+        incomeEndYear: step.incomeEndYear ?? null,
+        capitalReturned: step.capitalReturned ?? null,
+        capitalReturnYear: step.capitalReturnYear ?? null,
+      })),
+    [sortedSteps]
+  );
+
+  const projectionModalExpenses = useMemo(
+    () =>
+      plan.expenses.map((expense) => ({
+        id: expense.id,
+        title: expense.title,
+        amount: expense.amount,
+        frequency: expense.frequency,
+        startYear: expense.startYear ?? null,
+        endYear: expense.endYear ?? null,
+      })),
+    [plan.expenses]
+  );
 
   function openCreateStep() {
     setStepActionError(null);
@@ -1235,7 +1290,8 @@ function StrategyPlanDetailView({
         ) : (
           <ul className={listSpacingClass}>
             {sortedSteps.map((step, index) => {
-              const economics = getStepEconomicsLabels(step);
+              const economics =
+                stepEconomicsById.get(step.id) ?? getStepEconomicsLabels(step);
 
               const linkedDealLabel = step.linkedDeal
                 ? [
@@ -1470,7 +1526,9 @@ function StrategyPlanDetailView({
         ) : (
           <ul className={listSpacingClass}>
             {sortedExpenses.map((expense) => {
-              const economics = getExpenseEconomicsLabels(expense);
+              const economics =
+                expenseEconomicsById.get(expense.id) ??
+                getExpenseEconomicsLabels(expense);
 
               return (
                 <li
@@ -1692,10 +1750,7 @@ function StrategyPlanDetailView({
         <StrategyConnectionEditModal
           clientId={clientId}
           planId={plan.id}
-          steps={sortedSteps.map((step) => ({
-            id: step.id,
-            title: step.title,
-          }))}
+          steps={connectionModalSteps}
           connection={editingConnection}
           defaultFromStepId={
             editingConnection ? null : (createConnectionDefaults?.fromStepId ?? null)
@@ -1715,10 +1770,7 @@ function StrategyPlanDetailView({
         <StrategyExpenseEditModal
           clientId={clientId}
           planId={plan.id}
-          steps={sortedSteps.map((step) => ({
-            id: step.id,
-            title: step.title,
-          }))}
+          steps={connectionModalSteps}
           expense={editingExpense}
           defaultCoveredByStepId={
             editingExpense ? null : createExpenseCoveredByStepId
@@ -1735,30 +1787,8 @@ function StrategyPlanDetailView({
         <StrategyProjectionMilestoneEditModal
           clientId={clientId}
           planId={plan.id}
-          steps={sortedSteps.map((step) => ({
-            id: step.id,
-            title: step.title,
-            investmentAmount: step.investmentAmount ?? null,
-            plannedAmount: step.plannedAmount,
-            incomeAmount: step.incomeAmount ?? null,
-            expectedIncomeAmount: step.expectedIncomeAmount,
-            incomeFrequency: step.incomeFrequency ?? null,
-            expectedIncomeFrequency: step.expectedIncomeFrequency,
-            startYear: step.startYear ?? null,
-            endYear: step.endYear ?? null,
-            incomeStartYear: step.incomeStartYear ?? null,
-            incomeEndYear: step.incomeEndYear ?? null,
-            capitalReturned: step.capitalReturned ?? null,
-            capitalReturnYear: step.capitalReturnYear ?? null,
-          }))}
-          expenses={plan.expenses.map((expense) => ({
-            id: expense.id,
-            title: expense.title,
-            amount: expense.amount,
-            frequency: expense.frequency,
-            startYear: expense.startYear ?? null,
-            endYear: expense.endYear ?? null,
-          }))}
+          steps={projectionModalSteps}
+          expenses={projectionModalExpenses}
           milestone={editingProjectionMilestone}
           isOpen={isProjectionMilestoneModalOpen}
           onClose={closeProjectionMilestoneModal}

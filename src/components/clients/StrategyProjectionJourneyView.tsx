@@ -169,6 +169,7 @@ function StrategyProjectionJourneyView({
     () => sortProjectionMilestones(milestones),
     [milestones]
   );
+  // Illustrative summary cards — pure aggregate; recompute only when milestones change.
   const summary = useMemo(
     () => buildProjectionJourneySummary(milestones),
     [milestones]
