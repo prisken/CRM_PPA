@@ -4,8 +4,8 @@
 > **Sources of truth:** `docs/DATABASE_AND_UI_REFERENCE.md` + codebase audit + **final performance review (July 21, 2026)**.  
 > **Scope of this document:** Planning for **remaining** work. Shipped items are marked explicitly so they are not re-queued.  
 > **Deployment branch:** `deploy`  
-> **Measurement:** `PERF_LOGGING_ENABLED=true` + `npx tsx scripts/profile-api-routes.ts`  
-> **Timings caveat:** Published route timings in the UI reference are from **June 24, 2026**. Do not invent new numbers here — re-baseline after the next sprint.
+> **Measurement:** `PERF_LOGGING_ENABLED=true` + `npx tsx scripts/profile-api-routes.ts` (default `http://localhost:3001`; see script header for auth + hot-path coverage)  
+> **Timings caveat:** Published hot-path timings in the UI reference are from **July 21, 2026**. Re-run `profile-api-routes` after major perf changes; do not invent numbers in this plan.
 
 **Last updated:** July 21, 2026 (aligned with final performance review; schema/migrations verified for indexes + BackgroundJob)
 
@@ -394,10 +394,13 @@ Reference modal pattern in DATABASE_AND_UI_REFERENCE §15 — update pattern tex
 ### Baseline (before each phase)
 
 ```bash
-PERF_LOGGING_ENABLED=true npm run dev
+PERF_LOGGING_ENABLED=true npm run dev   # or your usual port
+# other terminal:
 npx tsx scripts/profile-api-routes.ts
-# Capture: LCC list, LCC preview, pipeline, Client 360 load + post-mutation refresh,
-# dashboard widgets, strategy plan GET, search, important-dates-calendar
+# Capture: LCC list (+ needsAttention / duplicateEmail), LCC preview, duplicates,
+# pipeline, Client 360 workspace, strategy plan GET, search, important-dates-calendar,
+# open-tasks, deal-participation, all-commission-returnable
+# Default BASE_URL=http://localhost:3001; Auth via local JWT (no prod credentials in script)
 ```
 
 ### Automated suites to keep green

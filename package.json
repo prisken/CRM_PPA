@@ -32,6 +32,7 @@
     "jobs:process": "npx tsx scripts/process-background-jobs.ts",
     "jobs:process:once": "npx tsx scripts/process-background-jobs.ts",
     "jobs:status": "npx tsx scripts/jobs-status.ts",
+    "profile:api": "npx tsx scripts/profile-api-routes.ts",
     "test:unit": "npm run test:deal-participants && npm run test:deal-returnables && npm run test:strategy-projection && npm run test:strategy-timeline && npm run test:strategy-report",
     "test:integration": "npm run verify:deal-participants && npm run test:deal-participant-api && npm run test:client-access && npm run test:client-strategy && npm run test:important-dates && npm run test:important-dates-calendar && npm run test:client-contacts && npm run test:merge-custom-fields && npm run test:lead-ingestion && npm run test:lead-command-center",
     "test:http": "npx tsx scripts/test-commission-system.ts && npx tsx scripts/test-activity-apis.ts && npx tsx scripts/test-user-management.ts",

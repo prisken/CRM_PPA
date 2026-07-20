@@ -3,12 +3,11 @@
 > **Single source of truth** for schema, APIs, permissions, UI structure, and shipped feature status.  
 > Prefer this document over chat notes, old handoffs, or divergent markdown. User-facing PDFs (`USER_MANUAL_*.pdf`) and one-off migration guides under `docs/` are **supplements**, not replacements.
 
-**Last updated:** July 16, 2026 (Currency-free money display via `lib/formatMoney`; Strategy Planner Timeline Economics; Client Strategy Overview; Projection Journey; Important Dates + calendar; deal participants; Lead Command Center)  
+**Last updated:** July 21, 2026 (route timing rebaseline; Client 360 core-then-parallel loaders; bounded admin pipeline; LCC DB pagination + fallbacks; BackgroundJob ops runbook; dashboard widget `take` caps)  
 **Repository:** [CRM_PPA](https://github.com/prisken/CRM_PPA)  
-**Deployment branch:** `deploy`  
-**Last deployed commit:** `40c5518`  
+**Deployment branch:** `deploy` (Vercel production builds from this branch)  
 **Production URL:** `https://crm-ppa-nine.vercel.app`  
-**Local dev server:** `http://localhost:3000` (run `npm run dev` — runs `prisma generate` first; add `PERF_LOGGING_ENABLED=true` for route timing logs)  
+**Local dev server:** `npm run dev` (default `http://localhost:3000`; profiling / multi-instance often uses `-p 3001`). Set `PERF_LOGGING_ENABLED=true` for route timing logs.  
 **User manuals (PDF):** `docs/USER_MANUAL_STANDARD_USER.pdf`, `docs/USER_MANUAL_SUPER_ADMIN.pdf` (regenerate: `npm run manuals:pdf`)
 
 This document describes the PostgreSQL database schema, API surface, and frontend UI structure for handoff to developers, designers, and stakeholders.
@@ -37,18 +36,17 @@ This document describes the PostgreSQL database schema, API surface, and fronten
 | Team occupancy limits | ✅ Max 1 Relationship, 1 Follow-up per client; legacy max 2 Doctors (no new doctor client assignments) |
 | Multi-deal system | ✅ CRUD per client; committed/potential value aggregation |
 | Commission returnables | ✅ Doctor liabilities on WON deals; multi-role credit sum; statements + reconciliation |
-| Assignment-triggered returnable recalculation | ✅ Durable `BackgroundJob` enqueue (+ best-effort in-process process); sync `POST /api/tasks/recalculate-returnables` kept for compat |
+| Assignment-triggered returnable recalculation | ✅ Durable `BackgroundJob` enqueue (+ best-effort in-process process); sync `POST /api/tasks/recalculate-returnables` kept for compat; ops: [`BACKGROUND_JOBS_OPS.md`](./BACKGROUND_JOBS_OPS.md) |
 | Role-based dashboard widgets | ✅ Secured commission + returnables by assignment role (all users) |
-| Performance — standard dashboard | ✅ Per-widget API endpoints; shared `loadStandardDashboardContext` for legacy monolith; SQL deal aggregates; skeleton loaders |
-| Performance — dashboard pass 2 | ✅ `lib/standardDashboardContext.ts` + `lib/dashboardDealAggregates.ts`; fewer duplicate DB round-trips; open tasks `clientId IN` filter |
-| Performance — Client 360 | ✅ Core loader first, then parallel deals + hierarchy; lazy workspace tabs; slice refresh (`loadClient360PageData` unused by live page) |
+| Performance — standard dashboard | ✅ Per-widget APIs + skeletons; shared context/deal aggregates for legacy monolith; open-tasks / deal-participation DB `take` 20; Important Dates calendar assignment bootstrap on `/dashboard` |
+| Performance — Client 360 | ✅ Core loader first, then parallel deals + hierarchy; slim deals list + detail-on-edit; slice refresh (`refreshClient360Slices`) |
+| Performance — Lead Command Center | ✅ Slim inbox; lazy preview; default Prisma `skip`/`take`; fallback load-all for needsAttention/dup/latest-source filters; candidate peer dup flags |
+| Performance — admin pipeline | ✅ Bounded default (50/status) + meta; `mode=legacy` / `ADMIN_PIPELINE_LEGACY` unbounded fallback |
 | Performance — admin analytics cache | ✅ `unstable_cache` (600s) for org-wide aggregates after `requireSuperAdminFromRequest`; routes `force-dynamic` |
 | Performance — frontend render | ✅ `memo`/`useMemo`/`useCallback`; `next/dynamic` for charts, pipeline, modals |
-| Performance — route timing logs | ✅ Opt-in `[perf]` logs via `PERF_LOGGING_ENABLED=true` (`lib/performance.ts`) |
-| DB performance indexes (phase 2) | ✅ `20260624084311_add_performance_indexes_phase_2` — assignments, tasks, deals, returnables |
-| DB performance indexes (phase 3) | ✅ `20260721020000_add_performance_indexes_phase_3` — Client/assignment/deal/notification/task indexes + `pg_trgm` search; occupancy uniques deferred |
+| Performance — route timing logs | ✅ Opt-in `[perf]` logs via `PERF_LOGGING_ENABLED=true` (`lib/performance.ts`); baseline July 21, 2026 |
+| DB performance indexes (phase 1–3) | ✅ Phases 1–3 shipped (incl. `pg_trgm` GIN search); occupancy partial uniques deferred |
 | Query optimizations | ✅ Activity feed SQL `UNION ALL`; conditional deal aggregation SQL; narrower Prisma selects |
-| DB performance indexes (phase 1) | ✅ `20260617003208_add_performance_indexes` — deals, interactions, activity logs, read status |
 | Unified lead ingestion | ✅ `lib/leadIngestion.ts` — shared `ingestExternalLead()` for webhooks; match by source+externalId → email → phone; safe merge on update |
 | Client source records | ✅ `client_source_records` table — raw webhook payloads per ingest; `@@unique([source, externalId])` dedupes repeat submissions |
 | Google Forms lead webhook | ✅ `POST /api/integrations/google-forms/leads` — uses `ingestExternalLead`; `201` created / `200` updated; optional RELATIONSHIP assign on create only |
@@ -137,47 +135,20 @@ docs/             # Documentation (this file, user manuals, google-forms-integra
 
 **Performance architecture:**
 
-- **Standard dashboard** — each widget has its own API route; the page fetches in parallel and shows dimension-matched skeleton loaders. The **legacy** `GET /api/dashboard/standard` loads shared context once (`loadStandardDashboardContext`) then builds all widgets in parallel (no duplicate assignment/deal queries per widget).
-- **Client 360** — server page loads **core first** via `getClient360CoreData()`, then **deals + company hierarchy in parallel** via `Promise.all([getClient360DealsData, getClient360CompanyHierarchyData])` (permission-gated). Workspace tabs lazy-load on demand. `loadClient360PageData()` still exists in `lib/client360.ts` but is **not** used by the live page. Slice refreshes use `refreshClient360Slices` (only `all` calls `router.refresh()`).
-- **Lead Command Center** — slim inbox via `GET /api/admin/leads` (default DB `skip`/`take` when filters allow; **fallback** load-all → filter/sort/slice for `needsAttention` / duplicate / latest-source date filters). Preview is **lazy** via `GET /api/admin/leads/[id]/preview` when the drawer opens.
+- **Standard dashboard** — live UI uses per-widget API routes + skeletons. Legacy `GET /api/dashboard/standard` still composes widgets from shared context (compat/tests).
+- **Client 360** — server page loads **core first** via `getClient360CoreData()`, then **deals + company hierarchy in parallel** (permission-gated). Workspace tabs lazy-load. Slice refreshes use `refreshClient360Slices` (only `all` calls `router.refresh()`).
+- **Lead Command Center** — slim inbox via `GET /api/admin/leads` (default DB `skip`/`take` when filters allow; **fallback** load-all → filter/sort/slice for `needsAttention` / duplicate / latest-source date filters). Preview is **lazy** via `GET /api/admin/leads/[id]/preview`.
 - **Admin master pipeline** — default **bounded** per-status pages (50/stage) + `meta`; temporary unbounded via `mode=legacy` / `ADMIN_PIPELINE_LEGACY=true`.
-- **Global search** — `GET /api/search/clients?q=` uses slim ranked `searchClients()`; `pg_trgm` GIN indexes ship in `20260721020000_add_performance_indexes_phase_3`.
-- **Important Dates calendar** — `GET /api/dashboard/widgets/important-dates-calendar` with required date-range validation and event `take` cap (`MAX_CALENDAR_EVENTS`, currently 1000).
-- **Background jobs** — durable `BackgroundJob` enqueue is shipped; **staging/production must** run `npm run jobs:process` / cron / protected `POST /api/tasks/process-background-jobs` or PENDING rows sit — see [`BACKGROUND_JOBS_OPS.md`](./BACKGROUND_JOBS_OPS.md).
-- **Admin analytics** — super-admin org-wide aggregates (funnel, KPIs, revenue tracker, leaderboards) use `unstable_cache` with 600s revalidation in `lib/adminAnalyticsCache.ts`. Auth (`requireSuperAdminFromRequest`) runs on every request before cache lookup. Routes export `dynamic = 'force-dynamic'` so session-scoped responses are not globally cached. User-specific dashboard, Client 360, and `/api/me/*` routes are also `force-dynamic`.
-- **Activity feed** — single PostgreSQL query via `UNION ALL` (Interactions + activity logs), sorted and limited in the database.
-- **Route timing** — set `PERF_LOGGING_ENABLED=true` to emit structured `[perf]` lines in the dev server terminal (`lib/performance.ts`). Includes method, route/op, status, durationMs, optional payloadBytes / cache, and payload size warnings by surface. Prisma logs queries ≥200ms in development or when `PERF_LOGGING_ENABLED=true` (SQL only — no bound params). See [Route performance timings](#route-performance-timings) below.
+- **Global search** — `GET /api/search/clients?q=` uses slim ranked `searchClients()` with `pg_trgm` GIN indexes (`20260721020000_add_performance_indexes_phase_3`).
+- **Important Dates calendar** — `GET /api/dashboard/widgets/important-dates-calendar` with required date-range validation and event `take` cap (`MAX_CALENDAR_EVENTS` = 1000).
+- **Background jobs** — durable `BackgroundJob` enqueue is shipped; **staging/production must** schedule a processor — see [`BACKGROUND_JOBS_OPS.md`](./BACKGROUND_JOBS_OPS.md).
+- **Admin analytics** — org-wide aggregates use `unstable_cache` (600s) after `requireSuperAdminFromRequest`; routes are `force-dynamic`.
+- **Activity feed** — single PostgreSQL `UNION ALL` (Interactions + activity logs), sorted/limited in the database.
+- **Route timing** — `PERF_LOGGING_ENABLED=true` → structured `[perf]` lines (`lib/performance.ts`). See [Route performance timings](#route-performance-timings).
 
 ### Route performance timings
 
-#### Historical baseline (June 24, 2026) — superseded for hot-path planning
-
-Measured locally against Supabase PostgreSQL with `PERF_LOGGING_ENABLED=true`. Times below are **server handler** durations from `[perf]` logs unless noted. Kept for trend comparison only; prefer the **July 21, 2026** table for current hot paths.
-
-**Typical server timings (historical, after performance pass 2, warm runs):**
-
-| Route / operation | Server time | Notes |
-|-------------------|------------|-------|
-| `GET /api/dashboard/standard` | **~540–880 ms** | Legacy monolith; shared context + parallel widgets. Live UI uses per-widget routes instead. |
-| `widget:buildPerformanceMetricsWidget` | **~1 ms** (with context) / **~250–670 ms** (standalone) | Secured commission via shared deal aggregates + role occupancy |
-| `widget:buildAssignedClientsWidget` | **~1 ms** (with context) / **~500–600 ms** (standalone) | Single SQL aggregate per client deal values |
-| `GET /api/admin/pipeline` | **~410–450 ms** | Then: unbounded all-clients path (pre–per-status cap) |
-| `widget:buildActivityFeedWidget` | **~246–470 ms** | Includes `activityFeed:fetchRawActivities` ~207–260 ms |
-| `widget:buildOpenTasksWidget` | **~222–515 ms** | `assigneeId` + `clientId IN` assigned clients |
-| `GET /api/dashboard/superadmin` | **~234–297 ms** | All-client activity feed (`limit=100`) |
-| `GET /api/admin/all-commission-returnable` | **~220–250 ms** | Full reconciliation list |
-| `GET /api/admin/users` | **~220–253 ms** | All users |
-
-**Admin analytics cache (org-wide, 600s TTL) — historical June 24:**
-
-| Route | Cache miss (DB) | Cache hit (handler) |
-|-------|-----------------|---------------------|
-| `GET /api/admin/dashboard-kpis` | ~241 ms | **~0 ms** |
-| `GET /api/admin/funnel-data` | ~233 ms | **~0 ms** |
-| `GET /api/admin/revenue-tracker` | ~226 ms | **~0 ms** |
-| `GET /api/admin/leaderboards` | ~240 ms | **~0 ms** |
-
-Client round-trip on cache hit is still network + auth bound; server DB work is skipped.
+> **Superseded:** June 24, 2026 server-only samples (unbounded pipeline, pre–LCC pagination meta, etc.) are obsolete for planning. Use the **July 21, 2026** baseline below.
 
 #### Current baseline (July 21, 2026)
 
@@ -1505,7 +1476,7 @@ Also editable as a full replace via `PUT /api/clients/[id]/details` (`importantD
 |--------|--------|
 | `npm run test:unit` | No DB server beyond local Node (pure helper math) |
 | `npm run test:integration` | `DATABASE_URL` / Prisma (no Next.js `dev` server) |
-| `npm run test:http` | Running app (`npm run dev`, default `http://localhost:3000`; override with `TEST_BASE_URL`) |
+| `npm run test:http` | Running app (`npm run dev`; default `http://localhost:3000`, override `TEST_BASE_URL` / `BASE_URL`) |
 | `npm run test:all` | Unit + integration only (includes strategy-timeline; **does not** require `npm run dev`) |
 | `npm run test:all:with-http` | `test:all` then `test:http` (requires running server) |
 
@@ -2257,8 +2228,6 @@ Responsive header — stacks on mobile (`flex-col`), horizontal from `sm` up; ac
 - `getClient360DealsData()` — when deal view is allowed (slim list DTO)
 - `getClient360CompanyHierarchyData()` — when hierarchy access is allowed (else empty hierarchy from core company fields)
 
-(`loadClient360PageData()` remains in `lib/client360.ts` as a combined helper but is **not** called by this page.)
-
 Unauthenticated users are redirected to `/login`. Missing client → `notFound()`.
 
 **Refresh after mutations:** `refreshClient360Slices([...])` bumps per-slice keys. Only `all` still calls `router.refresh()`. `core` client-fetches `GET /api/clients/[id]`; `importantDates` client-fetches dates; `hierarchy` / `deals` / `sourceRecords` widgets refetch on their keys. Workspace tabs reload on the `workspace` key.
@@ -2442,7 +2411,7 @@ Mounted via `src/components/Providers.tsx` (wraps app with `DisplayDensityProvid
 |--------|---------|
 | `prisma.ts` | Prisma client singleton |
 | `authHelpers.ts` | Auth guards, `verifyAdminPassword()` (Supabase re-auth for destructive actions), `ACTIVE` status checks, client access checks, system event logging |
-| `client360.ts` | Client 360 includes, response builders, server loaders (`getClient360CoreData`, `getClient360DealsData`, `getClient360CompanyHierarchyData`, `loadClient360PageData`) |
+| `client360.ts` | Client 360 includes, response builders, server loaders (`getClient360CoreData`, `getClient360DealsData`, `getClient360CompanyHierarchyData`) |
 | `pipelinePermissions.ts` | Pipeline stage advance rules + advance checklists (shared by API + UI) |
 | `adminPipeline.ts` | Super-admin master pipeline slim DTO, per-status cap, filters, meta, and legacy unbounded fallback for `GET /api/admin/pipeline` |
 | `standardDashboard.ts` | Composes legacy monolithic dashboard from widget builders (shared context) |
@@ -2679,7 +2648,7 @@ npm run find:duplicate-clients
 | `SUPABASE_SECRET_KEY` | Service role (registration, uploads) |
 | `NEXTAUTH_SECRET` | JWT signing secret (`lib/jwt.ts`) |
 | `SUPABASE_CLIENT_DOCUMENTS_BUCKET` | Supabase Storage bucket for client uploads (default: `client-documents`) |
-| `TEST_BASE_URL` | Base URL for **HTTP** test scripts (`test:http`). Default in scripts: `http://localhost:3000` (match `npm run dev`) |
+| `TEST_BASE_URL` / `BASE_URL` | Base URL for HTTP test / profile scripts. Many scripts default to `http://localhost:3000`; `profile-api-routes.ts` defaults to `http://localhost:3001` |
 | `PERF_LOGGING_ENABLED` | Set to `true` to log structured `[perf]` route/builder timings, payload size warnings, and (with Prisma) slow queries ≥200ms to the server console. Slow Prisma queries also log in `NODE_ENV=development` without this flag. Dev/staging only. |
 | `GOOGLE_FORMS_WEBHOOK_SECRET` | Shared secret for `POST /api/integrations/google-forms/leads` (`x-webhook-secret` header). **Required** for Google Forms webhook |
 | `GOOGLE_FORMS_DEFAULT_RELATIONSHIP_USER_ID` | Optional CRM user `id` — auto-assign new Google Form leads as `RELATIONSHIP` |
@@ -2692,7 +2661,8 @@ npm run find:duplicate-clients
 ```bash
 npm install          # runs prisma generate via postinstall
 npx prisma migrate deploy
-PERF_LOGGING_ENABLED=true npm run dev   # http://localhost:3000
+PERF_LOGGING_ENABLED=true npm run dev          # default :3000
+# or: PERF_LOGGING_ENABLED=true npm run dev -- -p 3001
 ```
 
 **Tests:**
@@ -2721,7 +2691,8 @@ npm run test:lead-ingestion
 npm run test:lead-command-center
 
 # --- Requires running app (npm run dev) ---
-# Default base URL: http://localhost:3000 (override: TEST_BASE_URL=http://localhost:PORT)
+# Default base URL for most HTTP tests: http://localhost:3000 (override: TEST_BASE_URL)
+# Profiler default: http://localhost:3001 (override: BASE_URL or TEST_BASE_URL)
 npm run test:http              # commission-system HTTP probes + activity APIs + user management
 npm run test:all:with-http     # test:all then test:http
 npx tsx scripts/test-commission-system.ts   # includes lib unit checks + HTTP against TEST_BASE_URL
@@ -2935,7 +2906,7 @@ Related: `lib/pipelinePermissions.ts` exports `getNextPipelineStage`, `canUserAd
 | Participant returnables v1 | Explicit per-doctor fields; create/update validates caps/`userId`/commissionable; backfill still does not infer returnables — business review after migration |
 | Deal participant API integration tests | `test:deal-participant-api` uses Prisma + route libraries (deal routes use session auth, not Bearer-only HTTP) |
 | Returnable backfill | Historical WON deals may need `npx tsx scripts/recalculate-commission-returnables.ts` after configuring doctor returnables |
-| Background returnable tasks | Durable `BackgroundJob` queue (`PENDING`/`RUNNING`/`SUCCEEDED`/`FAILED`); assignment enqueue + best-effort process; retry with backoff; reclaim stuck `RUNNING` (>15m). **Ops must run** `npm run jobs:process` or `POST /api/tasks/process-background-jobs` on a schedule — see [`BACKGROUND_JOBS_OPS.md`](./BACKGROUND_JOBS_OPS.md). Sync recalculate route kept for compat |
+| Background job processor ops | Code is durable; **each env must schedule** `jobs:process` / cron / `POST /api/tasks/process-background-jobs` — see [`BACKGROUND_JOBS_OPS.md`](./BACKGROUND_JOBS_OPS.md) |
 | Admin analytics cache | Funnel, revenue, leaderboards cached 10 min — new data may lag briefly after pipeline/deal changes |
 | Pipeline checklist in modal | Display-only reminders in `PipelineStageAdvanceModal`; not persisted or server-validated |
 | Admin route protection | `/admin/*` middleware checks session only; role enforced client-side + API 403 |
