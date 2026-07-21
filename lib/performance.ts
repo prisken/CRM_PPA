@@ -13,9 +13,10 @@
  *
  * Prisma slow queries (≥200ms) log in development or when
  * PERF_LOGGING_ENABLED=true — see `lib/prisma.ts`.
+ *
+ * Note: this module is imported from client-reachable paths (via `prisma.ts`).
+ * Do not statically import Node-only modules such as `async_hooks`.
  */
-
-import { AsyncLocalStorage } from 'async_hooks';
 
 type PerfMetaValue = string | number | boolean | null | undefined;
 
@@ -29,7 +30,27 @@ export type PerfRequestContext = {
   capability?: string;
 };
 
-const perfRequestStorage = new AsyncLocalStorage<PerfRequestContext>();
+/** Minimal ALS-like store — real AsyncLocalStorage on server, no-op on client. */
+type PerfRequestStore = {
+  getStore: () => PerfRequestContext | undefined;
+  run: <T>(context: PerfRequestContext, fn: () => T) => T;
+};
+
+function createPerfRequestStore(): PerfRequestStore {
+  if (typeof window !== 'undefined') {
+    return {
+      getStore: () => undefined,
+      run: (_context, fn) => fn(),
+    };
+  }
+
+  // Lazy require keeps `async_hooks` out of the client/Turbopack graph.
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { AsyncLocalStorage } = require('async_hooks') as typeof import('async_hooks');
+  return new AsyncLocalStorage<PerfRequestContext>();
+}
+
+const perfRequestStorage = createPerfRequestStore();
 
 /** Categories with payload size warning thresholds (bytes). */
 export type PayloadCategory =

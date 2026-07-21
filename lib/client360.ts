@@ -954,7 +954,8 @@ export async function getClient360CompanyHierarchyData(
         return null;
       }
 
-      const { client_id: _clientId, ...hierarchy } = payload;
+      const { client_id: _omitClientId, ...hierarchy } = payload;
+      void _omitClientId;
       return hierarchy;
     },
     (result) => ({
