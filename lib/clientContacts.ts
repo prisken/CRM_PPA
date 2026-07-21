@@ -225,12 +225,15 @@ export function resolveContactsFromRecords(
   };
 }
 
+/** Pooler-safe DB handle — PrismaClient or transaction client. */
+export type ClientContactDb = Pick<PrismaClient, 'clientContact' | 'client'>;
+
 /**
  * Replace EMAIL and/or PHONE rows for a client and sync primary mirrors.
  * Omit a kind (pass undefined) to leave existing rows of that kind unchanged.
  */
 export async function replaceClientContacts(
-  tx: Prisma.TransactionClient,
+  tx: ClientContactDb,
   clientId: string,
   input: {
     emails?: string[] | null;
@@ -297,7 +300,7 @@ export async function replaceClientContacts(
 
 /** Ensure primary scalar mirrors exist as contact rows (used on create). */
 export async function syncPrimaryContactsFromScalars(
-  tx: Prisma.TransactionClient,
+  tx: ClientContactDb,
   clientId: string,
   email: string | null,
   phone: string | null

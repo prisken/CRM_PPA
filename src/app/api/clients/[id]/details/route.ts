@@ -25,7 +25,127 @@ import {
   type ImportantDateDto,
 } from '@/lib/importantDates';
 import { prisma } from '@/lib/prisma';
-import { runWriteTransaction } from '@/lib/prismaWrite';
+
+const clientDetailsSelect = {
+  id: true,
+  name: true,
+  email: true,
+  phone: true,
+  leadSource: true,
+  company: true,
+  contactInfo: true,
+  roleInCompany: true,
+  employeeCount: true,
+  expectations: true,
+  importantDates: true,
+  lastModified: true,
+  status: true,
+  importantDateRecords: {
+    orderBy: { scheduledAt: 'asc' as const },
+    select: importantDateRecordSelect,
+  },
+  contacts: {
+    orderBy: [{ isPrimary: 'desc' as const }, { sortOrder: 'asc' as const }],
+    select: clientContactSelect,
+  },
+} satisfies Prisma.ClientSelect;
+
+/**
+ * Apply client details PUT without an interactive $transaction callback.
+ * Supabase transaction-mode pooler (and missing runtime DIRECT_URL) cannot
+ * reliably run prisma.$transaction(async (tx) => …) on Vercel.
+ */
+async function persistClientDetailsUpdate(input: {
+  clientId: string;
+  userId: string;
+  name?: string;
+  lead_source?: unknown;
+  company?: unknown;
+  contactInfo?: unknown;
+  roleInCompany?: unknown;
+  employeeCount?: unknown;
+  expectations?: unknown;
+  sanitizedImportantDates?: ImportantDateDto[];
+  contactsParsed: {
+    emailsProvided: boolean;
+    phonesProvided: boolean;
+    emails: string[];
+    phones: string[];
+  };
+}) {
+  const {
+    clientId,
+    userId,
+    name,
+    lead_source,
+    company,
+    contactInfo,
+    roleInCompany,
+    employeeCount,
+    expectations,
+    sanitizedImportantDates,
+    contactsParsed,
+  } = input;
+
+  if (sanitizedImportantDates !== undefined) {
+    await prisma.clientImportantDate.deleteMany({ where: { clientId } });
+    if (sanitizedImportantDates.length > 0) {
+      await prisma.clientImportantDate.createMany({
+        data: dtoToCreateManyInput(clientId, sanitizedImportantDates, userId),
+      });
+    }
+  }
+
+  if (contactsParsed.emailsProvided || contactsParsed.phonesProvided) {
+    await replaceClientContacts(prisma, clientId, {
+      emails: contactsParsed.emailsProvided
+        ? contactsParsed.emails
+        : undefined,
+      phones: contactsParsed.phonesProvided
+        ? contactsParsed.phones
+        : undefined,
+    });
+  }
+
+  return prisma.client.update({
+    where: { id: clientId },
+    data: {
+      ...(name !== undefined && { name: name.trim() }),
+      ...(lead_source !== undefined && {
+        leadSource:
+          typeof lead_source === 'string' ? lead_source.trim() || null : null,
+      }),
+      ...(company !== undefined && {
+        company:
+          typeof company === 'string' ? company.trim() || null : null,
+      }),
+      ...(contactInfo !== undefined && {
+        contactInfo:
+          typeof contactInfo === 'string' ? contactInfo.trim() || null : null,
+      }),
+      ...(roleInCompany !== undefined && {
+        roleInCompany:
+          typeof roleInCompany === 'string'
+            ? roleInCompany.trim() || null
+            : null,
+      }),
+      ...(employeeCount !== undefined && {
+        employeeCount:
+          employeeCount === null ? null : Number(employeeCount),
+      }),
+      ...(expectations !== undefined && {
+        expectations:
+          typeof expectations === 'string'
+            ? expectations.trim() || null
+            : null,
+      }),
+      ...(sanitizedImportantDates !== undefined && {
+        importantDates: toLegacyImportantDatesJson(sanitizedImportantDates),
+      }),
+    },
+    select: clientDetailsSelect,
+  });
+}
 
 function formatRouteError(error: unknown): string {
   if (error instanceof Prisma.PrismaClientKnownRequestError) {
@@ -109,83 +229,18 @@ export async function PUT(
       });
     }
 
-    const client = await runWriteTransaction(async (tx) => {
-      if (sanitizedImportantDates !== undefined) {
-        await tx.clientImportantDate.deleteMany({ where: { clientId } });
-        if (sanitizedImportantDates.length > 0) {
-          await tx.clientImportantDate.createMany({
-            data: dtoToCreateManyInput(
-              clientId,
-              sanitizedImportantDates,
-              auth.user.id
-            ),
-          });
-        }
-      }
-
-      if (
-        contactsParsed.data.emailsProvided ||
-        contactsParsed.data.phonesProvided
-      ) {
-        await replaceClientContacts(tx, clientId, {
-          emails: contactsParsed.data.emailsProvided
-            ? contactsParsed.data.emails
-            : undefined,
-          phones: contactsParsed.data.phonesProvided
-            ? contactsParsed.data.phones
-            : undefined,
-        });
-      }
-
-      return tx.client.update({
-        where: { id: clientId },
-        data: {
-          ...(name !== undefined && { name: name.trim() }),
-          ...(lead_source !== undefined && {
-            leadSource: lead_source?.trim() || null,
-          }),
-          ...(company !== undefined && { company: company?.trim() || null }),
-          ...(contactInfo !== undefined && {
-            contactInfo: contactInfo?.trim() || null,
-          }),
-          ...(roleInCompany !== undefined && {
-            roleInCompany: roleInCompany?.trim() || null,
-          }),
-          ...(employeeCount !== undefined && {
-            employeeCount:
-              employeeCount === null ? null : Number(employeeCount),
-          }),
-          ...(expectations !== undefined && {
-            expectations: expectations?.trim() || null,
-          }),
-          ...(sanitizedImportantDates !== undefined && {
-            importantDates: toLegacyImportantDatesJson(sanitizedImportantDates),
-          }),
-        },
-        select: {
-          id: true,
-          name: true,
-          email: true,
-          phone: true,
-          leadSource: true,
-          company: true,
-          contactInfo: true,
-          roleInCompany: true,
-          employeeCount: true,
-          expectations: true,
-          importantDates: true,
-          lastModified: true,
-          status: true,
-          importantDateRecords: {
-            orderBy: { scheduledAt: 'asc' },
-            select: importantDateRecordSelect,
-          },
-          contacts: {
-            orderBy: [{ isPrimary: 'desc' }, { sortOrder: 'asc' }],
-            select: clientContactSelect,
-          },
-        },
-      });
+    const client = await persistClientDetailsUpdate({
+      clientId,
+      userId: auth.user.id,
+      name,
+      lead_source,
+      company,
+      contactInfo,
+      roleInCompany,
+      employeeCount,
+      expectations,
+      sanitizedImportantDates,
+      contactsParsed: contactsParsed.data,
     });
 
     try {
@@ -261,10 +316,12 @@ export async function PUT(
       lastModified: client.lastModified.toISOString(),
     });
   } catch (error) {
-    console.error('Failed to update client details:', formatRouteError(error), error);
-    return NextResponse.json(
-      { error: 'Failed to update client details' },
-      { status: 500 }
-    );
+    const hint = formatRouteError(error);
+    console.error('Failed to update client details:', hint, error);
+    const message =
+      hint === 'prisma:P2021'
+        ? 'Failed to update client details (database schema out of date — run migrations)'
+        : 'Failed to update client details';
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
