@@ -7,7 +7,8 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import AuthRequiredMessage from '@/components/auth/AuthRequiredMessage';
 import LeadPreviewDrawer from '@/components/admin/LeadPreviewDrawer';
 import LeadDuplicatesPanel from '@/components/admin/LeadDuplicatesPanel';
-import Logo from '@/components/Logo';
+import WorkspaceShell from '@/components/layout/WorkspaceShell';
+import { buildWorkspaceNavConfig } from '@/components/layout/workspaceNavConfig';
 import LeadSourceBadges from '@/components/clients/LeadSourceBadges';
 import CompactPill from '@/components/ui/CompactPill';
 import EmptyMuted from '@/components/ui/EmptyMuted';
@@ -53,6 +54,11 @@ const BulkAssignRelationshipModal = dynamic(
 const BulkTagsModal = dynamic(() => import('@/components/admin/BulkTagsModal'), {
   ssr: false,
 });
+
+const BulkDeleteLeadsModal = dynamic(
+  () => import('@/components/admin/BulkDeleteLeadsModal'),
+  { ssr: false }
+);
 
 const MergeClientsModal = dynamic(() => import('@/components/admin/MergeClientsModal'), {
   ssr: false,
@@ -750,7 +756,6 @@ export default function LeadCommandCenterPage() {
   const [leadsRefreshing, setLeadsRefreshing] = useState(false);
   const [leadsLoadingMore, setLeadsLoadingMore] = useState(false);
   const [leadsError, setLeadsError] = useState<string | null>(null);
-  const [copyMessage, setCopyMessage] = useState<string | null>(null);
   const [previewClientId, setPreviewClientId] = useState<string | null>(null);
   const [previewFallbackName, setPreviewFallbackName] = useState<string | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
@@ -763,6 +768,7 @@ export default function LeadCommandCenterPage() {
   const [bulkStatusOpen, setBulkStatusOpen] = useState(false);
   const [bulkAssignRelationshipOpen, setBulkAssignRelationshipOpen] = useState(false);
   const [bulkTagsOpen, setBulkTagsOpen] = useState(false);
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const [bulkMergeOpen, setBulkMergeOpen] = useState(false);
   const [selectedMergeClients, setSelectedMergeClients] = useState<DuplicateReviewClient[]>(
     []
@@ -921,15 +927,6 @@ export default function LeadCommandCenterPage() {
 
     void loadAvailableTags();
   }, [profile, profileLoading, loadAvailableTags]);
-
-  useEffect(() => {
-    if (!copyMessage) {
-      return;
-    }
-
-    const timeoutId = window.setTimeout(() => setCopyMessage(null), 2000);
-    return () => window.clearTimeout(timeoutId);
-  }, [copyMessage]);
 
   useEffect(() => {
     if (!successMessage) {
@@ -1116,12 +1113,6 @@ export default function LeadCommandCenterPage() {
     activeFilterSummaries.length - visibleFilterSummaries.length
   );
 
-  const handleCopied = useCallback((label: string) => {
-    setCopyMessage(
-      label.startsWith('Failed') ? label : `${label} copied to clipboard`
-    );
-  }, []);
-
   const openPreview = useCallback((lead: LeadCommandCenterRow) => {
     setPreviewClientId(lead.clientId);
     setPreviewFallbackName(lead.name);
@@ -1218,6 +1209,14 @@ export default function LeadCommandCenterPage() {
 
   const closeBulkTags = useCallback(() => {
     setBulkTagsOpen(false);
+  }, []);
+
+  const openBulkDelete = useCallback(() => {
+    setBulkDeleteOpen(true);
+  }, []);
+
+  const closeBulkDelete = useCallback(() => {
+    setBulkDeleteOpen(false);
   }, []);
 
   const openBulkMerge = useCallback(async () => {
@@ -1350,16 +1349,39 @@ export default function LeadCommandCenterPage() {
     [loadAvailableTags, loadLeads]
   );
 
+  const handleBulkDeleteCompleted = useCallback(
+    (result: { mode: 'archive' | 'permanent'; count: number }) => {
+      const { mode, count } = result;
+      setSuccessMessage(
+        mode === 'permanent'
+          ? `Permanently deleted ${count} lead${count === 1 ? '' : 's'}`
+          : `Archived ${count} lead${count === 1 ? '' : 's'}`
+      );
+      setSelectedClientIds(new Set());
+      void loadLeads({ silent: true });
+    },
+    [loadLeads]
+  );
+
   async function handleSignOut() {
     await supabase.auth.signOut();
     localStorage.removeItem('token');
     router.push('/login');
   }
 
+  const nav = useMemo(
+    () =>
+      buildWorkspaceNavConfig({
+        shell: 'admin',
+        role: 'SUPER_ADMIN',
+      }),
+    []
+  );
+
   if (profileLoading) {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-gray-100">
-        <p className="text-gray-600">Loading Lead Command Center...</p>
+      <main className="flex min-h-dvh items-center justify-center bg-gray-100">
+        <p className="text-sm text-gray-600">Loading Lead Command Center…</p>
       </main>
     );
   }
@@ -1376,53 +1398,49 @@ export default function LeadCommandCenterPage() {
     return null;
   }
 
-  return (
-    <main
-      className={`min-h-screen bg-gray-100 ${
-        activeTab === 'inbox' && selectedCount > 0 ? 'pb-24' : ''
-      }`}
-    >
-      <header className="border-b border-gray-200 bg-white">
-        <div className="mx-auto flex max-w-7xl flex-col gap-4 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6 lg:px-8">
-          <div className="flex items-center gap-4">
-            <Link href="/" aria-label="Go to homepage">
-              <Logo className="h-8 w-auto" />
-            </Link>
-            <div>
-              <h1 className="text-xl font-bold text-gray-900 sm:text-2xl">
-                Lead Command Center
-              </h1>
-              <p className="text-sm text-gray-500">
-                Triage, segment, and navigate leads faster
-              </p>
-            </div>
-          </div>
-          <div className="flex flex-wrap gap-3">
-            <Link
-              href="/admin"
-              className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-            >
-              Back to Admin Dashboard
-            </Link>
-            <Link
-              href="/dashboard/settings"
-              className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-            >
-              Account Settings
-            </Link>
-            <button
-              type="button"
-              onClick={handleSignOut}
-              className="rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800"
-            >
-              Sign Out
-            </button>
-          </div>
-        </div>
-      </header>
+  const displayName = profile.name ?? profile.email;
 
-      <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-        <div className="mb-6 border-b border-gray-200">
+  const topBarActions = (
+    <>
+      <Link
+        href="/admin"
+        className="whitespace-nowrap rounded-lg border border-gray-300 px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 sm:px-3 sm:text-sm"
+      >
+        Admin Home
+      </Link>
+      <Link
+        href="/dashboard/settings"
+        className="whitespace-nowrap rounded-lg border border-gray-300 px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 sm:px-3 sm:text-sm"
+      >
+        Settings
+      </Link>
+      <button
+        type="button"
+        onClick={handleSignOut}
+        className="whitespace-nowrap rounded-lg bg-gray-900 px-2.5 py-1.5 text-xs font-medium text-white hover:bg-gray-800 sm:px-3 sm:text-sm"
+      >
+        Sign Out
+      </button>
+    </>
+  );
+
+  return (
+    <>
+      <WorkspaceShell
+        nav={nav}
+        userRole={profile.role}
+        title="Lead Command Center"
+        subtitle={displayName}
+        brandHref="/admin"
+        topBarActions={topBarActions}
+        contentLayout="full"
+      >
+        <div
+          className={`min-w-0 ${
+            activeTab === 'inbox' && selectedCount > 0 ? 'pb-24' : ''
+          }`}
+        >
+        <div className="mb-4 border-b border-gray-200 sm:mb-6">
           <nav className="-mb-px flex gap-2 overflow-x-auto" aria-label="Lead Command Center tabs">
             <button
               type="button"
@@ -1608,13 +1626,8 @@ export default function LeadCommandCenterPage() {
             </div>
           )}
 
-          {(copyMessage || successMessage || bulkMergeError) && (
+          {(successMessage || bulkMergeError) && (
             <div className="space-y-1">
-              {copyMessage && (
-                <p className="text-xs text-green-700" role="status">
-                  {copyMessage}
-                </p>
-              )}
               {successMessage && (
                 <p
                   className="rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-800"
@@ -1762,7 +1775,8 @@ export default function LeadCommandCenterPage() {
             onMergeSuccess={() => loadLeads({ silent: true })}
           />
         )}
-      </div>
+        </div>
+      </WorkspaceShell>
 
       <LeadPreviewDrawer
         clientId={previewClientId}
@@ -1811,6 +1825,13 @@ export default function LeadCommandCenterPage() {
         onSaved={handleBulkTagsSaved}
       />
 
+      <BulkDeleteLeadsModal
+        clientIds={selectedClientIdsList}
+        open={bulkDeleteOpen}
+        onClose={closeBulkDelete}
+        onCompleted={handleBulkDeleteCompleted}
+      />
+
       {bulkMergeOpen &&
         !bulkMergeLoading &&
         selectedMergeClients.length >= 2 &&
@@ -1834,7 +1855,7 @@ export default function LeadCommandCenterPage() {
 
       {activeTab === 'inbox' && selectedCount > 0 && (
         <div className="fixed inset-x-0 bottom-0 z-40 border-t border-gray-200 bg-white/95 px-4 py-3 shadow-lg backdrop-blur sm:px-6">
-            <div className="mx-auto flex max-w-7xl flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="mx-auto flex w-full max-w-none flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div className="space-y-1">
                 <p className="text-sm font-medium text-gray-900">
                   {selectedCount} selected
@@ -1885,6 +1906,13 @@ export default function LeadCommandCenterPage() {
               </button>
               <button
                 type="button"
+                onClick={openBulkDelete}
+                className="rounded-lg border border-red-300 px-4 py-2 text-sm font-medium text-red-700 hover:bg-red-50"
+              >
+                Delete leads
+              </button>
+              <button
+                type="button"
                 onClick={clearSelection}
                 className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
               >
@@ -1894,6 +1922,6 @@ export default function LeadCommandCenterPage() {
           </div>
         </div>
       )}
-    </main>
+    </>
   );
 }

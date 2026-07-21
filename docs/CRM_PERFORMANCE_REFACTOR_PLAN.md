@@ -4,10 +4,10 @@
 > **Sources of truth:** `docs/DATABASE_AND_UI_REFERENCE.md` + codebase audit + **final performance review (July 21, 2026)**.  
 > **Scope of this document:** Planning for **remaining** work. Shipped items are marked explicitly so they are not re-queued.  
 > **Deployment branch:** `deploy`  
-> **Measurement:** `PERF_LOGGING_ENABLED=true` + `npx tsx scripts/profile-api-routes.ts` (default `http://localhost:3001`; see script header for auth + hot-path coverage)  
-> **Timings caveat:** Published hot-path timings in the UI reference are from **July 21, 2026**. Re-run `profile-api-routes` after major perf changes; do not invent numbers in this plan.
+> **Measurement:** `PERF_LOGGING_ENABLED=true` + `npx tsx scripts/profile-api-routes.ts` (default `http://localhost:3001`; see script header for auth + hot-path coverage). Dashboard Home fan-out: Network panel + `npm run probe:dashboard-shell` (see UI reference → Measuring workspace shell loads).  
+> **Timings caveat:** Published hot-path timings in the UI reference are from **July 21, 2026** (API microbenches). The sidebar/workspace layout revamp **changes initial `/dashboard` and `/admin` Home fan-out** — re-measure Home first paint; do **not** invent page-paint numbers in this plan.
 
-**Last updated:** July 21, 2026 (Phase 4 closed — deliverables + acceptance; 4C no domain direct; 4B–4A; 3D–3B)
+**Last updated:** July 21, 2026 (Dashboard **Phase E** sidebar/workspace layout — active-module loading; Phase 4 Client 360 closed; 4C–3B)
 
 ---
 
@@ -38,7 +38,8 @@
 |------|----------------|
 | **Faster list surfaces** | Lead Command Center and Master Pipeline respond with SQL-limited pages; no full-table duplicate scans on every request |
 | **Cheaper Client 360 mutations** | Aside/widget mutations do not always re-run full RSC refresh + strategy refetch |
-| **Bounded dashboard queries** | Widgets use `take` / shared context; no duplicate `/api/me/assignments` |
+| **Bounded dashboard queries** | Widgets use `take` / shared context; no duplicate `/api/me/assignments` on standard Home |
+| **Reduced dashboard Home fan-out** | ✅ **Shipped (UI/loading boundary):** only the active workspace module mounts/fetches; Home is light |
 | **Predictable mobile UX** | Tall modals use `dvh`; Safari autofill remains readable; Strategy Planner usable on iPad |
 | **Reliable side effects** | ✅ **Shipped (code):** durable `BackgroundJob` enqueue + retries/backoff + stuck-RUNNING reclaim. **Ops:** set `CRON_SECRET` + schedule processor — see [`BACKGROUND_JOBS_OPS.md`](./BACKGROUND_JOBS_OPS.md) |
 | **Simpler auth** | One authentication path (Bearer **or** session) for Client 360 mutation routes (partially progressed — see §12) |
@@ -64,7 +65,8 @@ Confirmed against `prisma/schema.prisma` + migrations (July 21, 2026):
 |------|--------|----------|
 | **Phase 1–3 performance indexes** | ✅ Shipped | `20260617003208_add_performance_indexes`, `20260624084311_add_performance_indexes_phase_2`, `20260721020000_add_performance_indexes_phase_3` (incl. `Client(status)`, `client_assignments(client_id)`, notifications, `pg_trgm` GINs). Occupancy **partial uniques** still deferred (data may violate). |
 | **BackgroundJob durability** | ✅ Shipped (code) | `20260721030000_add_background_jobs`; `scheduleReturnableRecalculation` → enqueue + best-effort `processBackgroundJobs`; retries/`maxAttempts`; sync recalculate route kept for compat |
-| **Dashboard architecture** | ✅ Partial ship | Per-widget APIs + skeletons; shared context for legacy monolith; SQL deal aggregates; admin `unstable_cache` 600s |
+| **Dashboard architecture** | ✅ Partial ship → **Phase E layout shipped** | Per-widget APIs + skeletons; shared context for legacy monolith; SQL deal aggregates; admin `unstable_cache` 600s; **sidebar + `?view=` active-module shells** (`WorkspaceShell`) |
+| **Dashboard sidebar / workspace layout (Phase E)** | ✅ Shipped | Standard + admin `WorkspaceShell`; mobile off-canvas sidebar; inactive modules do not mount; existing APIs reused; no auth/API shape/DB/commission changes |
 | **LCC inbox vs preview split** | ✅ Shipped | Slim inbox row; on-open preview API |
 | **Strategy code-splitting** | ✅ Partial ship | `next/dynamic` Board/Projection/modals; conditional view mount |
 | **Global search** | ✅ Shipped | Ranked slim `searchClients` (no full dup/activity scan) |
@@ -83,7 +85,8 @@ Confirmed against `prisma/schema.prisma` + migrations (July 21, 2026):
 | **Client 360 refresh** | Typed slice keys + `refreshClient360Slices`; details skip workspace; stage/merge/archive/team still `all` | `client360Refresh.tsx`, `Client360PageClient` |
 | **Client 360 deals** | Slim list (`DealListItem`, no notes); full detail on `GET …/deals/[dealId]` | `listClientDealsForClient360`, `getClientDealDetail` |
 | **Admin / dashboard commission** | Hydrate WON deals + participants (cached 10 min for admin; per-request for standard context) | `adminAnalyticsCache`, `fetchWonDealsWithParticipants*`, `standardDashboardContext` |
-| **Dashboard widgets** | Open-tasks / deal-participation use DB `take` (20). Standard dashboard passes assignments into calendar (no duplicate `/api/me/assignments`) | `buildOpenTasksWidget`, `buildDealParticipationWidget`, `StandardUserDashboardPage` |
+| **Dashboard widgets** | Per-widget `take` (20) when a module is open. Home no longer mounts all widgets. Still open: cold-cache WON-deal hydrate cost on commission/admin analytics when those modules open | `buildOpenTasksWidget`, `buildDealParticipationWidget`, `StandardUserDashboardPage`, `SuperAdminDashboardPage` |
+| **Dashboard Home rebaseline** | Layout revamp deferred widget/pipeline/chart APIs off Home; July 21 route table does not equal Home first-paint fan-out | Network + `probe:dashboard-shell`; UI reference measuring section |
 | **Strategy Planner** | Detail GET narrowed (Phase 2E); still one full detail DTO for Board/List/Projection; mega-components remain | `loadStrategyPlanDetail`, `StrategyPlanDetailView`, `StrategyPlannerBoard` |
 | **Background jobs (ops)** | ✅ Runbook shipped (`docs/BACKGROUND_JOBS_OPS.md`); each env must still enable cron/`jobs:process` | ops / cron / runbook |
 | **Legacy paths** | Old dashboard monolith routes; `Strategy`/`Document` models | Docs known limitations |
@@ -101,7 +104,7 @@ Ordered by leverage (final performance review). No new measurements invented —
 | **3** | **Dashboard `take` + assignment dedupe** | ✅ DB `take` on open-tasks / deal-participation (20). ✅ Standard dashboard passes assignment bootstrap into Important Dates calendar / add-date modal |
 | **4** | **Admin pipeline bounded API** | ✅ Partial: per-status `take` (50) + `status`/`assignedUserId` server filters + `meta` (`total`, `returned`, `hasMore`, `perStatusCounts`). Still open: cursor / load-more |
 | **5** | **Jobs processing ops** | ✅ Runbook + `jobs:status` / `jobs:process:once` + hardened `CRON_SECRET` auth + stuck RUNNING reclaim. **Still open:** enable cron in each deployed env |
-| **6** | **Re-baseline timings** | ✅ Phase 2B–2N recorded. Still open: dealful deals list re-measure |
+| **6** | **Re-baseline timings** | ✅ Phase 2B–2N Client 360 recorded. Still open: dealful deals list; **Home `/dashboard` + `/admin` first-paint API fan-out** after layout Phase E (Network + `probe:dashboard-shell`; no invented numbers) |
 
 ---
 
@@ -120,16 +123,17 @@ Use `PERF_LOGGING_ENABLED=true` and extend `[perf]` tags where missing (Client 3
 | `GET /api/clients/[id]/employees` | Phase 2B: auth + clientLookup + query each ~0.2–0.4s → Phase 2F: **`clientLookup` removed**; one combined SQL for target+colleagues (~0.22–0.26s query). Auth still ~0.3s | Cheaper auth/JWT cache |
 | `GET /api/clients/[id]/deals` | Phase 2B: auth+access often ≥ query on empty list → Phase 2G: `canViewClientDeals` (admin access ≈0); `clientLookup` only if empty+admin; already-narrow `dealListResponseSelect`. **Dealful profile SKIPPED** (0 deals in audit DB) | Re-measure with seeded/dealful client; optional further participant field trim |
 | `GET /api/clients/[id]/strategy-plans/[planId]` | Phase 2E: narrow plan base select + parallel timed relations (`steps`/`connections`/`expenses`/`projectionMilestones`); ~0.8s server / ~1.4–1.8s client on small sample. Residual = pooler RTT per query | Further view-specific DTOs (board vs list vs projection/overview); optional contribution lazy-load |
-| `GET /api/dashboard/widgets/*` | Some widgets still hydrate large deal graphs; missing DB `take` | Prefer SQL aggregates; cap list widgets at DB |
-| `GET /api/me/assignments` | Standard `/dashboard` loads once and passes into calendar | Admin Schedule still self-fetches only if needed (super admin skips) |
-| Admin funnel/KPIs/leaderboards | Cold miss hydrates all/YTD WON deals | Keep cache; add summary tables or narrower aggregates |
-| `GET /api/admin/all-commission-returnable` | Full reconciliation list (~220–250 ms warm, June 24 doc) | Pagination + filters server-side |
-| Activity feed APIs | Assignment-scoped correlated SQL — OK at moderate scale | Monitor; ensure LIMIT always applied |
+| `GET /api/dashboard/widgets/*` | Called when the matching **workspace module** is active (`?view=`), not on Home. Some widgets still hydrate large deal graphs when opened | Prefer SQL aggregates; keep DB `take` on list widgets |
+| `GET /api/me/assignments` | Standard Home / shell light fetch (nav flags + count); calendar module reuses bootstrap when opened | Keep single shell fetch; do not reintroduce all-widget mount on Home |
+| Admin funnel/KPIs/leaderboards | Opened via `/admin?view=analytics|revenue|leaderboards` (not Home). Cold miss hydrates WON deals | Keep cache; Home stays KPI snapshot only |
+| `GET /api/admin/all-commission-returnable` | Full reconciliation list on `/admin/reconciliation` (~220–250 ms warm, June 24 doc) | Pagination + filters server-side |
+| Activity feed APIs | Assignment-scoped correlated SQL — OK at moderate scale; mounted on activity `?view=` only | Monitor; ensure LIMIT always applied |
 | Legacy `GET /api/dashboard/standard`, `GET /api/get-dashboard-data` | Compat/tests only; risk of accidental use | Deprecate gate or remove after test migration |
 
 **Already healthy (do not regress):**
 
 - Per-widget dashboard endpoints + skeleton loaders
+- **Active workspace module only** mounts/fetches (sidebar / `?view=`); Home light shell
 - `fetchDealAggregatesByClientIds` SQL GROUP BY
 - Activity feed `UNION ALL` with limit
 - Admin analytics auth-before-cache + `force-dynamic`
@@ -836,7 +840,7 @@ Contracts encoded in `lib/client360LoadGuards.ts` + `npm run test:client360-load
 
 ## 9. Dashboard refactor plan
 
-**Current (docs):** Per-widget APIs; shared `standardDashboardContext`; SQL deal aggregates; skeletons on standard dashboard; admin analytics cached 600s.
+**Current (docs):** Per-widget APIs; shared `standardDashboardContext`; SQL deal aggregates; skeletons; admin analytics cached 600s; **sidebar + workspace shells** with active-module loading (Phase E).
 
 ### Phase A — Quick wins — **PARTIAL**
 
@@ -846,7 +850,7 @@ Contracts encoded in `lib/client360LoadGuards.ts` + `npm run test:client360-load
 
 ### Phase B — Admin surfaces — **PARTIAL** (pipeline bounded default; cursor open)
 
-1. Master Pipeline: ✅ server `status` / `assignedUserId` + per-status cap + meta. Still open: cursor / load-more; keep mobile grouped list / desktop kanban.
+1. Master Pipeline: ✅ server `status` / `assignedUserId` + per-status cap + meta. Still open: **cursor / load-more per column** (separate from layout Phase E). Keep mobile grouped list / desktop kanban.
 2. Optional: light skeleton loaders on admin KPI/funnel (docs gap).
 3. Keep 600s cache; document lag; add on-demand revalidate only if product requires fresher KPIs.
 
@@ -860,13 +864,41 @@ Contracts encoded in `lib/client360LoadGuards.ts` + `npm run test:client360-load
 1. Mark or remove `GET /api/get-dashboard-data` and `GET /api/dashboard/standard` from production use; migrate tests to per-widget routes.
 2. Do not revive monolith in UI.
 
-**Key files:** `lib/standardDashboardWidgets.ts`, `lib/standardDashboardContext.ts`, `lib/dashboardDealAggregates.ts`, `lib/adminAnalyticsCache.ts`, `StandardUserDashboardPage`, admin dashboard + `MasterPipelineView`, `ImportantDatesCalendarWidget`.
+### Phase E — Sidebar / workspace layout (UI + loading boundary) — **SHIPPED**
+
+> **Status:** ✅ Shipped July 21, 2026.  
+> **Goal:** Reduce **initial dashboard fan-out** by mounting/fetching **only the active workspace module**.  
+> **Non-goals preserved:** existing widget/admin **APIs reused** (same response shapes); **no auth changes**; **no DB schema / query changes for logging**; **no commission/returnable formula changes**; routes `/admin/leads`, `/admin/users`, `/admin/reconciliation` preserved.
+
+| Surface | Behavior |
+|---------|----------|
+| **Standard shell** | `WorkspaceShell` + `StandardUserDashboardPage` + `?view=` (`home`, `clients`, `tasks`, `activity`, `calendar`, `deals`, `commission`, `returnables`) |
+| **Super admin shell** | `WorkspaceShell` + `SuperAdminDashboardPage` + `?view=` (`home`, `pipeline`, `calendar`, `activity`, `analytics`, `revenue`, `leaderboards`); tools stay on standalone routes |
+| **Mobile sidebar** | Hidden / **off-canvas** by default (`< lg`); hamburger opens drawer; nav closes drawer; workspace full width |
+| **Desktop sidebar** | In-flow; **collapsible** (`crm-sidebar-collapsed`) |
+| **Active module fetch rule** | Home is light (`/api/me/assignments` or `/api/admin/dashboard-kpis` only). Inactive modules: **do not mount** → no `useEffect` fetches. Active module owns its existing API(s) via `next/dynamic` |
+| **Deep links** | `?view=` soft-nav; invalid → Home; `/admin#master-pipeline` → `?view=pipeline` |
+
+**Key files (Phase E):** `src/components/layout/*`, `StandardUserDashboardPage`, `DashboardHomeView`, `standardDashboardViews`, `SuperAdminDashboardPage`, `AdminHomeView`, `adminDashboardViews`, LCC/users/reconciliation pages (shell wrap only).
+
+**Contract probe:** `npm run probe:dashboard-shell` + UI reference § Measuring workspace shell loads.
+
+#### Phase E follow-ups (open — separate from shipped layout)
+
+| Follow-up | Notes |
+|-----------|--------|
+| **Rebaseline initial `/dashboard` and `/admin` API calls** | Record Home Network fan-out + `[perf]` for allowed Home APIs only. Do **not** invent timings; July 21 route microbench table remains valid for individual routes |
+| **Optional nested routes later** | Promote `?view=` modules to nested App Router paths if product wants cleaner URLs / RSC boundaries — not required for fan-out win |
+| **Admin pipeline load-more** | Remains **Phase B / Next Sprint #4** — cursor / load-more per column; independent of sidebar layout |
+| **LCC SQL materialization** | Remains **Next Sprint #1 / Wave 4** — attention/dup/latest-source for full SQL pagination; independent of dashboard shell |
+
+**Key files (ongoing A–D):** `lib/standardDashboardWidgets.ts`, `lib/standardDashboardContext.ts`, `lib/dashboardDealAggregates.ts`, `lib/adminAnalyticsCache.ts`, `MasterPipelineView`, `ImportantDatesCalendarWidget`.
 
 ---
 
 ## 10. iPad / Safari UX fixes
 
-**Already shipped:** Global `-webkit-autofill` override in `globals.css` (dark text + inset box-shadow).
+**Already shipped:** Global `-webkit-autofill` override in `globals.css` (dark text + inset box-shadow). Dashboard shells: mobile **off-canvas** sidebar (workspace full width) — see Phase E.
 
 | Task | Detail |
 |------|--------|
@@ -996,7 +1028,8 @@ Prefer **§3 Next Sprint Hot Paths** for the immediate sprint. Waves below remai
 
 - [ ] Enable `PERF_LOGGING_ENABLED` on staging/local; record baseline timings for LCC, pipeline, Client 360, widgets, strategy GET
 - [ ] Note production DB size (#clients, #deals, #WON deals, #source records)
-- [ ] After next sprint: replace June 24 timings in UI reference (do not invent numbers in this plan)
+- [ ] After layout Phase E: rebaseline **Home** `/dashboard` + `/admin` Network fan-out (allowed APIs only) via UI reference measuring section + `npm run probe:dashboard-shell` — **do not invent numbers**
+- [ ] After next sprint: update UI reference with newly measured Home fan-out if recorded (keep July 21 API microbench history)
 
 ### Wave 1 — Indexes & query caps (low risk)
 
@@ -1035,7 +1068,10 @@ Prefer **§3 Next Sprint Hot Paths** for the immediate sprint. Waves below remai
 
 ### Wave 5 — Admin pipeline & dashboard depth (medium–high risk)
 
-- [x] Pipeline server filters + per-status limit + meta — **PARTIAL** (cursor / load-more still open)
+- [x] Pipeline server filters + per-status limit + meta — **PARTIAL** (cursor / load-more still open — **separate from layout**)
+- [x] Dashboard Phase E — sidebar / workspace shells + active-module loading — **SHIPPED** (no auth/API/DB/commission changes)
+- [ ] Rebaseline Home `/dashboard` + `/admin` first-paint API fan-out (Network + `probe:dashboard-shell`) — **OPEN** (do not invent numbers)
+- [ ] Optional: promote `?view=` to nested routes — **OPEN** (later)
 - [ ] Admin skeleton polish (optional)
 - [ ] Plan commission summary/read-model spike (design only → implement if approved)
 
@@ -1153,11 +1189,12 @@ Prefer **§3 Next Sprint Hot Paths** for the immediate sprint. Waves below remai
 |-------------|--------|
 | Phase 1–3 indexes | **Shipped** (W1 migrations) |
 | BackgroundJob durability | **Shipped** (W8 code); ops cron still open |
-| Dashboard over-fetch / duplicate assignments | ✅ Next sprint #3 shipped (take + standard dashboard dedupe) |
+| Dashboard over-fetch / duplicate assignments | ✅ Next sprint #3 shipped (take + standard dashboard dedupe); ✅ **Phase E** active-module Home fan-out reduced |
+| Dashboard Home rebaseline after layout | Next sprint #6 / W5 remaining |
 | Modal `dvh` + DealEdit dynamic import | W2 remaining |
 | Client 360 `router.refresh` fan-out + deals DTO | Next sprint #2 / W3 |
-| LCC post-filter load-all + attention sort not in SQL | Next sprint #1 remaining / W4 |
-| Admin pipeline all-data | Next sprint #4 / W5 |
+| LCC post-filter load-all + attention sort not in SQL | Next sprint #1 remaining / W4 (**separate** from dashboard shell) |
+| Admin pipeline load-more / cursor | Next sprint #4 / W5 (**separate** from dashboard shell) |
 | Strategy fat DTO | Next sprint (after #1–4) / W6 |
 | Mixed auth patterns | W7 |
 | Jobs processor ops | Next sprint #5 / W8 remaining |

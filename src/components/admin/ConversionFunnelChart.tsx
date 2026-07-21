@@ -56,8 +56,8 @@ function ConversionFunnelChart() {
   );
 
   return (
-    <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-      <div className="mb-4 flex items-center justify-between">
+    <div className="min-w-0 rounded-xl border border-gray-200 bg-white p-4 shadow-sm sm:p-5">
+      <div className="mb-4 flex items-center justify-between gap-2">
         <h2 className="text-lg font-semibold text-gray-900">Conversion Funnel</h2>
         <WidgetDownloadMenu links={FUNNEL_DOWNLOAD_LINKS} />
       </div>
@@ -66,7 +66,7 @@ function ConversionFunnelChart() {
       {error && <p className="text-sm text-red-600">{error}</p>}
 
       {!loading && !error && (
-        <div className="h-80">
+        <div className="h-[min(28rem,55dvh)] min-h-80 w-full">
           <ResponsiveContainer width="100%" height="100%">
             <FunnelChart>
               <Tooltip

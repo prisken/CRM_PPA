@@ -56,7 +56,7 @@ const PipelineColumn = memo(function PipelineColumn({
 
   if (variant === 'desktop') {
     return (
-      <div className="min-w-[220px] flex-1 rounded-lg bg-gray-50 p-3">
+      <div className="min-w-[11.5rem] flex-1 basis-[11.5rem] rounded-lg bg-gray-50 p-3">
         <div className="mb-3 flex items-center justify-between gap-2">
           <h3 className="text-sm font-semibold text-gray-800">{label}</h3>
           <span className="rounded-full bg-gray-200 px-2 py-0.5 text-xs text-gray-600">
@@ -207,9 +207,9 @@ export default function MasterPipelineView({
   }
 
   return (
-    <div id="master-pipeline" className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+    <div id="master-pipeline" className="min-w-0 rounded-xl border border-gray-200 bg-white p-3 shadow-sm sm:p-5">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <div>
+        <div className="min-w-0">
           <h2 className="text-lg font-semibold text-gray-900">Master Pipeline</h2>
           {meta?.hasMore && (
             <p className="mt-1 text-xs text-gray-500">
@@ -220,7 +220,13 @@ export default function MasterPipelineView({
             </p>
           )}
         </div>
-        <div className="flex flex-wrap gap-3">
+        <div className="flex min-w-0 flex-wrap gap-2 sm:gap-3">
+          <Link
+            href="/admin/leads"
+            className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-medium text-blue-800 hover:bg-blue-100"
+          >
+            Lead Command Center
+          </Link>
           <button
             type="button"
             onClick={onAddClick}
@@ -231,7 +237,7 @@ export default function MasterPipelineView({
           <select
             value={assignedUserFilter}
             onChange={(e) => setAssignedUserFilter(e.target.value)}
-            className="rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-700"
+            className="min-w-0 max-w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-700"
           >
             <option value="ALL">All Assigned Users</option>
             {assignedUserOptions.map((user) => (
@@ -243,7 +249,7 @@ export default function MasterPipelineView({
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className="rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-700"
+            className="min-w-0 max-w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-700"
           >
             {STATUS_OPTIONS.map((status) => (
               <option key={status.key} value={status.key}>
@@ -254,8 +260,9 @@ export default function MasterPipelineView({
         </div>
       </div>
 
+      {/* Intentional horizontal scroll for Kanban columns only — not the page. */}
       <div className="hidden lg:block">
-        <div className="flex gap-4 overflow-x-auto pb-2">
+        <div className="-mx-1 flex gap-3 overflow-x-auto px-1 pb-2 sm:gap-4">
           {STATUS_COLUMNS.map((column) => {
             const columnClients = clientsByStatus.get(column.key) ?? [];
             const totalCount =

@@ -110,12 +110,14 @@ export default function UserProfileSettingsPage() {
     );
   }
 
+  const homeHref = profile.role === 'SUPER_ADMIN' ? '/admin' : '/dashboard';
+
   return (
     <main className="min-h-screen bg-gray-100">
       <header className="border-b border-gray-200 bg-white">
         <div className="mx-auto flex max-w-7xl flex-col gap-4 px-4 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-6 lg:px-8">
           <div className="flex items-center gap-4">
-            <Link href="/" aria-label="Go to homepage">
+            <Link href={homeHref} aria-label="Go to homepage">
               <Logo className="h-8 w-auto" />
             </Link>
             <div>
@@ -127,10 +129,10 @@ export default function UserProfileSettingsPage() {
           </div>
           <div className="flex flex-wrap gap-3">
             <Link
-              href="/dashboard"
+              href={homeHref}
               className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
             >
-              Back to Dashboard
+              {profile.role === 'SUPER_ADMIN' ? 'Admin Home' : 'Back to Dashboard'}
             </Link>
             <button
               type="button"

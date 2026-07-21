@@ -224,6 +224,7 @@ export default function CommandPalette() {
 
       if (event.key === 'Escape') {
         event.preventDefault();
+        event.stopPropagation();
         closePalette();
         return;
       }

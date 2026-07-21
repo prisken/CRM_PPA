@@ -3,7 +3,7 @@
 > **Single source of truth** for schema, APIs, permissions, UI structure, and shipped feature status.  
 > Prefer this document over chat notes, old handoffs, or divergent markdown. User-facing PDFs (`USER_MANUAL_*.pdf`) and one-off migration guides under `docs/` are **supplements**, not replacements.
 
-**Last updated:** July 21, 2026 (route timing rebaseline; Client 360 core-then-parallel loaders; bounded admin pipeline; LCC DB pagination + fallbacks; BackgroundJob ops runbook; dashboard widget `take` caps)  
+**Last updated:** July 21, 2026 (sidebar + workspace dashboard layout; active-module loading; route timing baseline still July 21 API microbench — **reprofile Home fan-out** after layout revamp; Client 360 / LCC / pipeline notes unchanged)  
 **Repository:** [CRM_PPA](https://github.com/prisken/CRM_PPA)  
 **Deployment branch:** `deploy` (Vercel production builds from this branch)  
 **Production URL:** `https://crm-ppa-nine.vercel.app`  
@@ -16,20 +16,21 @@ This document describes the PostgreSQL database schema, API surface, and fronten
 
 | Area | Status |
 |------|--------|
-| Standard & super admin dashboards | ✅ KPIs, funnel, revenue, leaderboards, master pipeline |
-| Recent Activity feed (grouped, unread, mark-read) | ✅ Standard + super admin dashboards |
-| Branding (logo, favicon) | ✅ Login, signup, dashboards, Client 360 |
+| **Workspace shell (standard + admin)** | ✅ Shared `WorkspaceShell` — desktop collapsible sidebar, mobile/iPad off-canvas drawer, top bar, `?view=` deep links; density preserved |
+| Standard & super admin dashboards | ✅ Sidebar + **active workspace modules** (Home light; widgets/pipeline/charts on demand). Same underlying APIs as before |
+| Recent Activity feed (grouped, unread, mark-read) | ✅ Standard + super admin — `/dashboard?view=activity`, `/admin?view=activity` |
+| Branding (logo, favicon) | ✅ Login, signup, workspace shells, Client 360, settings, statements |
 | Client 360 workspace | ✅ Strategy, tasks, interactions, documents, multi-deal, team |
 | Client details expansion | ✅ Role in company, employee count, expectations, important dates (date + optional time) |
 | **Multi email / phone contacts** | ✅ `ClientContact` table; `emails`/`phones` arrays on create + details; Client 360 multi-entry UI; search/dupes/ingest/match any contact |
 | **Important Dates CRUD + time** | ✅ `ClientImportantDate` table; UTC wall-clock date/time; Client 360 panel + lead preview; activity log on create/update/delete |
-| **Important Dates Calendar** | ✅ `ImportantDatesCalendarWidget` on `/dashboard` and `/admin` Schedule sections; CLIENT/LEAD filters; SUPER_ADMIN sees all |
+| **Important Dates Calendar** | ✅ `ImportantDatesCalendarWidget` on `/dashboard?view=calendar` and `/admin?view=calendar`; CLIENT/LEAD filters; SUPER_ADMIN sees all |
 | **Client Strategy Builder / Strategy Planner** | ✅ Plans/steps/connections/expenses + **Timeline Economics** (invest/income/expense years, capital returned) + **Projection Journey** milestones (source selection + suggested values) + **Client Strategy Overview** read-only report. Client 360 workspace tab **Strategy Planner** (not right rail). Board / List / Projection (`crm-client-strategy-planner-view`); overview `/clients/[id]/strategy-plans/[planId]/overview`. Outcome Summary MONTHLY + YEARLY÷12. Tests: `npm run test:client-strategy`, `npm run test:strategy-projection`, `npm run test:strategy-timeline`, `npm run test:strategy-report` |
 | Company hierarchy | ✅ Colleagues by company, add employee as lead |
 | Role-based pipeline advances | ✅ Standard users; super admin full control |
-| Standard user lead creation | ✅ Add Lead on dashboard with auto-assignment |
+| Standard user lead creation | ✅ Add Lead on `/dashboard` top bar / Home (standard users only) with auto-assignment |
 | RELATIONSHIP client details edit | ✅ API + Edit button on Client 360 |
-| Mobile-responsive UI | ✅ Dashboards, Client 360, pipeline, modals, workspace tabs |
+| Mobile-responsive UI | ✅ Workspace-first dashboards (off-canvas sidebar), Client 360, pipeline, modals, workspace tabs |
 | **Money display (no currency label)** | ✅ Shared `lib/formatMoney.ts` — amounts show as plain locale numbers (e.g. `12,000.00`); no `$` / `US$` / `USD` in UI or PDF report text |
 | Auth UX | ✅ Stale-session sign-out; deactivated-account block on login + API |
 | Commission engine | ✅ Participant-backed splits (`DealParticipant`); legacy assignment-pool fallback; `totalCommission`, secured commission |
@@ -37,14 +38,15 @@ This document describes the PostgreSQL database schema, API surface, and fronten
 | Multi-deal system | ✅ CRUD per client; committed/potential value aggregation |
 | Commission returnables | ✅ Doctor liabilities on WON deals; multi-role credit sum; statements + reconciliation |
 | Assignment-triggered returnable recalculation | ✅ Durable `BackgroundJob` enqueue (+ best-effort in-process process); sync `POST /api/tasks/recalculate-returnables` kept for compat; ops: [`BACKGROUND_JOBS_OPS.md`](./BACKGROUND_JOBS_OPS.md) |
-| Role-based dashboard widgets | ✅ Secured commission + returnables by assignment role (all users) |
-| Performance — standard dashboard | ✅ Per-widget APIs + skeletons; shared context/deal aggregates for legacy monolith; open-tasks / deal-participation DB `take` 20; Important Dates calendar assignment bootstrap on `/dashboard` |
+| Role-based dashboard widgets | ✅ Secured commission + returnables by assignment role (all users); modules gated by `?view=` |
+| Performance — standard dashboard | ✅ Per-widget APIs reused; **Home** fetches only `/api/me/assignments`; inactive modules do not mount/fetch |
 | Performance — Client 360 | ✅ Core loader first, then parallel deals + hierarchy; slim deals list + detail-on-edit; slice refresh (`refreshClient360Slices`) |
 | Performance — Lead Command Center | ✅ Slim inbox; lazy preview; default Prisma `skip`/`take`; fallback load-all for needsAttention/dup/latest-source filters; candidate peer dup flags |
-| Performance — admin pipeline | ✅ Bounded default (50/status) + meta; `mode=legacy` / `ADMIN_PIPELINE_LEGACY` unbounded fallback |
+| Performance — admin pipeline | ✅ Bounded default (50/status) + meta; `mode=legacy` / `ADMIN_PIPELINE_LEGACY` unbounded fallback; pipeline is `/admin?view=pipeline` only |
 | Performance — admin analytics cache | ✅ `unstable_cache` (600s) for org-wide aggregates after `requireSuperAdminFromRequest`; routes `force-dynamic` |
-| Performance — frontend render | ✅ `memo`/`useMemo`/`useCallback`; `next/dynamic` for charts, pipeline, modals |
-| Performance — route timing logs | ✅ Opt-in `[perf]` logs via `PERF_LOGGING_ENABLED=true` (`lib/performance.ts`); baseline July 21, 2026 |
+| Performance — frontend render | ✅ `memo`/`useMemo`/`useCallback`; `next/dynamic` for workspace modules, charts, pipeline, modals |
+| Performance — route timing logs | ✅ Opt-in `[perf]` logs via `PERF_LOGGING_ENABLED=true` (`lib/performance.ts`); July 21, 2026 API baseline — **Home fan-out changed by layout revamp** (reprofile; see Measuring workspace shell loads) |
+| Performance — dashboard Home contract probe | ✅ `npm run probe:dashboard-shell` — source contract + optional Home API RTTs (no invented page-paint numbers) |
 | DB performance indexes (phase 1–3) | ✅ Phases 1–3 shipped (incl. `pg_trgm` GIN search); occupancy partial uniques deferred |
 | Query optimizations | ✅ Activity feed SQL `UNION ALL`; conditional deal aggregation SQL; narrower Prisma selects |
 | Unified lead ingestion | ✅ `lib/leadIngestion.ts` — shared `ingestExternalLead()` for webhooks; match by source+externalId → email → phone; safe merge on update |
@@ -55,12 +57,12 @@ This document describes the PostgreSQL database schema, API surface, and fronten
 | Duplicate client scan | ✅ `npm run find:duplicate-clients` — `scripts/find-duplicate-clients.ts` |
 | Lead ingestion integration test | ✅ `npx tsx scripts/test-lead-ingestion.ts` — direct `ingestExternalLead` tests (no webhooks/secrets) |
 | Client lifecycle management | ✅ Super admin archive (soft) + permanent delete with password confirmation |
-| User management | ✅ Super admin deactivate + permanent delete; `/admin/users` UI |
+| User management | ✅ Super admin deactivate + permanent delete; `/admin/users` in admin shell |
 | Enhanced lead creation | ✅ Full client-detail fields at create time (`AddLeadModal`, `AddClientModal`) |
-| Account settings | ✅ `/dashboard/settings` — edit display name; link in dashboard headers |
+| Account settings | ✅ `/dashboard/settings` — edit display name; Settings in workspace top bar / sidebar |
 | Safari/iPad autofill fix | ✅ Global `-webkit-autofill` override in `globals.css` |
 | Vercel deploy | ✅ `prisma generate` + `migrate deploy` on build |
-| **Lead Command Center** | ✅ `/admin/leads` — compact inbox, attention scoring, collapsible filters, preview drawer, bulk actions |
+| **Lead Command Center** | ✅ `/admin/leads` — same admin `WorkspaceShell`; compact inbox, attention scoring, collapsible filters, preview drawer, bulk actions |
 | **Lead duplicates panel** | ✅ Email/phone duplicate groups; `GET /api/admin/leads/duplicates`; `npm run find:duplicate-clients` |
 | **Manual client merge (pairwise)** | ✅ `mergeClients()` + `POST /api/admin/leads/merge` + `MergeClientsModal` (`pairwise`); writes `LeadMergeAudit`; archives duplicate |
 | **Manual selected-lead merge (LCC)** | ✅ Bulk **Merge selected** (2–10 rows) → `MergeClientsModal` (`manual-multi`) → `POST /api/admin/leads/merge-multiple` |
@@ -70,7 +72,7 @@ This document describes the PostgreSQL database schema, API surface, and fronten
 | **Client tags** | ✅ `Tag` + `ClientTag` models; bulk add via LCC; filter by tag; `GET/POST /api/admin/tags` |
 | **Follow-up fields** | ✅ `priority`, `nextAction`, `nextFollowUpAt` on Client; LCC preview drawer; attention scoring |
 | **Global client search** | ✅ `GET /api/search/clients?q=` — super admin: all clients; standard user: assigned only |
-| **Command palette** | ✅ `⌘K` / `Ctrl+K` — `CommandPalette.tsx` on dashboard/admin/clients/my-statements |
+| **Command palette** | ✅ `⌘K` / `Ctrl+K` — `CommandPalette.tsx` on dashboard/admin/clients/my-statements (unchanged; still global via `Providers.tsx`) |
 | **Lead source badges** | ✅ `LeadSourceBadges` on LCC, Client 360 header/details, source records widget |
 | **Auth token sync on login** | ✅ `POST /api/auth/token` issues JWT after Supabase sign-in; stale Bearer falls back to session |
 | **Lead Command Center smoke test** | ✅ `npx tsx scripts/test-lead-command-center.ts` |
@@ -135,10 +137,11 @@ docs/             # Documentation (this file, user manuals, google-forms-integra
 
 **Performance architecture:**
 
-- **Standard dashboard** — live UI uses per-widget API routes + skeletons. Legacy `GET /api/dashboard/standard` still composes widgets from shared context (compat/tests).
+- **Workspace dashboards (`/dashboard`, `/admin`)** — shared `WorkspaceShell` (sidebar + top bar). **Active module only:** Home is light; selecting a sidebar item / `?view=` mounts that module (`next/dynamic`) and owns its existing widget/admin APIs. Inactive modules do not fetch. Routes `/admin/leads`, `/admin/users`, `/admin/reconciliation` preserved (same shell chrome). See [Measuring workspace shell loads](#measuring-workspace-shell-loads-after-sidebar-redesign).
+- **Standard dashboard widgets** — live UI still uses per-widget API routes + skeletons when that module is open. Legacy `GET /api/dashboard/standard` still composes widgets from shared context (compat/tests).
 - **Client 360** — server page loads **core first** via `getClient360CoreData()`, then **deals + company hierarchy in parallel** (permission-gated). Workspace tabs lazy-load. Slice refreshes use `refreshClient360Slices` (only `all` calls `router.refresh()`).
 - **Lead Command Center** — slim inbox via `GET /api/admin/leads` (default DB `skip`/`take` when filters allow; **fallback** load-all → filter/sort/slice for `needsAttention` / duplicate / latest-source date filters). Preview is **lazy** via `GET /api/admin/leads/[id]/preview`.
-- **Admin master pipeline** — default **bounded** per-status pages (50/stage) + `meta`; temporary unbounded via `mode=legacy` / `ADMIN_PIPELINE_LEGACY=true`.
+- **Admin master pipeline** — default **bounded** per-status pages (50/stage) + `meta`; temporary unbounded via `mode=legacy` / `ADMIN_PIPELINE_LEGACY=true`. Opened as `/admin?view=pipeline` (not on Admin Home).
 - **Global search** — `GET /api/search/clients?q=` uses slim ranked `searchClients()` with `pg_trgm` GIN indexes (`20260721020000_add_performance_indexes_phase_3`).
 - **Important Dates calendar** — `GET /api/dashboard/widgets/important-dates-calendar` with required date-range validation and event `take` cap (`MAX_CALENDAR_EVENTS` = 1000).
 - **Background jobs** — durable `BackgroundJob` enqueue is shipped; **staging/production must** schedule a processor — see [`BACKGROUND_JOBS_OPS.md`](./BACKGROUND_JOBS_OPS.md).
@@ -148,7 +151,9 @@ docs/             # Documentation (this file, user manuals, google-forms-integra
 
 ### Route performance timings
 
-> **Superseded:** June 24, 2026 server-only samples (unbounded pipeline, pre–LCC pagination meta, etc.) are obsolete for planning. Use the **July 21, 2026** baseline below.
+> **Superseded:** June 24, 2026 server-only samples (unbounded pipeline, pre–LCC pagination meta, etc.) are obsolete for planning. Use the **July 21, 2026** baseline below for **API route** microbenches.
+>
+> **Layout revamp (July 21, 2026 — sidebar / active workspace):** Initial `/dashboard` and `/admin` **Home** no longer mount all widgets / pipeline / charts together. The July 21 table below still correctly times **individual** widget and admin routes when called, but it does **not** represent pre-revamp “open dashboard once → N parallel widget calls” fan-out. **Reprofile Home first paint** with Network + `npm run probe:dashboard-shell` / [Measuring workspace shell loads](#measuring-workspace-shell-loads-after-sidebar-redesign). Do not invent replacement page-paint numbers here until a new measured pass is recorded.
 
 #### Current baseline (July 21, 2026)
 
@@ -202,6 +207,64 @@ Auth: local ACTIVE `SUPER_ADMIN` / `STANDARD_USER` JWTs via `DATABASE_URL` (see 
 ```
 
 **Payload warn thresholds:** dashboard widgets 50KB · Client 360 core 100KB · deals 150KB · Strategy Planner 200KB · Lead Command Center 250KB · Admin master pipeline 150KB.
+
+#### Measuring workspace shell loads (after sidebar redesign)
+
+`/dashboard` and `/admin` are **client-rendered shells** (`StandardUserDashboardPage` / `SuperAdminDashboardPage`). There is no single server route for “page paint,” so compare **which APIs fire on first paint vs on view switch**, using the browser Network panel plus existing `[perf]` lines (no extra DB queries for logging).
+
+**Enable server logs:**
+
+```bash
+PERF_LOGGING_ENABLED=true npm run dev
+# optional: -- -p 3001
+```
+
+**Expected first-paint fetches (Home):**
+
+| Shell | URL | Expected Network (besides auth/profile) | Matching `[perf]` |
+|-------|-----|-------------------------------------------|-------------------|
+| Standard Home | `/dashboard` or `?view=home` | `GET /api/me/assignments` only (nav flags + Home count). **Must not** call widget APIs (assigned-clients, open-tasks, activity-feed, calendar, deals, performance-metrics, returnables). | `route=/api/me/assignments` |
+| Admin Home | `/admin` or `?view=home` | `GET /api/admin/dashboard-kpis` only (tiny KPI snapshot). **Must not** call pipeline, calendar, funnel, revenue, leaderboards, or `superadmin` activity. | `route=/api/admin/dashboard-kpis` (+ nested `cache:admin-dashboard-kpis` on miss) |
+
+**Expected module fetches (open one `?view=` at a time):**
+
+| View | URL | Primary API(s) | `[perf]` route / notes |
+|------|-----|----------------|------------------------|
+| Clients | `/dashboard?view=clients` | `/api/dashboard/widgets/assigned-clients` | `…/assigned-clients` |
+| Tasks | `/dashboard?view=tasks` | `/api/dashboard/widgets/open-tasks` | `…/open-tasks` |
+| Activity | `/dashboard?view=activity` | `/api/dashboard/widgets/activity-feed` | `…/activity-feed` |
+| Calendar | `/dashboard?view=calendar` | `/api/dashboard/widgets/important-dates-calendar` | `…/important-dates-calendar` |
+| Deals | `/dashboard?view=deals` | `/api/dashboard/widgets/deal-participation` | `…/deal-participation` |
+| Commission | `/dashboard?view=commission` | `/api/dashboard/widgets/performance-metrics` | `…/performance-metrics` |
+| Returnables | `/dashboard?view=returnables` | `/api/me/commission-returnable` (doctor-gated) | `…/commission-returnable` |
+| Pipeline | `/admin?view=pipeline` | `/api/admin/pipeline` | `…/pipeline` |
+| Calendar | `/admin?view=calendar` | `/api/dashboard/widgets/important-dates-calendar` | `…/important-dates-calendar` |
+| Activity | `/admin?view=activity` | `/api/dashboard/superadmin` | `…/superadmin` |
+| Analytics | `/admin?view=analytics` | `/api/admin/dashboard-kpis` + `/api/admin/funnel-data` | KPIs + `…/funnel-data` |
+| Revenue | `/admin?view=revenue` | `/api/admin/revenue-tracker` | `…/revenue-tracker` |
+| Leaderboards | `/admin?view=leaderboards` | `/api/admin/leaderboards` | `…/leaderboards` |
+
+**Before/after checklist:**
+
+1. Hard-refresh Home → Network: only the Home API(s) above; note Timing (TTFB + content) and size.
+2. Hard-refresh the same Home with `PERF_LOGGING_ENABLED=true` → copy matching `[perf] … durationMs=` lines from the terminal.
+3. Switch to one workspace module (sidebar or `?view=`) → confirm **that** module’s API appears and previous module APIs do **not** re-fire.
+4. Compare Home first-paint count/duration vs pre-redesign (when all widgets mounted together) — success is fewer parallel requests on Home and deferred module cost until selected.
+
+**Automated helpers (no invented baselines):**
+
+```bash
+# Source contract + optional Home API round-trips (assignments / dashboard-kpis)
+npm run probe:dashboard-shell
+# or: BASE_URL=http://localhost:3001 npx tsx scripts/probe-dashboard-layout-shell.ts
+
+# Existing hot-path microbench (includes Home APIs + module widgets; does not assert page fan-out)
+npm run profile:api
+```
+
+`probe:dashboard-shell` fails if Home source starts importing heavy modules or forbidden API strings. Browser Network is still required to prove a live session does not fire forbidden XHRs. Module route timings stay in `profile-api-routes.ts` / Client 360 probes — unchanged.
+
+**Not practical as a single server `[perf]` line:** client shell mount / React hydration / sidebar chrome. Use Network waterfall for that UX wall time; use `[perf]` for API handler cost only.
 
 #### Phase 2B substep audit (July 21, 2026 — cold + warm)
 
@@ -1486,7 +1549,7 @@ Merges two sources via a **single raw SQL query** (`prisma.$queryRaw`) using `UN
 
 Grouped by client for dashboard widgets. `isUnread` = no row in `activity_read_status` for `(activityId, userId)`.
 
-**Feed limits:** Standard dashboard widget — 15 recent items; super admin dashboard — ~100 items.
+**Feed limits:** Standard dashboard activity module — 15 recent items; super admin activity module (`/admin?view=activity`) — ~100 items.
 
 ### Activity ID note
 
@@ -1575,7 +1638,7 @@ Also editable as a full replace via `PUT /api/clients/[id]/details` (`importantD
 
 **Calendar widget (`ImportantDatesCalendarWidget`):**
 
-- Mounted on **Schedule** sections of `/dashboard` (`StandardUserDashboardPage`) and `/admin` (`SuperAdminDashboardPage`)
+- Mounted on **Calendar** workspace modules: `/dashboard?view=calendar` and `/admin?view=calendar` (not on Home)
 - Data: `GET /api/dashboard/widgets/important-dates-calendar` (`lib/importantDatesCalendar.ts`)
 - Query: required `startDate`/`endDate` (YYYY-MM-DD); optional `recordType=CLIENT|LEAD|ALL`, `search`, `assignedUserId` (**SUPER_ADMIN only**)
 - Visibility: SUPER_ADMIN = all in range; others = assigned / deal-participant owners only (enforced server-side)
@@ -2114,32 +2177,47 @@ See `docs/deal-participant-migration.md` for full migration runbook.
 ### Site map
 
 ```
-/                     → redirect to /login or /dashboard
+/                     → redirect to /login
 /login                → Sign in
 /signup               → Register
-/dashboard            → User Dashboard (all authenticated users; role-based commission widgets)
+/dashboard            → User workspace shell (Home; ?view=clients|tasks|activity|calendar|deals|commission|returnables)
 /dashboard/settings   → Account Settings (display name, display density preference)
-/admin                → Super Admin Dashboard
-/admin/leads          → Lead Command Center (inbox + duplicates + merge)
-/admin/reconciliation → Global Reconciliation Dashboard (commission returnables audit)
-/admin/users          → User Management (deactivate / permanently delete users)
+/admin                → Super-admin workspace shell (Home; ?view=pipeline|calendar|activity|analytics|revenue|leaderboards)
+/admin/leads          → Lead Command Center (inbox + duplicates + merge) — same admin shell chrome
+/admin/reconciliation → Global Reconciliation Dashboard — same admin shell chrome
+/admin/users          → User Management — same admin shell chrome
 /my-statements        → Returnable Statements (doctors mark liabilities as paid)
 /clients/[id]         → Client 360 page
 ```
+
+Deep links: invalid `?view=` falls back to Home. `/admin#master-pipeline` redirects to `/admin?view=pipeline`. Standalone admin tool routes are unchanged.
+
+### Shared workspace chrome
+
+**Components:** `src/components/layout/` — `WorkspaceShell`, `WorkspaceSidebar`, `WorkspaceTopBar`, `WorkspaceShellContext`, `workspaceNavConfig`, `workspaceNavUtils`.
+
+| Behavior | Detail |
+|----------|--------|
+| Desktop (`lg+`) | In-flow sidebar; collapsible (persists `localStorage` `crm-sidebar-collapsed`) |
+| Mobile / iPad (`< lg`) | Sidebar **off-canvas** (hidden by default); hamburger opens drawer; selecting a nav item closes it; workspace is full remaining width |
+| Scroll | Shell uses `h-dvh`; main content scrolls; avoid page-level horizontal scroll (Kanban may scroll horizontally inside its board) |
+| Density | Comfortable / Compact via existing `DisplayDensityProvider` |
+| Navigation | Client `Link` + `?view=` (soft nav, `scroll={false}`); refresh restores the same module |
+| Logo / brand | Standard shell → `/dashboard` (super admin on `/dashboard` may brand to `/admin`); admin shell → `/admin` |
 
 ### Role-based landing
 
 | Role | Primary home | Notes |
 |------|--------------|-------|
-| `STANDARD_USER` | `/dashboard` | Commission widgets shown based on assignment roles |
-| `SUPER_ADMIN` | `/admin` (typical) | Can also use `/dashboard` for personal commission widgets if assigned to clients |
+| `STANDARD_USER` | `/dashboard` | Workspace modules; commission / returnables by assignment role |
+| `SUPER_ADMIN` | `/admin` (typical) | Can open `/dashboard` (User Dashboard nav) for personal modules if assigned |
 
 ### Branding
 
 - **Logo component:** `src/components/Logo.tsx` → `/assets/logo-full.png`
 - **Favicon:** `/assets/favicon.ico` (configured in `src/app/layout.tsx` metadata)
 - **Viewport:** `<meta name="viewport" content="width=device-width, initial-scale=1" />` in root layout `<head>`
-- Logo appears in: dashboard headers, Client 360 header, login, signup
+- Logo appears in: workspace sidebar brand, Client 360 header, login, signup, settings, statements
 
 ---
 
@@ -2165,31 +2243,40 @@ See `docs/deal-participant-migration.md` for full migration runbook.
 
 ### Page: User Dashboard (`/dashboard`)
 
-**File:** `src/components/dashboard/StandardUserDashboardPage.tsx`
+**File:** `src/components/dashboard/StandardUserDashboardPage.tsx`  
+**Shell:** `WorkspaceShell` + `buildWorkspaceNavConfig({ shell: 'standard' })`  
+**Home:** `DashboardHomeView` · **Modules:** `standardDashboardViews.tsx` (lazy via `next/dynamic`)
 
-**Header:** Logo (links home), welcome message, **Add Lead** (standard users only), **Returnable Statements** (if `DOCTOR` role), **Admin Dashboard** (super admin), **Account Settings**, Sign Out
+**Layout:** Sidebar (Workspace: Home, My Clients, Tasks, Activity, Calendar, Deals, Commission, Returnables if doctor; Account: Settings) + top bar (title, Add Lead for standard users, Settings, Sign Out). Super admin also sees Admin → Admin Dashboard.
 
-**Command palette:** `⌘K` / `Ctrl+K` opens global client search (`CommandPalette` via `Providers.tsx`). Enabled on `/dashboard`, `/admin/*`, `/clients/*`, `/my-statements`.
+**Command palette:** `⌘K` / `Ctrl+K` — global via `Providers.tsx` (unchanged).
 
-**Data loading:** Page shell (header + widget grid) renders immediately once profile is ready. Each widget fetches its own endpoint **in parallel**; dimension-matched **skeleton loaders** display until data arrives. Fetches `/api/me/assignments` once for doctor/relationship flags and passes assignment bootstrap into `ImportantDatesCalendarWidget` (avoids a second assignments round-trip on standard dashboard).
+**Data loading (active workspace only):**
 
-**Refresh:** `AddLeadModal` `onCreated` soft-refetches only assigned clients + recent activity (lead create auto-assigns RELATIONSHIP; no deals/dates/returnables). Other widgets stay as loaded.
+| Surface | Fetches |
+|---------|---------|
+| Shell / Home | Identity (`useUserProfile`) + `/api/me/assignments` (nav flags, Home count, calendar bootstrap when calendar opens) |
+| Active `?view=` module | That module’s existing widget API only |
+| Inactive modules | Not mounted → no fetch |
 
-**Modals:** `AddLeadModal` — full lead form (name, company, email, phone, lead source, role in company, employee count, expectations) → `POST /api/clients`
+See [Measuring workspace shell loads](#measuring-workspace-shell-loads-after-sidebar-redesign). APIs and response shapes unchanged.
 
-**Widgets (responsive grid: `grid-cols-1 md:grid-cols-2`):**
+**Refresh:** `AddLeadModal` `onCreated` soft-refetches assignments and bumps Clients/Activity keys when those modules remount later.
 
-| Widget | Component | Skeleton | Visibility | Data source |
-|--------|-----------|----------|------------|-------------|
-| My Assigned Clients | `MyClientsWidget` | `MyClientsWidgetSkeleton` | Always | `GET /api/dashboard/widgets/assigned-clients` |
-| My Open Tasks | `MyTasksWidget` | `MyTasksWidgetSkeleton` | Always | `GET /api/dashboard/widgets/open-tasks` |
-| Recent Activity | `CollapsibleActivityWidget` | `CollapsibleActivityWidgetSkeleton` | Always | `GET /api/dashboard/widgets/activity-feed` |
-| My Secured Commission | `MySecuredCommissionWidget` | `MySecuredCommissionWidgetSkeleton` | If `hasAnyAssignment` from performance-metrics | `GET /api/dashboard/widgets/performance-metrics` |
-| My Deal Participation | `MyDealParticipationWidget` | `MyDealParticipationWidgetSkeleton` | If user has deal participant rows | `GET /api/dashboard/widgets/deal-participation` |
-| Important Dates Calendar | `ImportantDatesCalendarWidget` | `ImportantDatesCalendarWidgetSkeleton` | Always (Schedule section) | `GET /api/dashboard/widgets/important-dates-calendar` |
-| Current Month Commission Returnable | `MyCommissionReturnableWidget` | *(inline pulse)* | If `hasDoctorRole` from `/api/me/assignments` | `GET /api/me/commission-returnable?status=UNPAID&period=YYYY-MM` |
+**Modals:** `AddLeadModal` — full lead form → `POST /api/clients`
 
-**Skeleton design:** Each skeleton mirrors its widget's exact section padding, heading, and content structure to prevent layout shift (CLS).
+**Workspace modules (`?view=`):**
+
+| View | Component | Reuses (existing API) |
+|------|-----------|------------------------|
+| `home` | `DashboardHomeView` | `/api/me/assignments` (shell) |
+| `clients` | `DashboardClientsView` → `MyClientsWidget` | `GET /api/dashboard/widgets/assigned-clients` |
+| `tasks` | `DashboardTasksView` → `MyTasksWidget` | `GET /api/dashboard/widgets/open-tasks` |
+| `activity` | `DashboardActivityView` → `CollapsibleActivityWidget` | `GET /api/dashboard/widgets/activity-feed` |
+| `calendar` | `DashboardCalendarView` → `ImportantDatesCalendarWidget` | `GET /api/dashboard/widgets/important-dates-calendar` |
+| `deals` | `DashboardDealsView` → `MyDealParticipationWidget` | `GET /api/dashboard/widgets/deal-participation` |
+| `commission` | `DashboardCommissionView` → `MySecuredCommissionWidget` | `GET /api/dashboard/widgets/performance-metrics` |
+| `returnables` | `DashboardReturnablesView` → `MyCommissionReturnableWidget` (doctor) | `GET /api/me/commission-returnable` (+ link to `/my-statements`) |
 
 **Unauthenticated state:** `AuthRequiredMessage` with “Back to Sign In” (signs out stale session, then → `/login`)
 
@@ -2208,31 +2295,43 @@ See `docs/deal-participant-migration.md` for full migration runbook.
 - **Edit** toggles inline name input with **Save** / **Cancel**
 - **Display density** preference (Comfortable / Compact) — stored in `localStorage` (`crm-display-density`); default Compact for super admin, Comfortable for standard users
 - Loading, saving, and error states
-- Header: logo, **Account Settings** (via dashboard headers), Back to Dashboard, Sign Out
+- Logo / back → `/dashboard` (standard) or `/admin` (super admin); Sign Out
 
 ---
 
 ### Page: Super Admin Dashboard (`/admin`)
 
-**File:** `src/components/admin/SuperAdminDashboardPage.tsx`
+**File:** `src/components/admin/SuperAdminDashboardPage.tsx`  
+**Shell:** `WorkspaceShell` + `buildWorkspaceNavConfig({ shell: 'admin' })`  
+**Home:** `AdminHomeView` · **Modules:** `adminDashboardViews.tsx` (lazy via `next/dynamic`)
 
-**Header:** Logo, title, Add Lead/Client, **Lead Command Center**, User Dashboard, **Reconciliation**, **User Management**, **Account Settings**, Sign Out
+**Layout:** Sidebar — Workspace (Home, Lead Command Center → `/admin/leads`, Pipeline, Calendar, Activity, Analytics, Revenue, Leaderboards); Tools (User Management, Commission / Returnables); Account (User Dashboard, Settings). Top bar: title, LCC shortcut, Add Lead / Client, Settings, Sign Out.
 
-Responsive header — stacks on mobile (`flex-col`), horizontal from `sm` up; action buttons wrap.
+**Data loading (active workspace only):**
 
-**Sections (vertical stack, `flex flex-col gap-6`):**
+| Surface | Fetches |
+|---------|---------|
+| Home | `/api/admin/dashboard-kpis` snapshot only |
+| Active `?view=` | That module’s existing admin/widget API(s) |
+| Inactive modules | Not mounted → no fetch |
 
-| Section | Component | API | Cache |
-|---------|-----------|-----|-------|
-| KPI bar + Company earnings | `KpiBar` + `CompanyEarningsWidget` | `/api/admin/dashboard-kpis` | — |
-| Conversion funnel | `ConversionFunnelChart` | `/api/admin/funnel-data` | 10 min |
-| Revenue tracker | `RevenueTrackerChart` | `/api/admin/revenue-tracker` (`groupBy` param) | 10 min |
-| Leaderboards | `Leaderboards` | `/api/admin/leaderboards` | 10 min |
-| Recent Activity (all clients) | `CollapsibleActivityWidget` | `/api/dashboard/superadmin` | — |
-| Important Dates Calendar | `ImportantDatesCalendarWidget` | `/api/dashboard/widgets/important-dates-calendar` | — |
-| Master pipeline | `MasterPipelineView` | `/api/admin/pipeline` — Kanban on `lg+`, grouped list on mobile; status/assignee filters sent as query params; column badges use `meta.perStatusCounts`; truncated columns show “Showing N of M” | — |
+**Preserved routes (same shell chrome, own pages):** `/admin/leads`, `/admin/users`, `/admin/reconciliation` — APIs, permissions, and behaviors unchanged.
 
-**Modals:** `AddClientModal` — same fields as `AddLeadModal` plus pipeline stage selector; scroll-safe overlay (`max-h-[90vh]`)
+**Workspace modules (`?view=`):**
+
+| View | Component | Reuses (existing API) |
+|------|-----------|------------------------|
+| `home` | `AdminHomeView` | `/api/admin/dashboard-kpis` |
+| `pipeline` | `AdminPipelineView` → `MasterPipelineView` | `/api/admin/pipeline` (Kanban `lg+`, grouped list mobile) |
+| `calendar` | `AdminCalendarView` → `ImportantDatesCalendarWidget` | `/api/dashboard/widgets/important-dates-calendar` |
+| `activity` | `AdminActivityView` → `CollapsibleActivityWidget` | `/api/dashboard/superadmin` |
+| `analytics` | `AdminAnalyticsView` → `KpiBar`, earnings, `ConversionFunnelChart` | `/api/admin/dashboard-kpis` + `/api/admin/funnel-data` |
+| `revenue` | `AdminRevenueView` → `RevenueTrackerChart` | `/api/admin/revenue-tracker` |
+| `leaderboards` | `AdminLeaderboardsView` → `Leaderboards` | `/api/admin/leaderboards` |
+
+**Modals:** `AddClientModal` — same fields as `AddLeadModal` plus pipeline stage; scroll-safe overlay (`max-h-[90vh]`)
+
+**Legacy:** `/admin#master-pipeline` → `/admin?view=pipeline`
 
 ---
 
@@ -2241,6 +2340,8 @@ Responsive header — stacks on mobile (`flex-col`), horizontal from `sm` up; ac
 **File:** `src/app/admin/leads/page.tsx` → `src/components/admin/LeadCommandCenterPage.tsx`
 
 **Auth:** Super admin only (non-admins redirected to `/dashboard`).
+
+**Shell:** Same admin `WorkspaceShell` (`contentLayout="full"`); sidebar highlights Lead Command Center. Inbox / Duplicates / filters / preview / bulk / merge **behavior and APIs unchanged**.
 
 **Tabs:**
 
@@ -2280,8 +2381,6 @@ Responsive header — stacks on mobile (`flex-col`), horizontal from `sm` up; ac
 
 `manual-multi` is a 3-step wizard: (1) pick surviving record, (2) set final field values per field (existing record value, blank, or custom), (3) review. **`name` is required** in step 2.
 
-**Navigation:** Link back to Admin Dashboard in header.
-
 ---
 
 ### Page: User Management (`/admin/users`)
@@ -2289,6 +2388,8 @@ Responsive header — stacks on mobile (`flex-col`), horizontal from `sm` up; ac
 **File:** `src/app/admin/users/page.tsx` → `src/components/admin/UserManagementPage.tsx`
 
 **Auth:** Super admin only (non-admins redirected to `/dashboard`).
+
+**Shell:** Same admin `WorkspaceShell` (`contentLayout="full"`); sidebar highlights User Management. List / deactivate / delete / self-block **unchanged**.
 
 **Data:** `GET /api/admin/users`
 
@@ -2300,8 +2401,6 @@ Responsive header — stacks on mobile (`flex-col`), horizontal from `sm` up; ac
   - **Deactivate** — type user's display name to confirm → `POST /api/users/[id]/deactivate`
   - **Permanently Delete** — severe warning, name confirmation + admin password → `DELETE /api/users/[id]`
 
-**Navigation:** Link back to Admin Dashboard in header.
-
 ---
 
 ### Page: Global Reconciliation Dashboard (`/admin/reconciliation`)
@@ -2310,12 +2409,14 @@ Responsive header — stacks on mobile (`flex-col`), horizontal from `sm` up; ac
 
 **Auth:** Super admin only (non-admins redirected to `/dashboard`).
 
+**Shell:** Same admin `WorkspaceShell` (`contentLayout="full"`); sidebar highlights Commission / Returnables. Table / filters / `/api/admin/all-commission-returnable` **unchanged** (no formula changes).
+
 **Data:** `GET /api/admin/all-commission-returnable`
 
 **Features:**
 - TanStack Table with columns: User Name, Period, Client Name, Deal Value, Returnable Amount, Status
 - Filters: User Name (text search), Status (UNPAID/PAID), Period (dropdown)
-- Link back to `/admin`
+- Full-width table in workspace main; logo/back via shell → `/admin`
 
 ---
 
@@ -2331,7 +2432,7 @@ Responsive header — stacks on mobile (`flex-col`), horizontal from `sm` up; ac
 - Grouped by period with monthly headings (e.g. "June 2026")
 - Table per month: Client Name, Deal Value, Returnable Amount, Status
 - **Mark as Paid** checkbox on UNPAID rows → `PATCH /api/commission-returnable/[id]`
-- Link back to `/dashboard`
+- Logo / back → `/dashboard` (standard) or `/admin` (super admin)
 
 ---
 
@@ -2350,7 +2451,7 @@ Unauthenticated users are redirected to `/login`. Missing client → `notFound()
 
 **Refresh coordination:** `Client360RefreshProvider` + `refreshClient360Slices`. Details save → `['core','importantDates']` (+ `hierarchy` if company/employeeCount changed). Important Dates panel CRUD → `['importantDates']` only. **Stage** → core DTO / `['core']` (no RSC). **Team assign/remove** → `['core','team']` (no RSC). Merge / archive / delete still `['all']` (full `router.refresh()`).
 
-**Header:** Logo, back to pipeline link, **More actions** menu (super admin: **Merge clients**, **Archive client**), client name, `LeadSourceBadges`, pipeline stage control:
+**Header:** Logo → role home (`/dashboard` or `/admin`); **Back to list** → `/dashboard?view=clients` (standard) or `/admin?view=pipeline` (super admin); **More actions** menu (super admin: **Merge clients**, **Archive client**); client name, `LeadSourceBadges`, pipeline stage control:
 
 | Role | UI control |
 |------|------------|
@@ -2365,7 +2466,7 @@ Unauthenticated users are redirected to `/login`. Missing client → `notFound()
 
 **Archive / delete modal:** `ClientDeletionModal` — super admin only. Two tabs:
 - **Archive** — type client name → `POST /api/clients/[id]/archive` (sets `ARCHIVED`, refreshes page)
-- **Permanently Delete** — warning, client name + admin password → `DELETE /api/clients/[id]` (redirects to `/admin#master-pipeline`)
+- **Permanently Delete** — warning, client name + admin password → `DELETE /api/clients/[id]` (redirects to `/admin?view=pipeline`)
 
 **Refresh coordination:** see slice refresh above (`refreshClient360Slices`).
 
@@ -2408,6 +2509,12 @@ Deep links: `#strategy-planner` opens Strategy Planner (when allowed); `#activit
 | `SignUpPage` | `src/components/auth/SignUpPage.tsx` | Registration form |
 | `Providers` | `src/components/Providers.tsx` | App-level providers wrapper (legacy NextAuth `SessionProvider`; mounts `CommandPalette` with `ssr: false`) |
 | `CommandPalette` | `src/components/CommandPalette.tsx` | Global `⌘K`/`Ctrl+K` client search → `/clients/[id]` |
+| `WorkspaceShell` | `src/components/layout/WorkspaceShell.tsx` | Sidebar + top bar + main; desktop collapse / mobile off-canvas |
+| `WorkspaceSidebar` | `src/components/layout/WorkspaceSidebar.tsx` | Role-filtered nav; active `?view=` / route highlight |
+| `WorkspaceTopBar` | `src/components/layout/WorkspaceTopBar.tsx` | Menu / collapse, title, actions |
+| `WorkspaceShellContext` | `src/components/layout/WorkspaceShellContext.tsx` | Collapse + mobile drawer state |
+| `workspaceNavConfig` | `src/components/layout/workspaceNavConfig.ts` | Standard/admin nav builders + `?view=` helpers |
+| `workspaceNavUtils` | `src/components/layout/workspaceNavUtils.ts` | Active match, role filter |
 | `formatMoney` helpers | `lib/formatMoney.ts` | Shared money display: `formatMoney` / `displayMoney` / `formatMoneyRequired` — **no currency symbol or code** (no `$` / `US$` / `USD`). Used by dashboards, admin KPIs/charts, Deal Info, Strategy Planner, Client Strategy Overview, and PDF report text |
 
 **Money display convention:** Persist amounts as numbers in the DB (unchanged). UI and exported report copy format with locale grouping/decimals only (e.g. `12,000.00`). Do not use `Intl.NumberFormat` `style: 'currency'` for product surfaces.
@@ -2419,6 +2526,8 @@ Deep links: `#strategy-planner` opens Strategy Planner (when allowed); `#activit
 | Component | Path |
 |-----------|------|
 | `StandardUserDashboardPage` | `src/components/dashboard/StandardUserDashboardPage.tsx` |
+| `DashboardHomeView` | `src/components/dashboard/DashboardHomeView.tsx` |
+| `standardDashboardViews` | `src/components/dashboard/standardDashboardViews.tsx` — lazy module mounts |
 | `MyClientsWidget` | `src/components/dashboard/MyClientsWidget.tsx` |
 | `MyTasksWidget` | `src/components/dashboard/MyTasksWidget.tsx` |
 | `CollapsibleActivityWidget` | `src/components/dashboard/CollapsibleActivityWidget.tsx` |
@@ -2444,6 +2553,8 @@ Deep links: `#strategy-planner` opens Strategy Planner (when allowed); `#activit
 | Component | Path |
 |-----------|------|
 | `SuperAdminDashboardPage` | `src/components/admin/SuperAdminDashboardPage.tsx` |
+| `AdminHomeView` | `src/components/admin/AdminHomeView.tsx` |
+| `adminDashboardViews` | `src/components/admin/adminDashboardViews.tsx` — lazy module mounts |
 | `KpiBar` | `src/components/admin/KpiBar.tsx` |
 | `CompanyEarningsWidget` | `src/components/admin/CompanyEarningsWidget.tsx` |
 | `ReconciliationPage` | `src/components/admin/ReconciliationPage.tsx` |
@@ -2592,17 +2703,17 @@ Mounted via `src/components/Providers.tsx` (wraps app with `DisplayDensityProvid
 ### Standard user — edit display name
 
 ```
-/dashboard → Account Settings (header link)
+/dashboard → Settings (top bar or sidebar)
 /dashboard/settings → view name + email → Edit → Save → PATCH /api/user/profile { name }
 ```
 
 ### Standard user daily workflow
 
 ```
-/dashboard → view assigned clients, tasks, activity
-          → My Secured Commission (if assigned to any client)
-          → Current Month Commission Returnable (if DOCTOR role)
-          → Add Lead → POST /api/clients (auto-assigned RELATIONSHIP)
+/dashboard → Home (light; /api/me/assignments) → sidebar opens one module at a time
+          → ?view=clients|tasks|activity|calendar|deals|commission
+          → ?view=returnables (if DOCTOR) → optional /my-statements
+          → Add Lead (top bar / Home) → POST /api/clients (auto-assigned RELATIONSHIP)
           → click client → /clients/[id]
           → add interaction / update strategy / manage deals / complete tasks
           → Edit Client Details (if RELATIONSHIP) → PUT /api/clients/[id]/details
@@ -2613,7 +2724,7 @@ Mounted via `src/components/Providers.tsx` (wraps app with `DisplayDensityProvid
 ### Doctor — commission returnables
 
 ```
-/dashboard → Current Month Commission Returnable widget shows unpaid total
+/dashboard?view=returnables → Current Month Commission Returnable widget
           → Returnable Statements → /my-statements
           → review monthly liabilities grouped by period
           → check "Mark as Paid" → PATCH /api/commission-returnable/[id]
@@ -2661,15 +2772,16 @@ Mounted via `src/components/Providers.tsx` (wraps app with `DisplayDensityProvid
 ### Super admin workflow
 
 ```
-/admin → review KPIs, funnel, revenue, leaderboards
-      → scan system-wide activity feed
-      → master pipeline → filter by status/user → open Client 360
+/admin → Home (KPI snapshot only) → open modules via sidebar / ?view=
+      → ?view=analytics|revenue|leaderboards|activity|calendar as needed
+      → ?view=pipeline → filter by status/user → open Client 360
       → change pipeline stage, edit details, manage team assignments
       → archive or permanently delete client (Client 360 → More actions → Archive client)
-/admin/leads → Lead Command Center inbox (compact rows, preview drawer, bulk actions)
+/admin/leads → Lead Command Center (admin shell) inbox / preview / bulk / merge
             → Inbox: select 2–10 leads → Merge selected (manual-multi)
             → Duplicates tab → pairwise merge per group (MergeClientsModal)
-/admin/users → deactivate or permanently delete user accounts
+/admin/users → deactivate or permanently delete user accounts (admin shell)
+/admin/reconciliation → global returnables audit (admin shell)
 /clients/[id] → More actions → Merge clients (multi-picker) or Archive client
 ```
 
@@ -2699,7 +2811,7 @@ Multi (LCC bulk or Client 360):
                 Archive tab: confirm client name → POST /api/clients/[id]/archive
                 Delete tab: confirm name + admin password → DELETE /api/clients/[id]
              → archive: page refreshes in place
-             → delete: redirect to /admin#master-pipeline
+             → delete: redirect to /admin?view=pipeline
 ```
 
 ### Super admin — user lifecycle
@@ -2828,6 +2940,8 @@ npx tsx scripts/profile-api-routes.ts
 # Optional sample ids: PROFILE_LEAD_ID, PROFILE_CLIENT_ID, PROFILE_STRATEGY_PLAN_ID, PROFILE_SEARCH_Q
 # Hot paths: LCC (+ filters/preview/duplicates), pipeline, search, strategy plan,
 # open-tasks, deal-participation, important-dates-calendar, all-commission-returnable
+npm run probe:dashboard-shell   # Home fetch contract (+ optional Home API RTTs; no invented page-paint numbers)
+npm run test:workspace-nav      # ?view= nav helpers (also covered by test:unit)
 npx tsx scripts/recalculate-commission-returnables.ts
 npm run jobs:process
 npm run jobs:process:once
@@ -2859,11 +2973,12 @@ Tailwind breakpoints used throughout the app (`sm` 640px, `md` 768px, `lg` 1024p
 | Area | Mobile behavior | Desktop behavior |
 |------|-----------------|------------------|
 | **Root layout** | Viewport meta tag in `<head>` | Same |
-| **Standard dashboard** | Single-column widget grid; header stacks vertically; per-widget skeleton loaders until data streams in | `md:grid-cols-2`; header horizontal |
-| **Super admin dashboard** | Sections stack vertically; charts single column | Charts `lg:grid-cols-2`; header horizontal |
-| **Master pipeline** | Grouped list by status (`block lg:hidden`) | Horizontal Kanban columns (`hidden lg:block`) |
+| **Workspace shell** | Sidebar **off-canvas** (hidden by default); hamburger opens drawer; nav selection closes drawer; workspace **full width** | In-flow sidebar; **collapsible** (`crm-sidebar-collapsed`); top bar + main |
+| **Standard dashboard** | Workspace-first: one active module; Home / modules fill width | Same shell; module content uses available width |
+| **Super admin dashboard** | Same off-canvas shell; pipeline / charts / tables full width when open | Collapsible sidebar; pipeline Kanban / charts use wide/`full` content layouts |
+| **Master pipeline** | Grouped list by status (`block lg:hidden`) | Horizontal Kanban columns (`hidden lg:block`; intentional board scroll only) |
 | **Client 360 layout** | Workspace above widgets (`flex-col`) | Side-by-side `md:flex-row` (2:1 ratio) |
-| **Workspace tabs** | Headless UI dropdown (`block md:hidden`) | Horizontal tab bar (`hidden md:flex`) |
+| **Workspace tabs** (Client 360) | Headless UI dropdown (`block md:hidden`) | Horizontal tab bar (`hidden md:flex`) |
 | **Modals** | Full width within `p-4` padding; stacked action buttons | `max-w-md` / `max-w-lg`; buttons row-aligned |
 
 **Modal pattern:**
@@ -2930,33 +3045,26 @@ Related: `lib/pipelinePermissions.ts` exports `getNextPipelineStage`, `canUserAd
 ## Appendix: UI Wireframe Overview
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│  [Logo]  Welcome back, {name}   [Add Lead] [Settings] [Out] │  Standard Dashboard
-├──────────────────────────┬──────────────────────────────────┤
-│  My Assigned Clients     │  My Open Tasks                     │  skeletons → data
-├──────────────────────────┼──────────────────────────────────┤
-│  Recent Activity         │  My Secured Commission (*)       │
-│  ▼ Client A  [!]         │  My Deal Participation           │
-│  ▼ Client B              │  Current Month Returnable (**)   │
-└──────────────────────────┴──────────────────────────────────┘
-  (*)  if any assignment   (**) if DOCTOR role
+┌──────────┬──────────────────────────────────────────────────┐
+│ Sidebar  │  Top bar: title · [Add Lead] [Settings] [Out]    │  Standard /dashboard
+│ (coll.)  ├──────────────────────────────────────────────────┤
+│ Home     │  Active workspace module only (?view=…)           │
+│ Clients  │  Home: light summary · no all-widget fan-out      │
+│ Tasks    │  Mobile: sidebar off-canvas; main full width      │
+│ …        │                                                    │
+└──────────┴──────────────────────────────────────────────────┘
+
+┌──────────┬──────────────────────────────────────────────────┐
+│ Sidebar  │  Top bar: title · [LCC] [+Add] [Settings] [Out] │  Super admin /admin
+│ Home     ├──────────────────────────────────────────────────┤
+│ LCC →    │  Home: KPI snapshot only                          │
+│ Pipeline │  Modules: pipeline · calendar · activity · …      │
+│ Analytics│  Tools routes: /admin/leads|users|reconciliation  │
+│ …        │                                                    │
+└──────────┴──────────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────────────────────┐
-│  [Logo]  Super Admin Dashboard  [+Add] [Users] [Settings]   │
-├─────────────────────────────────────────────────────────────┤
-│  KPI Bar + Company Overhead Earnings                        │
-├──────────────────────────┬──────────────────────────────────┤
-│  Conversion Funnel         │  Revenue Tracker                 │
-├──────────────────────────┴──────────────────────────────────┤
-│  Leaderboards                                               │
-├─────────────────────────────────────────────────────────────┤
-│  Recent Activity (All Clients) — CollapsibleActivityWidget  │
-├─────────────────────────────────────────────────────────────┤
-│  Master Pipeline (desktop: kanban / mobile: grouped list)   │
-└─────────────────────────────────────────────────────────────┘
-
-┌─────────────────────────────────────────────────────────────┐
-│  Lead Command Center    [Compact│Comfortable]  [Inbox][Dup] │
+│  Lead Command Center (admin shell)  [Inbox][Dup]            │
 ├─────────────────────────────────────────────────────────────┤
 │  [search] [quick chips]              [Filters ▼ collapsed]    │
 ├─────────────────────────────────────────────────────────────┤

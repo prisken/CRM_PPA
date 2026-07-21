@@ -25,6 +25,10 @@ import { useUserProfile } from '@/hooks/useUserProfile';
 import { authenticatedFetch } from '@/lib/authenticatedFetch';
 import { getStatusBadgeStyles, CLIENT_STAGES } from '@/lib/clientStages';
 import { calculateUserClientCommissionShare } from '@/lib/commissionCalculations';
+import {
+  adminDashboardHref,
+  standardDashboardHref,
+} from '@/components/layout/workspaceNavConfig';
 import type {
   Client360CompanyHierarchyData,
   Client360CoreData,
@@ -265,7 +269,10 @@ function Client360PageClientInner({
 
   const handleOpenDeletionModal = useCallback(() => setIsDeletionModalOpen(true), []);
   const handleCloseDeletionModal = useCallback(() => setIsDeletionModalOpen(false), []);
-  const handleDeleted = useCallback(() => router.push('/admin#master-pipeline'), [router]);
+  const handleDeleted = useCallback(
+    () => router.push(adminDashboardHref('pipeline')),
+    [router]
+  );
   const handleOpenMergePicker = useCallback(() => {
     setIsMergePickerOpen(true);
   }, []);
@@ -312,6 +319,10 @@ function Client360PageClientInner({
   }, [profile, client]);
 
   const isSuperAdmin = profile?.role === 'SUPER_ADMIN';
+  const homeHref = isSuperAdmin ? '/admin' : '/dashboard';
+  const backToListHref = isSuperAdmin
+    ? adminDashboardHref('pipeline')
+    : standardDashboardHref('clients');
   const isStandardUser = profile?.role === 'STANDARD_USER';
   const userAssignmentRoles = useMemo(() => {
     if (!profile || !client) {
@@ -383,12 +394,12 @@ function Client360PageClientInner({
       <header className="border-b border-gray-200 bg-white">
         <div className="mx-auto max-w-7xl px-4 py-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between gap-4">
-            <Link href="/" aria-label="Go to homepage">
+            <Link href={homeHref} aria-label="Go to homepage">
               <Logo className="h-8 w-auto" />
             </Link>
             <div className="flex flex-wrap items-center gap-2">
               <Link
-                href="/admin#master-pipeline"
+                href={backToListHref}
                 className="text-sm text-blue-600 hover:underline"
               >
                 ← Back to list

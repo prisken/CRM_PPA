@@ -23,6 +23,9 @@
  * Phase 2L/2M: probing `GET …/source-records` here is a **route** microbench only.
  * Client 360 first paint must not call source-records until the aside card expands.
  *
+ * Dashboard Home fetch *contract* (Home must not call all widgets / pipeline):
+ *   `npx tsx scripts/probe-dashboard-layout-shell.ts` (or `npm run probe:dashboard-shell`).
+ *
  * ## Server-side perf logs
  *
  *   PERF_LOGGING_ENABLED=true npm run dev
@@ -67,6 +70,11 @@ type TimedResult = {
 
 /** Static routes that do not need discovered ids. */
 const STATIC_ROUTES: TimedRoute[] = [
+  {
+    label: 'Standard Home shell: assignments',
+    path: '/api/me/assignments',
+    role: UserRole.STANDARD_USER,
+  },
   {
     label: 'Standard dashboard (legacy monolith)',
     path: '/api/dashboard/standard',

@@ -4,6 +4,7 @@ import {
   buildClient360CoreResponse,
   client360CoreQuerySelect,
 } from '@/lib/client360';
+import { permanentlyDeleteClientRecords } from '@/lib/clientDeletion';
 import { replaceClientContacts } from '@/lib/clientContacts';
 import { prisma } from '@/lib/prisma';
 import {
@@ -246,20 +247,7 @@ export async function DELETE(
     );
   }
 
-  const dealIds = (
-    await prisma.deal.findMany({
-      where: { clientId: id },
-      select: { id: true },
-    })
-  ).map((deal) => deal.id);
-
-  if (dealIds.length > 0) {
-    await prisma.commissionReturnable.deleteMany({
-      where: { dealId: { in: dealIds } },
-    });
-  }
-
-  await prisma.client.delete({ where: { id } });
+  await permanentlyDeleteClientRecords(prisma, id);
 
   return NextResponse.json({ success: true, client_id: id });
 }

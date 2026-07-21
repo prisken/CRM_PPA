@@ -3,10 +3,11 @@
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { memo, useCallback, useEffect, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import AuthRequiredMessage from '@/components/auth/AuthRequiredMessage';
-import Logo from '@/components/Logo';
 import UserActionsMenu from '@/components/admin/UserActionsMenu';
+import WorkspaceShell from '@/components/layout/WorkspaceShell';
+import { buildWorkspaceNavConfig } from '@/components/layout/workspaceNavConfig';
 import { useUserProfile } from '@/hooks/useUserProfile';
 import { authenticatedFetch } from '@/lib/authenticatedFetch';
 import { supabase } from '@/lib/supabaseClient';
@@ -148,6 +149,15 @@ export default function UserManagementPage() {
 
   const handleCloseModal = useCallback(() => setModalState(null), []);
 
+  const nav = useMemo(
+    () =>
+      buildWorkspaceNavConfig({
+        shell: 'admin',
+        role: 'SUPER_ADMIN',
+      }),
+    []
+  );
+
   async function handleSignOut() {
     await supabase.auth.signOut();
     localStorage.removeItem('token');
@@ -156,8 +166,8 @@ export default function UserManagementPage() {
 
   if (profileLoading || (usersLoading && profile?.role === 'SUPER_ADMIN')) {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-gray-100">
-        <p className="text-gray-600">Loading user management...</p>
+      <main className="flex min-h-dvh items-center justify-center bg-gray-100">
+        <p className="text-sm text-gray-600">Loading user management…</p>
       </main>
     );
   }
@@ -174,94 +184,101 @@ export default function UserManagementPage() {
     return null;
   }
 
+  const displayName = profile.name ?? profile.email;
+
+  const topBarActions = (
+    <>
+      <Link
+        href="/admin"
+        className="whitespace-nowrap rounded-lg border border-gray-300 px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 sm:px-3 sm:text-sm"
+      >
+        Admin Home
+      </Link>
+      <Link
+        href="/dashboard/settings"
+        className="whitespace-nowrap rounded-lg border border-gray-300 px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 sm:px-3 sm:text-sm"
+      >
+        Settings
+      </Link>
+      <button
+        type="button"
+        onClick={handleSignOut}
+        className="whitespace-nowrap rounded-lg bg-gray-900 px-2.5 py-1.5 text-xs font-medium text-white hover:bg-gray-800 sm:px-3 sm:text-sm"
+      >
+        Sign Out
+      </button>
+    </>
+  );
+
   return (
-    <main className="min-h-screen bg-gray-100">
-      <header className="border-b border-gray-200 bg-white">
-        <div className="mx-auto flex max-w-7xl flex-col gap-4 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6 lg:px-8">
-          <div className="flex items-center gap-4">
-            <Link href="/" aria-label="Go to homepage">
-              <Logo className="h-8 w-auto" />
-            </Link>
-            <div>
-              <h1 className="text-xl font-bold text-gray-900 sm:text-2xl">
-                User Management
-              </h1>
-              <p className="text-sm text-gray-500">
-                Deactivate or permanently delete user accounts
-              </p>
-            </div>
-          </div>
-          <div className="flex flex-wrap gap-3">
-            <Link
-              href="/admin"
-              className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-            >
-              Admin Dashboard
-            </Link>
-            <button
-              type="button"
-              onClick={handleSignOut}
-              className="rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800"
-            >
-              Sign Out
-            </button>
-          </div>
+    <>
+      <WorkspaceShell
+        nav={nav}
+        userRole={profile.role}
+        title="User Management"
+        subtitle={displayName}
+        brandHref="/admin"
+        topBarActions={topBarActions}
+        contentLayout="full"
+      >
+        <div className="min-w-0">
+          <p className="mb-4 text-sm text-gray-600">
+            Deactivate or permanently delete user accounts
+          </p>
+
+          {usersError ? (
+            <section className="rounded-xl border border-red-200 bg-red-50 p-6 text-sm text-red-700">
+              {usersError}
+            </section>
+          ) : (
+            <section className="min-w-0 overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+              <div className="min-w-0 overflow-x-auto">
+                <table className="min-w-full w-full divide-y divide-gray-200 text-sm">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-4 py-3 text-left font-semibold text-gray-700">
+                        Name
+                      </th>
+                      <th className="px-4 py-3 text-left font-semibold text-gray-700">
+                        Email
+                      </th>
+                      <th className="px-4 py-3 text-left font-semibold text-gray-700">
+                        Role
+                      </th>
+                      <th className="px-4 py-3 text-left font-semibold text-gray-700">
+                        Status
+                      </th>
+                      <th className="px-4 py-3 text-left font-semibold text-gray-700">
+                        Joined
+                      </th>
+                      <th className="px-4 py-3 text-right font-semibold text-gray-700">
+                        Actions
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {users.map((user) => (
+                      <UserTableRow
+                        key={user.user_id}
+                        user={user}
+                        isCurrentUser={user.user_id === profile.id}
+                        onDeactivate={openDeactivateModal}
+                        onDelete={openDeleteModal}
+                      />
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {users.length === 0 && (
+                <p className="px-4 py-8 text-center text-sm text-gray-500">
+                  No users found.
+                </p>
+              )}
+            </section>
+          )}
         </div>
-      </header>
-
-      <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-        {usersError ? (
-          <section className="rounded-xl border border-red-200 bg-red-50 p-6 text-sm text-red-700">
-            {usersError}
-          </section>
-        ) : (
-          <section className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200 text-sm">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-4 py-3 text-left font-semibold text-gray-700">
-                      Name
-                    </th>
-                    <th className="px-4 py-3 text-left font-semibold text-gray-700">
-                      Email
-                    </th>
-                    <th className="px-4 py-3 text-left font-semibold text-gray-700">
-                      Role
-                    </th>
-                    <th className="px-4 py-3 text-left font-semibold text-gray-700">
-                      Status
-                    </th>
-                    <th className="px-4 py-3 text-left font-semibold text-gray-700">
-                      Joined
-                    </th>
-                    <th className="px-4 py-3 text-right font-semibold text-gray-700">
-                      Actions
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {users.map((user) => (
-                    <UserTableRow
-                      key={user.user_id}
-                      user={user}
-                      isCurrentUser={user.user_id === profile.id}
-                      onDeactivate={openDeactivateModal}
-                      onDelete={openDeleteModal}
-                    />
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-            {users.length === 0 && (
-              <p className="px-4 py-8 text-center text-sm text-gray-500">
-                No users found.
-              </p>
-            )}
-          </section>
-        )}
-      </div>
+      </WorkspaceShell>
 
       {modalState && (
         <UserManagementModal
@@ -274,6 +291,6 @@ export default function UserManagementPage() {
           onDeleted={loadUsers}
         />
       )}
-    </main>
+    </>
   );
 }

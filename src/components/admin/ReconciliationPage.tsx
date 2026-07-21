@@ -10,10 +10,12 @@ import {
   useReactTable,
   type Row,
 } from '@tanstack/react-table';
-import Logo from '@/components/Logo';
+import WorkspaceShell from '@/components/layout/WorkspaceShell';
+import { buildWorkspaceNavConfig } from '@/components/layout/workspaceNavConfig';
 import { useUserProfile } from '@/hooks/useUserProfile';
 import { formatCommissionReturnablePeriodLabel } from '@/lib/commissionReturnables';
 import { formatMoneyRequired } from '@/lib/formatMoney';
+import { supabase } from '@/lib/supabaseClient';
 
 type CommissionReturnableRecord = {
   id: string;
@@ -236,10 +238,25 @@ export default function ReconciliationPage() {
     getCoreRowModel: getCoreRowModel(),
   });
 
+  const nav = useMemo(
+    () =>
+      buildWorkspaceNavConfig({
+        shell: 'admin',
+        role: 'SUPER_ADMIN',
+      }),
+    []
+  );
+
+  async function handleSignOut() {
+    await supabase.auth.signOut();
+    localStorage.removeItem('token');
+    router.push('/login');
+  }
+
   if (profileLoading || loading) {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-gray-100">
-        <p className="text-gray-600">Loading reconciliation dashboard...</p>
+      <main className="flex min-h-dvh items-center justify-center bg-gray-100">
+        <p className="text-sm text-gray-600">Loading reconciliation dashboard…</p>
       </main>
     );
   }
@@ -248,42 +265,56 @@ export default function ReconciliationPage() {
     return null;
   }
 
-  return (
-    <main className="min-h-screen bg-gray-100">
-      <header className="border-b border-gray-200 bg-white">
-        <div className="mx-auto flex max-w-7xl flex-col gap-4 px-4 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-6 lg:px-8">
-          <div className="flex items-center gap-4">
-            <Link href="/" aria-label="Go to homepage">
-              <Logo className="h-8 w-auto" />
-            </Link>
-            <div>
-              <h1 className="text-xl font-bold text-gray-900 sm:text-2xl">
-                Global Reconciliation Dashboard
-              </h1>
-              <p className="mt-1 text-sm text-gray-500">
-                Audit commission returnables across all users
-              </p>
-            </div>
-          </div>
-          <Link
-            href="/admin"
-            className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-          >
-            Back to Admin Dashboard
-          </Link>
-        </div>
-      </header>
+  const displayName = profile.name ?? profile.email;
 
-      <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+  const topBarActions = (
+    <>
+      <Link
+        href="/admin"
+        className="whitespace-nowrap rounded-lg border border-gray-300 px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 sm:px-3 sm:text-sm"
+      >
+        Admin Home
+      </Link>
+      <Link
+        href="/dashboard/settings"
+        className="whitespace-nowrap rounded-lg border border-gray-300 px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 sm:px-3 sm:text-sm"
+      >
+        Settings
+      </Link>
+      <button
+        type="button"
+        onClick={handleSignOut}
+        className="whitespace-nowrap rounded-lg bg-gray-900 px-2.5 py-1.5 text-xs font-medium text-white hover:bg-gray-800 sm:px-3 sm:text-sm"
+      >
+        Sign Out
+      </button>
+    </>
+  );
+
+  return (
+    <WorkspaceShell
+      nav={nav}
+      userRole={profile.role}
+      title="Commission / Returnables"
+      subtitle={displayName}
+      brandHref="/admin"
+      topBarActions={topBarActions}
+      contentLayout="full"
+    >
+      <div className="min-w-0">
+        <p className="mb-4 text-sm text-gray-600">
+          Audit commission returnables across all users
+        </p>
+
         {error && (
-          <div className="mb-6 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+          <div className="mb-4 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
             {error}
           </div>
         )}
 
-        <section className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+        <section className="min-w-0 rounded-xl border border-gray-200 bg-white p-4 shadow-sm sm:p-6">
           <div className="mb-6 grid gap-4 md:grid-cols-3">
-            <div>
+            <div className="min-w-0">
               <label
                 htmlFor="user-filter"
                 className="mb-1 block text-sm font-medium text-gray-700"
@@ -299,7 +330,7 @@ export default function ReconciliationPage() {
                 className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
               />
             </div>
-            <div>
+            <div className="min-w-0">
               <label
                 htmlFor="status-filter"
                 className="mb-1 block text-sm font-medium text-gray-700"
@@ -317,7 +348,7 @@ export default function ReconciliationPage() {
                 <option value="PAID">PAID</option>
               </select>
             </div>
-            <div>
+            <div className="min-w-0">
               <label
                 htmlFor="period-filter"
                 className="mb-1 block text-sm font-medium text-gray-700"
@@ -340,8 +371,8 @@ export default function ReconciliationPage() {
             </div>
           </div>
 
-          <div className="overflow-x-auto">
-            <table className="min-w-full text-left text-sm">
+          <div className="min-w-0 overflow-x-auto">
+            <table className="min-w-full w-full text-left text-sm">
               <thead className="border-b border-gray-200 text-gray-500">
                 {table.getHeaderGroups().map((headerGroup) => (
                   <tr key={headerGroup.id}>
@@ -361,6 +392,6 @@ export default function ReconciliationPage() {
           </div>
         </section>
       </div>
-    </main>
+    </WorkspaceShell>
   );
 }

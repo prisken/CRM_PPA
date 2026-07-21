@@ -1,37 +1,33 @@
 'use client';
 
+/**
+ * Standard `/dashboard` shell + workspace module switcher.
+ *
+ * Loading boundaries:
+ * 1. Shell loads identity (`useUserProfile`) and navigation flags via
+ *    `/api/me/assignments` only — not full widgets.
+ * 2. Active workspace module owns its fetches (see standardDashboardViews).
+ * 3. Inactive modules must not mount: render with `activeView === … ? <Mod/> : null`
+ *    and load heavy modules via `next/dynamic` so Home does not pull widget code.
+ */
+
 import dynamic from 'next/dynamic';
-import { useRouter } from 'next/navigation';
-import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
-import CollapsibleActivityWidget from '@/components/dashboard/CollapsibleActivityWidget';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import AuthRequiredMessage from '@/components/auth/AuthRequiredMessage';
-import MyCommissionReturnableWidget from '@/components/dashboard/MyCommissionReturnableWidget';
-import MyDealParticipationWidget from '@/components/dashboard/MyDealParticipationWidget';
-import MyClientsWidget from '@/components/dashboard/MyClientsWidget';
-import MySecuredCommissionWidget from '@/components/dashboard/MySecuredCommissionWidget';
-import MyTasksWidget from '@/components/dashboard/MyTasksWidget';
-import ImportantDatesCalendarWidget from '@/components/dashboard/ImportantDatesCalendarWidget';
-import CollapsibleActivityWidgetSkeleton from '@/components/dashboard/skeletons/CollapsibleActivityWidgetSkeleton';
-import MyDealParticipationWidgetSkeleton from '@/components/dashboard/skeletons/MyDealParticipationWidgetSkeleton';
-import MyClientsWidgetSkeleton from '@/components/dashboard/skeletons/MyClientsWidgetSkeleton';
-import MySecuredCommissionWidgetSkeleton from '@/components/dashboard/skeletons/MySecuredCommissionWidgetSkeleton';
-import MyTasksWidgetSkeleton from '@/components/dashboard/skeletons/MyTasksWidgetSkeleton';
-import Logo from '@/components/Logo';
-import SectionCard from '@/components/ui/SectionCard';
+import DashboardHomeView from '@/components/dashboard/DashboardHomeView';
+import WorkspaceShell from '@/components/layout/WorkspaceShell';
+import {
+  buildWorkspaceNavConfig,
+  isStandardDashboardView,
+  parseStandardDashboardView,
+  standardDashboardHref,
+  type StandardDashboardView,
+} from '@/components/layout/workspaceNavConfig';
 import { useUserProfile } from '@/hooks/useUserProfile';
-import type {
-  AssignedClientRow,
-  DealParticipationRow,
-  GroupedClientActivity,
-  OpenTaskRow,
-} from '@/lib/dashboardTypes';
 import { authenticatedFetch } from '@/lib/authenticatedFetch';
 import { supabase } from '@/lib/supabaseClient';
-
-const AddLeadModal = dynamic(() => import('@/components/dashboard/AddLeadModal'), {
-  ssr: false,
-});
 
 type AssignmentSummary = {
   hasDoctorRole: boolean;
@@ -45,242 +41,123 @@ type AssignmentSummary = {
   }>;
 };
 
-type WidgetRequestState<T> = {
-  loading: boolean;
-  error: string | null;
-  data: T;
-};
+const AddLeadModal = dynamic(() => import('@/components/dashboard/AddLeadModal'), {
+  ssr: false,
+});
 
-const emptyDealParticipationState: WidgetRequestState<DealParticipationRow[]> = {
-  loading: true,
-  error: null,
-  data: [],
-};
+/** Lazy section modules — only downloaded/mounted when that view is active. */
+const DashboardClientsView = dynamic(
+  () =>
+    import('@/components/dashboard/standardDashboardViews').then(
+      (mod) => mod.DashboardClientsView
+    ),
+  { ssr: false, loading: () => <SectionLoading label="clients" /> }
+);
 
-const emptyClientsState: WidgetRequestState<{
-  assignedClients: AssignedClientRow[];
-  legacyDoctorAssignments: AssignedClientRow[];
-}> = {
-  loading: true,
-  error: null,
-  data: { assignedClients: [], legacyDoctorAssignments: [] },
-};
+const DashboardTasksView = dynamic(
+  () =>
+    import('@/components/dashboard/standardDashboardViews').then(
+      (mod) => mod.DashboardTasksView
+    ),
+  { ssr: false, loading: () => <SectionLoading label="tasks" /> }
+);
 
-const emptyTasksState: WidgetRequestState<OpenTaskRow[]> = {
-  loading: true,
-  error: null,
-  data: [],
-};
+const DashboardActivityView = dynamic(
+  () =>
+    import('@/components/dashboard/standardDashboardViews').then(
+      (mod) => mod.DashboardActivityView
+    ),
+  { ssr: false, loading: () => <SectionLoading label="activity" /> }
+);
 
-const emptyActivityState: WidgetRequestState<GroupedClientActivity[]> = {
-  loading: true,
-  error: null,
-  data: [],
-};
+const DashboardCalendarView = dynamic(
+  () =>
+    import('@/components/dashboard/standardDashboardViews').then(
+      (mod) => mod.DashboardCalendarView
+    ),
+  { ssr: false, loading: () => <SectionLoading label="calendar" /> }
+);
 
-type CommissionWidgetState = {
-  loading: boolean;
-  error: string | null;
-  hasAnyAssignment: boolean;
-  amount: number;
-};
+const DashboardDealsView = dynamic(
+  () =>
+    import('@/components/dashboard/standardDashboardViews').then(
+      (mod) => mod.DashboardDealsView
+    ),
+  { ssr: false, loading: () => <SectionLoading label="deals" /> }
+);
 
-const initialCommissionState: CommissionWidgetState = {
-  loading: true,
-  error: null,
-  hasAnyAssignment: false,
-  amount: 0,
-};
+const DashboardCommissionView = dynamic(
+  () =>
+    import('@/components/dashboard/standardDashboardViews').then(
+      (mod) => mod.DashboardCommissionView
+    ),
+  { ssr: false, loading: () => <SectionLoading label="commission" /> }
+);
 
-const ACTIVITY_PREVIEW_GROUP_COUNT = 4;
+const DashboardReturnablesView = dynamic(
+  () =>
+    import('@/components/dashboard/standardDashboardViews').then(
+      (mod) => mod.DashboardReturnablesView
+    ),
+  { ssr: false, loading: () => <SectionLoading label="returnables" /> }
+);
 
-function QuickActionsRow({
-  onAddLead,
-  showAddLead,
-  showStatements,
-  showAdmin,
-}: {
-  onAddLead: () => void;
-  showAddLead: boolean;
-  showStatements: boolean;
-  showAdmin: boolean;
-}) {
+function SectionLoading({ label }: { label: string }) {
   return (
-    <section
-      aria-label="Quick actions"
-      className="rounded-xl border border-gray-200 bg-white p-3 shadow-sm sm:p-4"
-    >
-      <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Quick actions</p>
-      <div className="mt-2 flex flex-wrap gap-2">
-        {showAddLead && (
-          <button
-            type="button"
-            onClick={onAddLead}
-            className="rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700"
-          >
-            Add Lead
-          </button>
-        )}
-        {showStatements && (
-          <Link
-            href="/my-statements"
-            className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
-          >
-            Returnable Statements
-          </Link>
-        )}
-        {showAdmin && (
-          <Link
-            href="/admin"
-            className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
-          >
-            Admin Dashboard
-          </Link>
-        )}
-      </div>
-    </section>
+    <p className="text-sm text-gray-500" role="status">
+      Loading {label}…
+    </p>
   );
 }
 
-function MyWorkSection({
-  clientsState,
-  tasksState,
-  dealParticipationState,
-  activityState,
-}: {
-  clientsState: WidgetRequestState<{
-    assignedClients: AssignedClientRow[];
-    legacyDoctorAssignments: AssignedClientRow[];
-  }>;
-  tasksState: WidgetRequestState<OpenTaskRow[]>;
-  dealParticipationState: WidgetRequestState<DealParticipationRow[]>;
-  activityState: WidgetRequestState<GroupedClientActivity[]>;
-}) {
-  return (
-    <div className="space-y-4">
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-        {clientsState.loading ? (
-          <MyClientsWidgetSkeleton />
-        ) : (
-          <MyClientsWidget
-            assignedClients={clientsState.data.assignedClients}
-            legacyDoctorAssignments={clientsState.data.legacyDoctorAssignments}
-            error={clientsState.error}
-          />
-        )}
-
-        {tasksState.loading ? (
-          <MyTasksWidgetSkeleton />
-        ) : (
-          <MyTasksWidget openTasks={tasksState.data} error={tasksState.error} />
-        )}
-      </div>
-
-      {dealParticipationState.loading ? (
-        <MyDealParticipationWidgetSkeleton />
-      ) : (
-        <MyDealParticipationWidget
-          deals={dealParticipationState.data}
-          error={dealParticipationState.error}
-        />
-      )}
-
-      {activityState.loading ? (
-        <CollapsibleActivityWidgetSkeleton />
-      ) : (
-        <CollapsibleActivityWidget
-          recentActivity={activityState.data}
-          title="Recent activity"
-          maxVisibleGroups={ACTIVITY_PREVIEW_GROUP_COUNT}
-        />
-      )}
-    </div>
-  );
-}
-
-function PerformanceSection({
-  commissionState,
-  showReturnable,
-}: {
-  commissionState: CommissionWidgetState;
-  showReturnable: boolean;
-}) {
-  const showSecuredCommission =
-    commissionState.loading || commissionState.hasAnyAssignment;
-
-  if (!showSecuredCommission && !showReturnable) {
-    return (
-      <p className="text-sm text-gray-500">No performance metrics available yet.</p>
-    );
-  }
-
-  return (
-    <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-      {commissionState.loading ? (
-        <MySecuredCommissionWidgetSkeleton />
-      ) : showSecuredCommission ? (
-        <MySecuredCommissionWidget
-          amount={commissionState.amount}
-          error={commissionState.error}
-        />
-      ) : null}
-
-      {showReturnable && <MyCommissionReturnableWidget />}
-    </div>
-  );
-}
+const VIEW_TITLES: Record<StandardDashboardView, string> = {
+  home: 'Home',
+  clients: 'My Clients',
+  tasks: 'Tasks',
+  activity: 'Activity',
+  calendar: 'Calendar',
+  deals: 'Deals',
+  commission: 'Commission',
+  returnables: 'Returnables',
+};
 
 export default function StandardUserDashboardPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { profile, loading: profileLoading } = useUserProfile();
+
+  const rawView = searchParams.get('view');
+  const view = parseStandardDashboardView(rawView);
+
+  // Invalid `?view=` → home (refresh-safe canonical URL).
+  useEffect(() => {
+    if (rawView == null || rawView === '' || isStandardDashboardView(rawView)) {
+      return;
+    }
+
+    router.replace(standardDashboardHref('home'));
+  }, [rawView, router]);
+
   const [assignmentSummary, setAssignmentSummary] =
     useState<AssignmentSummary | null>(null);
   const [assignmentsLoading, setAssignmentsLoading] = useState(true);
   const [assignmentsError, setAssignmentsError] = useState<string | null>(null);
   const [showAddLead, setShowAddLead] = useState(false);
-  const [clientsState, setClientsState] =
-    useState<
-      WidgetRequestState<{
-        assignedClients: AssignedClientRow[];
-        legacyDoctorAssignments: AssignedClientRow[];
-      }>
-    >(emptyClientsState);
-  const [dealParticipationState, setDealParticipationState] =
-    useState<WidgetRequestState<DealParticipationRow[]>>(emptyDealParticipationState);
-  const [tasksState, setTasksState] =
-    useState<WidgetRequestState<OpenTaskRow[]>>(emptyTasksState);
-  const [activityState, setActivityState] =
-    useState<WidgetRequestState<GroupedClientActivity[]>>(emptyActivityState);
-  const [commissionState, setCommissionState] =
-    useState<CommissionWidgetState>(initialCommissionState);
+  const [clientsRefreshKey, setClientsRefreshKey] = useState(0);
+  const [activityRefreshKey, setActivityRefreshKey] = useState(0);
 
-  const loadDashboardData = useCallback(async () => {
+  // Shell-owned light fetch only (nav Returnables flag + Home count + calendar bootstrap).
+  const loadAssignments = useCallback(async () => {
     setAssignmentsLoading(true);
     setAssignmentsError(null);
-    setClientsState((current) => ({ ...current, loading: true, error: null }));
-    setDealParticipationState((current) => ({ ...current, loading: true, error: null }));
-    setTasksState((current) => ({ ...current, loading: true, error: null }));
-    setActivityState((current) => ({ ...current, loading: true, error: null }));
-    setCommissionState((current) => ({ ...current, loading: true, error: null }));
 
-    const [
-      assignmentsResult,
-      clientsResult,
-      dealParticipationResult,
-      tasksResult,
-      activityResult,
-      commissionResult,
-    ] = await Promise.allSettled([
-      authenticatedFetch('/api/me/assignments'),
-      authenticatedFetch('/api/dashboard/widgets/assigned-clients'),
-      authenticatedFetch('/api/dashboard/widgets/deal-participation'),
-      authenticatedFetch('/api/dashboard/widgets/open-tasks'),
-      authenticatedFetch('/api/dashboard/widgets/activity-feed'),
-      authenticatedFetch('/api/dashboard/widgets/performance-metrics'),
-    ]);
+    try {
+      const response = await authenticatedFetch('/api/me/assignments');
+      if (!response.ok) {
+        throw new Error('Failed to load assignment data');
+      }
 
-    if (assignmentsResult.status === 'fulfilled' && assignmentsResult.value.ok) {
-      const assignments = await assignmentsResult.value.json();
+      const assignments = await response.json();
       setAssignmentSummary({
         hasDoctorRole: assignments.hasDoctorRole === true,
         hasRelationshipRole: assignments.hasRelationshipRole === true,
@@ -288,133 +165,13 @@ export default function StandardUserDashboardPage() {
           ? assignments.assignments
           : [],
       });
-      setAssignmentsError(null);
-    } else {
+    } catch (err) {
       setAssignmentSummary(null);
-      setAssignmentsError('Failed to load assignment data');
-    }
-    setAssignmentsLoading(false);
-
-    if (clientsResult.status === 'fulfilled' && clientsResult.value.ok) {
-      const data = await clientsResult.value.json();
-      setClientsState({
-        loading: false,
-        error: null,
-        data: {
-          assignedClients: data.assignedClients ?? [],
-          legacyDoctorAssignments: data.legacyDoctorAssignments ?? [],
-        },
-      });
-    } else {
-      setClientsState({
-        loading: false,
-        error: 'Failed to load assigned clients',
-        data: { assignedClients: [], legacyDoctorAssignments: [] },
-      });
-    }
-
-    if (dealParticipationResult.status === 'fulfilled' && dealParticipationResult.value.ok) {
-      const data = await dealParticipationResult.value.json();
-      setDealParticipationState({
-        loading: false,
-        error: null,
-        data: data.deals ?? [],
-      });
-    } else {
-      setDealParticipationState({
-        loading: false,
-        error: 'Failed to load deal participation',
-        data: [],
-      });
-    }
-
-    if (tasksResult.status === 'fulfilled' && tasksResult.value.ok) {
-      const data = await tasksResult.value.json();
-      setTasksState({
-        loading: false,
-        error: null,
-        data: data.openTasks ?? [],
-      });
-    } else {
-      setTasksState({
-        loading: false,
-        error: 'Failed to load open tasks',
-        data: [],
-      });
-    }
-
-    if (activityResult.status === 'fulfilled' && activityResult.value.ok) {
-      const data = await activityResult.value.json();
-      setActivityState({
-        loading: false,
-        error: null,
-        data: data.recentActivity ?? [],
-      });
-    } else {
-      setActivityState({
-        loading: false,
-        error: 'Failed to load recent activity',
-        data: [],
-      });
-    }
-
-    if (commissionResult.status === 'fulfilled' && commissionResult.value.ok) {
-      const data = await commissionResult.value.json();
-      setCommissionState({
-        loading: false,
-        error: null,
-        hasAnyAssignment: data.hasAnyAssignment === true,
-        amount: data.performanceMetrics?.mySecuredCommission ?? 0,
-      });
-    } else {
-      setCommissionState({
-        loading: false,
-        error: 'Failed to load secured commission',
-        hasAnyAssignment: false,
-        amount: 0,
-      });
-    }
-  }, []);
-
-  // Lead create auto-assigns RELATIONSHIP — only clients + activity change.
-  // Soft refresh: keep current rows visible (no full-dashboard skeleton flash).
-  const refreshAfterLeadCreated = useCallback(async () => {
-    const [clientsResult, activityResult] = await Promise.allSettled([
-      authenticatedFetch('/api/dashboard/widgets/assigned-clients'),
-      authenticatedFetch('/api/dashboard/widgets/activity-feed'),
-    ]);
-
-    if (clientsResult.status === 'fulfilled' && clientsResult.value.ok) {
-      const data = await clientsResult.value.json();
-      setClientsState({
-        loading: false,
-        error: null,
-        data: {
-          assignedClients: data.assignedClients ?? [],
-          legacyDoctorAssignments: data.legacyDoctorAssignments ?? [],
-        },
-      });
-    } else {
-      setClientsState((current) => ({
-        ...current,
-        loading: false,
-        error: 'Failed to load assigned clients',
-      }));
-    }
-
-    if (activityResult.status === 'fulfilled' && activityResult.value.ok) {
-      const data = await activityResult.value.json();
-      setActivityState({
-        loading: false,
-        error: null,
-        data: data.recentActivity ?? [],
-      });
-    } else {
-      setActivityState((current) => ({
-        ...current,
-        loading: false,
-        error: 'Failed to load recent activity',
-      }));
+      setAssignmentsError(
+        err instanceof Error ? err.message : 'Failed to load assignment data'
+      );
+    } finally {
+      setAssignmentsLoading(false);
     }
   }, []);
 
@@ -423,12 +180,15 @@ export default function StandardUserDashboardPage() {
       return;
     }
 
-    loadDashboardData();
-  }, [profile, profileLoading, loadDashboardData]);
+    void loadAssignments();
+  }, [profile, profileLoading, loadAssignments]);
 
   const handleLeadCreated = useCallback(() => {
-    void refreshAfterLeadCreated();
-  }, [refreshAfterLeadCreated]);
+    // Bump keys so Clients/Activity refetch if those modules remount later.
+    setClientsRefreshKey((key) => key + 1);
+    setActivityRefreshKey((key) => key + 1);
+    void loadAssignments();
+  }, [loadAssignments]);
 
   const handleOpenAddLead = useCallback(() => setShowAddLead(true), []);
   const handleCloseAddLead = useCallback(() => setShowAddLead(false), []);
@@ -439,26 +199,35 @@ export default function StandardUserDashboardPage() {
     router.push('/login');
   }, [router]);
 
+  const isSuperAdmin = profile?.role === 'SUPER_ADMIN';
+  const showStatements =
+    !assignmentsLoading && assignmentSummary?.hasDoctorRole === true;
+
+  // Doctor-gated: `?view=returnables` without access → home URL (refresh-safe).
+  useEffect(() => {
+    if (assignmentsLoading) {
+      return;
+    }
+
+    if (view === 'returnables' && !showStatements) {
+      router.replace(standardDashboardHref('home'));
+    }
+  }, [assignmentsLoading, view, showStatements, router]);
+
+  const nav = useMemo(
+    () =>
+      buildWorkspaceNavConfig({
+        shell: 'standard',
+        role: profile?.role ?? 'STANDARD_USER',
+        flags: { showReturnableStatements: showStatements },
+      }),
+    [profile?.role, showStatements]
+  );
+
   if (profileLoading) {
     return (
-      <main className="min-h-screen bg-gray-100">
-        <header className="border-b border-gray-200 bg-white">
-          <div className="mx-auto max-w-7xl px-4 py-4 sm:px-6 lg:px-8">
-            <div className="h-8 w-32 animate-pulse rounded bg-gray-200" />
-            <div className="mt-2 h-6 w-48 animate-pulse rounded bg-gray-200" />
-          </div>
-        </header>
-        <div className="mx-auto max-w-7xl space-y-4 px-4 py-5 sm:px-6 lg:px-8">
-          <div className="h-16 animate-pulse rounded-xl bg-gray-200" />
-          <SectionCard title="My Work" collapsible>
-            <MyWorkSection
-              clientsState={emptyClientsState}
-              tasksState={emptyTasksState}
-              dealParticipationState={emptyDealParticipationState}
-              activityState={emptyActivityState}
-            />
-          </SectionCard>
-        </div>
+      <main className="flex min-h-dvh items-center justify-center bg-gray-100">
+        <p className="text-sm text-gray-600">Loading dashboard…</p>
       </main>
     );
   }
@@ -469,73 +238,82 @@ export default function StandardUserDashboardPage() {
     );
   }
 
+  // Doctor-only view: fall back to home if returnables are not applicable.
+  const activeView =
+    view === 'returnables' && !showStatements && !assignmentsLoading
+      ? 'home'
+      : view;
+
   const displayName = profile.name ?? profile.email;
-  const isSuperAdmin = profile.role === 'SUPER_ADMIN';
-  const showStatements = !assignmentsLoading && assignmentSummary?.hasDoctorRole === true;
+
+  const topBarActions = (
+    <>
+      {!isSuperAdmin ? (
+        <button
+          type="button"
+          onClick={handleOpenAddLead}
+          className="whitespace-nowrap rounded-lg bg-blue-600 px-2.5 py-1.5 text-xs font-medium text-white hover:bg-blue-700 sm:px-3 sm:text-sm"
+        >
+          Add Lead
+        </button>
+      ) : null}
+      <Link
+        href="/dashboard/settings"
+        className="whitespace-nowrap rounded-lg border border-gray-300 px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 sm:px-3 sm:text-sm"
+      >
+        Settings
+      </Link>
+      <button
+        type="button"
+        onClick={handleSignOut}
+        className="whitespace-nowrap rounded-lg bg-gray-900 px-2.5 py-1.5 text-xs font-medium text-white hover:bg-gray-800 sm:px-3 sm:text-sm"
+      >
+        Sign Out
+      </button>
+    </>
+  );
 
   return (
-    <main className="min-h-screen bg-gray-100">
-      <header className="border-b border-gray-200 bg-white">
-        <div className="mx-auto flex max-w-7xl flex-col gap-3 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6 lg:px-8">
-          <div className="flex items-center gap-3">
-            <Link href="/" aria-label="Go to homepage">
-              <Logo className="h-8 w-auto" />
-            </Link>
-            <h1 className="text-lg font-bold text-gray-900 sm:text-xl">
-              Welcome, {displayName}
-            </h1>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <Link
-              href="/dashboard/settings"
-              className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
-            >
-              Account Settings
-            </Link>
-            <button
-              type="button"
-              onClick={handleSignOut}
-              className="rounded-lg bg-gray-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-gray-800"
-            >
-              Sign Out
-            </button>
-          </div>
-        </div>
-      </header>
+    <>
+      <WorkspaceShell
+        nav={nav}
+        userRole={profile.role}
+        title={VIEW_TITLES[activeView]}
+        subtitle={displayName}
+        brandHref={isSuperAdmin ? '/admin' : '/dashboard'}
+        topBarActions={topBarActions}
+      >
+        {assignmentsError ? (
+          <p className="mb-4 text-sm text-red-600">{assignmentsError}</p>
+        ) : null}
 
-      {assignmentsError && (
-        <div className="mx-auto max-w-7xl px-4 pt-3 sm:px-6 lg:px-8">
-          <p className="text-sm text-red-600">{assignmentsError}</p>
-        </div>
-      )}
-
-      <div className="mx-auto max-w-7xl space-y-4 px-4 py-5 sm:px-6 lg:px-8">
-        <QuickActionsRow
-          onAddLead={handleOpenAddLead}
-          showAddLead={!isSuperAdmin}
-          showStatements={showStatements}
-          showAdmin={isSuperAdmin}
-        />
-
-        <SectionCard
-          title="My Work"
-          description="Assigned clients, deal participation, tasks, and recent updates"
-          collapsible
-        >
-          <MyWorkSection
-            clientsState={clientsState}
-            tasksState={tasksState}
-            dealParticipationState={dealParticipationState}
-            activityState={activityState}
+        {/* Inactive modules: do not mount (null). Active module owns its fetches. */}
+        {activeView === 'home' ? (
+          <DashboardHomeView
+            displayName={displayName}
+            showReturnables={showStatements}
+            showAdmin={isSuperAdmin}
+            onAddLead={handleOpenAddLead}
+            showAddLead={!isSuperAdmin}
+            assignmentCount={
+              assignmentSummary ? assignmentSummary.assignments.length : null
+            }
+            assignmentsLoading={assignmentsLoading}
           />
-        </SectionCard>
+        ) : null}
 
-        <SectionCard
-          title="Schedule"
-          description="Important dates for your clients and leads this month"
-          collapsible
-        >
-          <ImportantDatesCalendarWidget
+        {activeView === 'clients' ? (
+          <DashboardClientsView refreshKey={clientsRefreshKey} />
+        ) : null}
+
+        {activeView === 'tasks' ? <DashboardTasksView /> : null}
+
+        {activeView === 'activity' ? (
+          <DashboardActivityView refreshKey={activityRefreshKey} />
+        ) : null}
+
+        {activeView === 'calendar' ? (
+          <DashboardCalendarView
             assignmentAccess={
               isSuperAdmin
                 ? undefined
@@ -547,27 +325,20 @@ export default function StandardUserDashboardPage() {
                   }
             }
           />
-        </SectionCard>
+        ) : null}
 
-        <SectionCard
-          title="Performance"
-          description="Secured commission and returnables"
-          collapsible
-          defaultCollapsed
-        >
-          <PerformanceSection
-            commissionState={commissionState}
-            showReturnable={showStatements}
-          />
-        </SectionCard>
-      </div>
+        {activeView === 'deals' ? <DashboardDealsView /> : null}
 
-      {showAddLead && (
-        <AddLeadModal
-          onClose={handleCloseAddLead}
-          onCreated={handleLeadCreated}
-        />
-      )}
-    </main>
+        {activeView === 'commission' ? <DashboardCommissionView /> : null}
+
+        {activeView === 'returnables' && showStatements ? (
+          <DashboardReturnablesView />
+        ) : null}
+      </WorkspaceShell>
+
+      {showAddLead ? (
+        <AddLeadModal onClose={handleCloseAddLead} onCreated={handleLeadCreated} />
+      ) : null}
+    </>
   );
 }

@@ -71,10 +71,10 @@ function RevenueTrackerChart() {
   );
 
   return (
-    <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+    <div className="min-w-0 rounded-xl border border-gray-200 bg-white p-4 shadow-sm sm:p-5">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <h2 className="text-lg font-semibold text-gray-900">Revenue Tracker</h2>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <WidgetDownloadMenu links={downloadLinks} />
           {GROUP_OPTIONS.map((option) => (
             <button
@@ -96,7 +96,7 @@ function RevenueTrackerChart() {
       {error && <p className="text-sm text-red-600">{error}</p>}
 
       {!loading && !error && (
-        <div className="h-80">
+        <div className="h-[min(28rem,55dvh)] min-h-80 w-full">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={data}>
               <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />

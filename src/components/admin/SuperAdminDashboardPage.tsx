@@ -1,149 +1,132 @@
 'use client';
 
+/**
+ * Super-admin `/admin` shell + workspace module switcher.
+ *
+ * Active-workspace-only loading:
+ * 1. Shell loads identity (`useUserProfile`) — not full widgets.
+ * 2. Home (`AdminHomeView`) may fetch cached KPIs for a tiny snapshot only.
+ * 3. Active workspace module owns its fetches (see adminDashboardViews).
+ * 4. Inactive modules must not mount: `activeView === … ? <Mod/> : null` plus
+ *    `next/dynamic` so Home never downloads pipeline/calendar/charts code.
+ *
+ * Home must NOT fetch: pipeline, calendar, activity feed, funnel, revenue,
+ * or leaderboards.
+ */
+
 import dynamic from 'next/dynamic';
-import { useRouter } from 'next/navigation';
-import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import AdminHomeView from '@/components/admin/AdminHomeView';
 import AdminSectionSkeleton from '@/components/admin/AdminSectionSkeleton';
 import AuthRequiredMessage from '@/components/auth/AuthRequiredMessage';
-import CompanyEarningsWidget from '@/components/admin/CompanyEarningsWidget';
-import KpiBar, { type KpiData } from '@/components/admin/KpiBar';
-import CollapsibleActivityWidget from '@/components/dashboard/CollapsibleActivityWidget';
-import ImportantDatesCalendarWidget from '@/components/dashboard/ImportantDatesCalendarWidget';
-import Logo from '@/components/Logo';
-import SectionCard from '@/components/ui/SectionCard';
+import WorkspaceShell from '@/components/layout/WorkspaceShell';
+import {
+  buildWorkspaceNavConfig,
+  isAdminDashboardView,
+  parseAdminDashboardView,
+  adminDashboardHref,
+  type AdminDashboardView,
+} from '@/components/layout/workspaceNavConfig';
 import { useUserProfile } from '@/hooks/useUserProfile';
-import type { SuperAdminDashboardData } from '@/lib/dashboardTypes';
 import { supabase } from '@/lib/supabaseClient';
-
-const ConversionFunnelChart = dynamic(
-  () => import('@/components/admin/ConversionFunnelChart'),
-  { loading: () => <AdminSectionSkeleton /> }
-);
-
-const RevenueTrackerChart = dynamic(
-  () => import('@/components/admin/RevenueTrackerChart'),
-  { loading: () => <AdminSectionSkeleton /> }
-);
-
-const Leaderboards = dynamic(() => import('@/components/admin/Leaderboards'), {
-  loading: () => <AdminSectionSkeleton className="h-48" />,
-});
-
-const MasterPipelineView = dynamic(
-  () => import('@/components/admin/MasterPipelineView'),
-  { loading: () => <AdminSectionSkeleton className="h-64" /> }
-);
 
 const AddClientModal = dynamic(() => import('@/components/admin/AddClientModal'), {
   ssr: false,
 });
 
-function QuickActionsRow({ onAddClient }: { onAddClient: () => void }) {
-  return (
-    <section
-      aria-label="Quick actions"
-      className="rounded-xl border border-gray-200 bg-white p-3 shadow-sm sm:p-4"
-    >
-      <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Quick actions</p>
-      <div className="mt-2 flex flex-wrap gap-2">
-        <button
-          type="button"
-          onClick={onAddClient}
-          className="rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700"
-        >
-          Add Lead / Client
-        </button>
-        <Link
-          href="/admin/leads"
-          className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
-        >
-          Lead Command Center
-        </Link>
-        <Link
-          href="/admin/users"
-          className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
-        >
-          User Management
-        </Link>
-        <Link
-          href="/admin/reconciliation"
-          className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
-        >
-          Reconciliation
-        </Link>
-      </div>
-    </section>
-  );
-}
+/** Lazy section modules — downloaded/mounted only when that view is active. */
+const AdminPipelineView = dynamic(
+  () =>
+    import('@/components/admin/adminDashboardViews').then(
+      (mod) => mod.AdminPipelineView
+    ),
+  { ssr: false, loading: () => <AdminSectionSkeleton className="h-64" /> }
+);
+
+const AdminCalendarView = dynamic(
+  () =>
+    import('@/components/admin/adminDashboardViews').then(
+      (mod) => mod.AdminCalendarView
+    ),
+  { ssr: false, loading: () => <AdminSectionSkeleton className="h-64" /> }
+);
+
+const AdminActivityView = dynamic(
+  () =>
+    import('@/components/admin/adminDashboardViews').then(
+      (mod) => mod.AdminActivityView
+    ),
+  { ssr: false, loading: () => <AdminSectionSkeleton className="h-48" /> }
+);
+
+const AdminAnalyticsView = dynamic(
+  () =>
+    import('@/components/admin/adminDashboardViews').then(
+      (mod) => mod.AdminAnalyticsView
+    ),
+  { ssr: false, loading: () => <AdminSectionSkeleton /> }
+);
+
+const AdminRevenueView = dynamic(
+  () =>
+    import('@/components/admin/adminDashboardViews').then(
+      (mod) => mod.AdminRevenueView
+    ),
+  { ssr: false, loading: () => <AdminSectionSkeleton /> }
+);
+
+const AdminLeaderboardsView = dynamic(
+  () =>
+    import('@/components/admin/adminDashboardViews').then(
+      (mod) => mod.AdminLeaderboardsView
+    ),
+  { ssr: false, loading: () => <AdminSectionSkeleton className="h-48" /> }
+);
+
+const VIEW_TITLES: Record<AdminDashboardView, string> = {
+  home: 'Home',
+  pipeline: 'Pipeline',
+  calendar: 'Calendar',
+  activity: 'Activity',
+  analytics: 'Analytics',
+  revenue: 'Revenue',
+  leaderboards: 'Leaderboards',
+};
 
 export default function SuperAdminDashboardPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { profile, loading: profileLoading, error: profileError } = useUserProfile();
-  const [dashboardData, setDashboardData] = useState<SuperAdminDashboardData | null>(
-    null
-  );
-  const [dashboardLoading, setDashboardLoading] = useState(true);
-  const [dashboardError, setDashboardError] = useState<string | null>(null);
-  const [kpiData, setKpiData] = useState<KpiData | null>(null);
-  const [kpiLoading, setKpiLoading] = useState(true);
-  const [kpiError, setKpiError] = useState<string | null>(null);
+
+  const rawView = searchParams.get('view');
+  const viewFromQuery = parseAdminDashboardView(rawView);
+
+  // Invalid `?view=` → home (refresh-safe canonical URL).
+  useEffect(() => {
+    if (rawView == null || rawView === '' || isAdminDashboardView(rawView)) {
+      return;
+    }
+
+    router.replace(adminDashboardHref('home'));
+  }, [rawView, router]);
+
+  // Preserve legacy deep link `/admin#master-pipeline` → `?view=pipeline`.
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    if (window.location.hash === '#master-pipeline') {
+      router.replace(adminDashboardHref('pipeline'));
+    }
+  }, [router]);
+
+  const activeView = viewFromQuery;
+
   const [showAddClient, setShowAddClient] = useState(false);
   const [pipelineRefreshKey, setPipelineRefreshKey] = useState(0);
-  const [pipelineSectionKey, setPipelineSectionKey] = useState('pipeline-collapsed');
-
-  const loadKpis = useCallback(async () => {
-    setKpiLoading(true);
-    setKpiError(null);
-
-    try {
-      const res = await fetch('/api/admin/dashboard-kpis');
-
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(
-          typeof data.error === 'string' ? data.error : 'Failed to load KPIs'
-        );
-      }
-
-      setKpiData(await res.json());
-    } catch (err) {
-      setKpiError(err instanceof Error ? err.message : 'Failed to load KPIs');
-    } finally {
-      setKpiLoading(false);
-    }
-  }, []);
-
-  const loadDashboard = useCallback(async () => {
-    setDashboardLoading(true);
-    setDashboardError(null);
-
-    try {
-      const token = localStorage.getItem('token');
-      const res = await fetch('/api/dashboard/superadmin', {
-        credentials: 'same-origin',
-        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-      });
-
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(
-          typeof data.error === 'string'
-            ? data.error
-            : 'Failed to load admin activity feed'
-        );
-      }
-
-      const data = await res.json();
-      setDashboardData(data);
-    } catch (err) {
-      setDashboardError(
-        err instanceof Error ? err.message : 'Failed to load admin activity feed'
-      );
-    } finally {
-      setDashboardLoading(false);
-    }
-  }, []);
 
   useEffect(() => {
     if (!profileLoading && profile && profile.role !== 'SUPER_ADMIN') {
@@ -151,49 +134,31 @@ export default function SuperAdminDashboardPage() {
     }
   }, [profileLoading, profile, router]);
 
-  useEffect(() => {
-    if (profileLoading || !profile || profile.role !== 'SUPER_ADMIN') {
-      return;
-    }
+  const handleOpenAddClient = useCallback(() => setShowAddClient(true), []);
+  const handleCloseAddClient = useCallback(() => setShowAddClient(false), []);
+  const handleClientCreated = useCallback(() => {
+    setPipelineRefreshKey((key) => key + 1);
+  }, []);
 
-    loadDashboard();
-    loadKpis();
-  }, [profile, profileLoading, loadDashboard, loadKpis]);
-
-  useEffect(() => {
-    if (typeof window === 'undefined' || window.location.hash !== '#master-pipeline') {
-      return;
-    }
-
-    setPipelineSectionKey('pipeline-expanded');
-
-    const timeoutId = window.setTimeout(() => {
-      document.getElementById('master-pipeline')?.scrollIntoView({
-        behavior: 'smooth',
-        block: 'start',
-      });
-    }, 100);
-
-    return () => window.clearTimeout(timeoutId);
-  }, [profileLoading, profile]);
-
-  async function handleSignOut() {
+  const handleSignOut = useCallback(async () => {
     await supabase.auth.signOut();
     localStorage.removeItem('token');
     router.push('/login');
-  }
+  }, [router]);
 
-  const handleOpenAddClient = useCallback(() => setShowAddClient(true), []);
-  const handleCloseAddClient = useCallback(() => setShowAddClient(false), []);
-  const handleClientCreated = useCallback(
-    () => setPipelineRefreshKey((key) => key + 1),
+  const nav = useMemo(
+    () =>
+      buildWorkspaceNavConfig({
+        shell: 'admin',
+        role: 'SUPER_ADMIN',
+      }),
     []
   );
 
   if (profileLoading) {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-gray-100">
-        <p className="text-gray-600">Loading admin dashboard...</p>
+      <main className="flex min-h-dvh items-center justify-center bg-gray-100">
+        <p className="text-sm text-gray-600">Loading admin dashboard…</p>
       </main>
     );
   }
@@ -201,10 +166,7 @@ export default function SuperAdminDashboardPage() {
   if (profileError || !profile) {
     return (
       <AuthRequiredMessage
-        message={
-          profileError ??
-          'Please log in to view the admin dashboard.'
-        }
+        message={profileError ?? 'Please log in to view the admin dashboard.'}
       />
     );
   }
@@ -213,129 +175,95 @@ export default function SuperAdminDashboardPage() {
     return null;
   }
 
+  const displayName = profile.name ?? profile.email;
+
+  const contentLayout =
+    activeView === 'pipeline'
+      ? 'full'
+      : activeView === 'calendar' ||
+          activeView === 'analytics' ||
+          activeView === 'revenue' ||
+          activeView === 'leaderboards'
+        ? 'wide'
+        : 'default';
+
+  const topBarActions = (
+    <>
+      <Link
+        href="/admin/leads"
+        className="whitespace-nowrap rounded-lg border border-blue-200 bg-blue-50 px-2.5 py-1.5 text-xs font-semibold text-blue-800 hover:bg-blue-100 sm:px-3 sm:text-sm"
+      >
+        Lead Command Center
+      </Link>
+      <button
+        type="button"
+        onClick={handleOpenAddClient}
+        className="whitespace-nowrap rounded-lg bg-blue-600 px-2.5 py-1.5 text-xs font-medium text-white hover:bg-blue-700 sm:px-3 sm:text-sm"
+      >
+        Add Lead / Client
+      </button>
+      <Link
+        href="/dashboard/settings"
+        className="whitespace-nowrap rounded-lg border border-gray-300 px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 sm:px-3 sm:text-sm"
+      >
+        Settings
+      </Link>
+      <button
+        type="button"
+        onClick={handleSignOut}
+        className="whitespace-nowrap rounded-lg bg-gray-900 px-2.5 py-1.5 text-xs font-medium text-white hover:bg-gray-800 sm:px-3 sm:text-sm"
+      >
+        Sign Out
+      </button>
+    </>
+  );
+
   return (
-    <main className="min-h-screen bg-gray-100">
-      <header className="border-b border-gray-200 bg-white">
-        <div className="mx-auto flex max-w-7xl flex-col gap-4 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6 lg:px-8">
-          <div className="flex items-center gap-4">
-            <Link href="/" aria-label="Go to homepage">
-              <Logo className="h-8 w-auto" />
-            </Link>
-            <div>
-              <h1 className="text-xl font-bold text-gray-900 sm:text-2xl">
-                Super Admin Dashboard
-              </h1>
-              <p className="text-sm text-gray-500">
-                Welcome, {profile.name ?? profile.email}
-              </p>
-            </div>
-          </div>
-          <div className="flex flex-wrap gap-3">
-            <a
-              href="/dashboard"
-              className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-            >
-              User Dashboard
-            </a>
-            <Link
-              href="/dashboard/settings"
-              className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-            >
-              Account Settings
-            </Link>
-            <button
-              type="button"
-              onClick={handleSignOut}
-              className="rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800"
-            >
-              Sign Out
-            </button>
-          </div>
-        </div>
-      </header>
-
-      <div className="mx-auto flex max-w-7xl flex-col gap-4 px-4 py-6 sm:gap-5 sm:px-6 lg:px-8">
-        <QuickActionsRow onAddClient={handleOpenAddClient} />
-
-        <div className="flex flex-col gap-4 xl:flex-row xl:items-start">
-          <div className="min-w-0 flex-1">
-            <KpiBar data={kpiData} loading={kpiLoading} error={kpiError} />
-          </div>
-          <CompanyEarningsWidget
-            companyOverheadEarnings={kpiData?.companyOverheadEarnings ?? null}
-            loading={kpiLoading}
-            error={kpiError}
+    <>
+      <WorkspaceShell
+        nav={nav}
+        userRole={profile.role}
+        title={VIEW_TITLES[activeView]}
+        subtitle={displayName}
+        brandHref="/admin"
+        topBarActions={topBarActions}
+        contentLayout={contentLayout}
+      >
+        {/*
+          Inactive modules: render null (do not mount → no useEffect fetches).
+          Active module is also code-split via next/dynamic above.
+        */}
+        {activeView === 'home' ? (
+          <AdminHomeView
+            displayName={displayName}
+            onAddClient={handleOpenAddClient}
           />
-        </div>
+        ) : null}
 
-        <SectionCard
-          title="Schedule"
-          description="Important dates across clients and leads this month"
-          collapsible
-        >
-          <ImportantDatesCalendarWidget />
-        </SectionCard>
-
-        <SectionCard
-          title="Analytics"
-          description="Conversion funnel and revenue trends"
-          collapsible
-          defaultCollapsed
-        >
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 lg:gap-6">
-            <ConversionFunnelChart />
-            <RevenueTrackerChart />
-          </div>
-        </SectionCard>
-
-        <SectionCard
-          title="Leaderboards"
-          description="Commission and deals closed rankings"
-          collapsible
-          defaultCollapsed
-        >
-          <Leaderboards />
-        </SectionCard>
-
-        <SectionCard
-          title="Recent Activity"
-          description="Latest updates across all clients"
-          collapsible
-          defaultCollapsed
-        >
-          {dashboardLoading ? (
-            <div className="h-48 animate-pulse rounded-lg bg-gray-100" />
-          ) : dashboardError ? (
-            <p className="text-sm text-red-600">{dashboardError}</p>
-          ) : (
-            <CollapsibleActivityWidget
-              recentActivity={dashboardData?.recentActivity ?? []}
-              title=""
-              showOuterTitle={false}
-            />
-          )}
-        </SectionCard>
-
-        <SectionCard
-          key={pipelineSectionKey}
-          title="Pipeline Overview"
-          description="Master pipeline by stage — use Lead Command Center for day-to-day lead work"
-          collapsible
-          defaultCollapsed={pipelineSectionKey !== 'pipeline-expanded'}
-        >
-          <MasterPipelineView
+        {activeView === 'pipeline' ? (
+          <AdminPipelineView
             refreshKey={pipelineRefreshKey}
             onAddClick={handleOpenAddClient}
           />
-        </SectionCard>
-      </div>
+        ) : null}
 
-      {showAddClient && (
+        {activeView === 'calendar' ? <AdminCalendarView /> : null}
+
+        {activeView === 'activity' ? <AdminActivityView /> : null}
+
+        {activeView === 'analytics' ? <AdminAnalyticsView /> : null}
+
+        {activeView === 'revenue' ? <AdminRevenueView /> : null}
+
+        {activeView === 'leaderboards' ? <AdminLeaderboardsView /> : null}
+      </WorkspaceShell>
+
+      {showAddClient ? (
         <AddClientModal
           onClose={handleCloseAddClient}
           onCreated={handleClientCreated}
         />
-      )}
-    </main>
+      ) : null}
+    </>
   );
 }
