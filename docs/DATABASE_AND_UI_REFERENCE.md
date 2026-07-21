@@ -2761,6 +2761,7 @@ npm run find:duplicate-clients
 | `DIRECT_URL` | Direct Postgres URL for migrations; also used for auth User PK lookups (Phase **3B**) and read access-check existence queries (Phase **3C**) unless opted out |
 | `AUTH_USER_LOOKUP_DIRECT` | Optional. Set to `false` to force auth User lookups onto the pooler `DATABASE_URL` client |
 | `ACCESS_CHECK_LOOKUP_DIRECT` | Optional. Set to `false` to force assignment/participant existence checks onto the pooler |
+| `PRISMA_WRITE_TRANSACTION_DIRECT` | Optional. Set to `false` to force interactive write `$transaction` callbacks onto pooler `DATABASE_URL` (default: use `DIRECT_URL` when set — required for Supabase transaction-mode pooler) |
 | `NEXT_PUBLIC_SUPABASE_URL` | Supabase project URL |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase anon key (client + middleware) |
 | `SUPABASE_SECRET_KEY` | Service role (registration, uploads) |

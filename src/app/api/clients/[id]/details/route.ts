@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { Prisma } from '@prisma/client';
 import {
   authorizeClientDetailsEdit,
   getClientOr404,
@@ -24,6 +25,17 @@ import {
   type ImportantDateDto,
 } from '@/lib/importantDates';
 import { prisma } from '@/lib/prisma';
+import { runWriteTransaction } from '@/lib/prismaWrite';
+
+function formatRouteError(error: unknown): string {
+  if (error instanceof Prisma.PrismaClientKnownRequestError) {
+    return `prisma:${error.code}`;
+  }
+  if (error instanceof Error) {
+    return error.message;
+  }
+  return 'unknown';
+}
 
 export async function PUT(
   request: Request,
@@ -97,7 +109,7 @@ export async function PUT(
       });
     }
 
-    const client = await prisma.$transaction(async (tx) => {
+    const client = await runWriteTransaction(async (tx) => {
       if (sanitizedImportantDates !== undefined) {
         await tx.clientImportantDate.deleteMany({ where: { clientId } });
         if (sanitizedImportantDates.length > 0) {
@@ -176,11 +188,15 @@ export async function PUT(
       });
     });
 
-    await logClientSystemEvent(
-      clientId,
-      'Client details updated',
-      auth.user.id
-    );
+    try {
+      await logClientSystemEvent(
+        clientId,
+        'Client details updated',
+        auth.user.id
+      );
+    } catch (logError) {
+      console.error('Client details saved but activity log failed:', logError);
+    }
 
     if (sanitizedImportantDates !== undefined) {
       const ownerKind =
@@ -189,23 +205,31 @@ export async function PUT(
           : 'client';
 
       for (const previous of previousImportantDates) {
-        await logImportantDateEvent({
-          clientId,
-          userId: auth.user.id,
-          action: 'deleted',
-          ownerKind,
-          ...importantDateLogFieldsFromRecord(previous),
-        });
+        try {
+          await logImportantDateEvent({
+            clientId,
+            userId: auth.user.id,
+            action: 'deleted',
+            ownerKind,
+            ...importantDateLogFieldsFromRecord(previous),
+          });
+        } catch (logError) {
+          console.error('Important date delete log failed:', logError);
+        }
       }
 
       for (const created of client.importantDateRecords) {
-        await logImportantDateEvent({
-          clientId,
-          userId: auth.user.id,
-          action: 'created',
-          ownerKind,
-          ...importantDateLogFieldsFromRecord(created),
-        });
+        try {
+          await logImportantDateEvent({
+            clientId,
+            userId: auth.user.id,
+            action: 'created',
+            ownerKind,
+            ...importantDateLogFieldsFromRecord(created),
+          });
+        } catch (logError) {
+          console.error('Important date create log failed:', logError);
+        }
       }
     }
 
@@ -237,7 +261,7 @@ export async function PUT(
       lastModified: client.lastModified.toISOString(),
     });
   } catch (error) {
-    console.error('Failed to update client details:', error);
+    console.error('Failed to update client details:', formatRouteError(error), error);
     return NextResponse.json(
       { error: 'Failed to update client details' },
       { status: 500 }
