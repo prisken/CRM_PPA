@@ -133,7 +133,7 @@ function Client360PageClientInner({
           setClient(data);
         }
       } catch {
-        // Keep last known core; risky mutations still use full refresh.
+        // Keep last known core; merge/archive and uncertain mutations still use full refresh.
       }
     }
 
@@ -181,9 +181,21 @@ function Client360PageClientInner({
     };
   }, [clientId, sliceKeys.importantDates]);
 
-  /** Legacy full refresh — every slice key + router.refresh(). */
+  /** Legacy full refresh — every slice key + router.refresh() → client360:rscPageLoad. */
   const triggerDataRefresh = useCallback(() => {
     refreshClient360Slices(['all']);
+  }, [refreshClient360Slices]);
+
+  /**
+   * Phase 2A: stage + team avoid full RSC. Assignments live on the core DTO
+   * (`assignedUsers`); bumping `core` refetches GET /api/clients/[id] only.
+   */
+  const refreshCoreAfterSafeMutation = useCallback(() => {
+    refreshClient360Slices(['core']);
+  }, [refreshClient360Slices]);
+
+  const refreshTeamAfterAssignmentMutation = useCallback(() => {
+    refreshClient360Slices(['core', 'team']);
   }, [refreshClient360Slices]);
 
   async function handleStageChange(newStatus: string) {
@@ -213,8 +225,17 @@ function Client360PageClientInner({
         );
       }
 
+      const data = (await res.json()) as Client360CoreData;
       setIsAdvanceModalOpen(false);
-      triggerDataRefresh();
+
+      if (data?.client_id && typeof data.status === 'string') {
+        // Apply PATCH core DTO immediately; bump core to sync any other core consumers (no RSC).
+        setClient(data);
+        refreshCoreAfterSafeMutation();
+      } else {
+        // Uncertain payload — keep legacy full refresh for correctness.
+        triggerDataRefresh();
+      }
     } catch (err) {
       setStageError(err instanceof Error ? err.message : 'Failed to update status');
     } finally {
@@ -498,7 +519,7 @@ function Client360PageClientInner({
             clientId={clientId}
             assignedUsers={client.assignedUsers}
             currentUser={teamCurrentUser}
-            onMutationSuccess={triggerDataRefresh}
+            onMutationSuccess={refreshTeamAfterAssignmentMutation}
           />
           <CompanyHierarchyWidget
             clientId={clientId}

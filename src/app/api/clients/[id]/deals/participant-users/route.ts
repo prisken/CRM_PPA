@@ -1,12 +1,11 @@
 import { UserStatus } from '@prisma/client';
 import { NextResponse } from 'next/server';
 import {
-  canUseDealParticipantPicker,
+  canAccessDealParticipantPicker,
   getAuthenticatedUserFromRequest,
-  getDealAccessForClient,
 } from '@/lib/authHelpers';
+import { timeAsync, timeRouteHandler } from '@/lib/performance';
 import { prisma } from '@/lib/prisma';
-import { timeRouteHandler } from '@/lib/performance';
 
 function getUserDisplayName(user: { name: string | null; email: string }) {
   return user.name?.trim() || user.email;
@@ -14,44 +13,58 @@ function getUserDisplayName(user: { name: string | null; email: string }) {
 
 export const dynamic = 'force-dynamic';
 
+/**
+ * Phase 2I.2: light picker gate — no getDealAccessForClient (admin no longer
+ * enumerates all deal ids). Same allow-list as canUseDealParticipantPicker.
+ */
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id: clientId } = await params;
-  const auth = await getAuthenticatedUserFromRequest(request);
+
+  const auth = await timeAsync('client360:participantUsers:auth', () =>
+    getAuthenticatedUserFromRequest(request)
+  );
   if (auth.error) {
     return auth.error;
   }
 
-  const dealAccess = await getDealAccessForClient(
-    auth.user.id,
-    auth.user.role,
-    clientId
+  const allowed = await timeAsync('client360:participantUsers:access', () =>
+    canAccessDealParticipantPicker(auth.user.id, auth.user.role, clientId)
   );
-
-  if (!canUseDealParticipantPicker(auth.user.role, dealAccess)) {
+  if (!allowed) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
   const users = await timeRouteHandler(
-    'GET /api/clients/[id]/deals/participant-users',
+    `GET /api/clients/${clientId}/deals/participant-users`,
     async () => {
-      const rows = await prisma.user.findMany({
-        where: { status: UserStatus.ACTIVE },
-        select: {
-          id: true,
-          name: true,
-          email: true,
-        },
-        orderBy: [{ name: 'asc' }, { email: 'asc' }],
-      });
+      return timeAsync(
+        'client360:participantUsers',
+        async () => {
+          const rows = await timeAsync('client360:participantUsers:query', () =>
+            prisma.user.findMany({
+              where: { status: UserStatus.ACTIVE },
+              select: {
+                id: true,
+                name: true,
+                email: true,
+              },
+              orderBy: [{ name: 'asc' }, { email: 'asc' }],
+            })
+          );
 
-      return rows.map((user) => ({
-        user_id: user.id,
-        userName: getUserDisplayName(user),
-        email: user.email,
-      }));
+          return timeAsync('client360:participantUsers:map', async () =>
+            rows.map((user) => ({
+              user_id: user.id,
+              userName: getUserDisplayName(user),
+              email: user.email,
+            }))
+          );
+        },
+        (result) => ({ clientId, userCount: result.length })
+      );
     },
     (result) => ({ clientId, userCount: result.length })
   );

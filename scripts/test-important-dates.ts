@@ -412,6 +412,53 @@ async function main() {
     'denied'
   );
 
+  // Phase 2I.1: 403-first list GET — no existence leak; admin missing → 404
+  {
+    const missingClientId = `missing-client-dates-${RUN_ID}`;
+    const outsiderListExisting = await getImportantDates(
+      authRequest(
+        `/api/clients/${client.id}/important-dates`,
+        outsiderToken
+      ),
+      { params: Promise.resolve({ id: client.id }) }
+    );
+    record(
+      'GET /important-dates (outsider existing client 403)',
+      outsiderListExisting.status === 403,
+      `status ${outsiderListExisting.status}`
+    );
+
+    const outsiderListMissing = await getImportantDates(
+      authRequest(
+        `/api/clients/${missingClientId}/important-dates`,
+        outsiderToken
+      ),
+      { params: Promise.resolve({ id: missingClientId }) }
+    );
+    record(
+      'GET /important-dates (outsider missing client 403)',
+      outsiderListMissing.status === 403,
+      `status ${outsiderListMissing.status}`
+    );
+
+    const adminListMissing = await getImportantDates(
+      authRequest(
+        `/api/clients/${missingClientId}/important-dates`,
+        adminToken
+      ),
+      { params: Promise.resolve({ id: missingClientId }) }
+    );
+    const adminMissingBody = (await adminListMissing.json()) as {
+      error?: string;
+    };
+    record(
+      'GET /important-dates (SUPER_ADMIN missing client 404)',
+      adminListMissing.status === 404 &&
+        adminMissingBody.error === 'Client not found',
+      `status ${adminListMissing.status} error=${adminMissingBody.error ?? ''}`
+    );
+  }
+
   // --- 1. Create with date + time (assigned user) ---
   let timedDateId = '';
   {

@@ -306,6 +306,88 @@ async function main() {
     `status ${outsiderCreate.status}`
   );
 
+  // Phase 2I.3: 403-first — outsider must not learn client existence via strategy GET
+  const missingClientId = `missing-client-${RUN_ID}`;
+  const outsiderListExisting = await listPlans(
+    await authRequest(`/api/clients/${client.id}/strategy-plans`, outsiderToken),
+    { params: clientParams }
+  );
+  record(
+    'GET /strategy-plans (outsider existing client 403)',
+    outsiderListExisting.status === 403,
+    `status ${outsiderListExisting.status}`
+  );
+
+  const outsiderListMissing = await listPlans(
+    await authRequest(
+      `/api/clients/${missingClientId}/strategy-plans`,
+      outsiderToken
+    ),
+    { params: Promise.resolve({ id: missingClientId }) }
+  );
+  record(
+    'GET /strategy-plans (outsider missing client 403)',
+    outsiderListMissing.status === 403,
+    `status ${outsiderListMissing.status}`
+  );
+
+  const outsiderDetailMissing = await getPlan(
+    await authRequest(
+      `/api/clients/${missingClientId}/strategy-plans/missing-plan-${RUN_ID}`,
+      outsiderToken
+    ),
+    {
+      params: Promise.resolve({
+        id: missingClientId,
+        planId: `missing-plan-${RUN_ID}`,
+      }),
+    }
+  );
+  record(
+    'GET /strategy-plans/[planId] (outsider missing client 403)',
+    outsiderDetailMissing.status === 403,
+    `status ${outsiderDetailMissing.status}`
+  );
+
+  const adminListMissing = await listPlans(
+    await authRequest(
+      `/api/clients/${missingClientId}/strategy-plans`,
+      adminToken
+    ),
+    { params: Promise.resolve({ id: missingClientId }) }
+  );
+  const adminListMissingBody = (await adminListMissing.json()) as {
+    error?: string;
+  };
+  record(
+    'GET /strategy-plans (SUPER_ADMIN missing client 404)',
+    adminListMissing.status === 404 &&
+      adminListMissingBody.error === 'Client not found',
+    `status ${adminListMissing.status} error=${adminListMissingBody.error ?? ''}`
+  );
+
+  const adminDetailMissing = await getPlan(
+    await authRequest(
+      `/api/clients/${missingClientId}/strategy-plans/missing-plan-${RUN_ID}`,
+      adminToken
+    ),
+    {
+      params: Promise.resolve({
+        id: missingClientId,
+        planId: `missing-plan-${RUN_ID}`,
+      }),
+    }
+  );
+  const adminDetailMissingBody = (await adminDetailMissing.json()) as {
+    error?: string;
+  };
+  record(
+    'GET /strategy-plans/[planId] (SUPER_ADMIN missing client 404)',
+    adminDetailMissing.status === 404 &&
+      adminDetailMissingBody.error === 'Client not found',
+    `status ${adminDetailMissing.status} error=${adminDetailMissingBody.error ?? ''}`
+  );
+
   const relationshipCreateDenied = await createPlan(
     await authRequest(
       `/api/clients/${client.id}/strategy-plans`,

@@ -66,13 +66,28 @@ function expandRefreshRequests(
   return expanded;
 }
 
+function logClient360Refresh(
+  requests: readonly Client360RefreshRequest[],
+  expanded: Set<Client360RefreshSlice>,
+  rscFull: boolean
+) {
+  if (process.env.NODE_ENV !== 'development') {
+    return;
+  }
+
+  // Verify stage/team: expect rsc=skipped (no [perf] client360:rscPageLoad).
+  console.info(
+    `[client360:refresh] request=${requests.join('+')} slices=${[...expanded].join(',')} rsc=${rscFull ? 'full' : 'skipped'}`
+  );
+}
+
 export type Client360RefreshContextValue = {
   sliceKeys: Client360SliceKeys;
   /**
    * Request refresh for one or more slices.
-   * - `all`: bump every slice key + `router.refresh()` (legacy full refresh).
+   * - `all`: bump every slice key + `router.refresh()` (legacy full → `client360:rscPageLoad`).
    * - `core`: bump key only — page client-fetches `GET /api/clients/[id]` (no RSC refresh).
-   * - `team`: bump key only unless paired with `all` (team mutations still use `all` today).
+   * - `team`: bump key only; page refetches core DTO (`assignedUsers`) — no RSC refresh.
    * - other slices: bump key only (widgets / page refetch via `sliceKeys`).
    */
   refreshClient360Slices: (slices: readonly Client360RefreshRequest[]) => void;
@@ -97,6 +112,9 @@ export function Client360RefreshProvider({ children }: { children: ReactNode }) 
         return;
       }
 
+      const rscFull = requestIncludesFullRouterRefresh(slices);
+      logClient360Refresh(slices, expanded, rscFull);
+
       setSliceKeys((current) => {
         const next = { ...current };
         for (const slice of expanded) {
@@ -106,7 +124,7 @@ export function Client360RefreshProvider({ children }: { children: ReactNode }) 
       });
 
       // Only legacy `all` still forces a full RSC reload.
-      if (requestIncludesFullRouterRefresh(slices)) {
+      if (rscFull) {
         router.refresh();
       }
     },

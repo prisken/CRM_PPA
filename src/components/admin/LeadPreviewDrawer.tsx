@@ -691,8 +691,27 @@ function LeadPreviewDrawer({
                         ))}
                         {lead.sources.length > 2 && (
                           <li className="text-xs text-gray-500">
-                            +{lead.sources.length - 2} more record
-                            {lead.sources.length - 2 === 1 ? '' : 's'}
+                            +
+                            {(lead.sourcesHasMore
+                              ? lead.sourceRecordCount
+                              : lead.sources.length) - 2}{' '}
+                            more record
+                            {(lead.sourcesHasMore
+                              ? lead.sourceRecordCount
+                              : lead.sources.length) -
+                              2 ===
+                            1
+                              ? ''
+                              : 's'}
+                            {lead.sourcesHasMore
+                              ? ` (showing newest ${lead.sources.length})`
+                              : ''}
+                          </li>
+                        )}
+                        {lead.sources.length <= 2 && lead.sourcesHasMore && (
+                          <li className="text-xs text-gray-500">
+                            Showing newest {lead.sources.length} of{' '}
+                            {lead.sourceRecordCount} records
                           </li>
                         )}
                       </ul>

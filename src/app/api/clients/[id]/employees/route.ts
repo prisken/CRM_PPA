@@ -1,10 +1,13 @@
 import { AssignmentRole, ClientStatus } from '@prisma/client';
 import { NextResponse } from 'next/server';
 import {
+  canAccessClientHierarchy,
+  getAuthenticatedUserFromRequest,
   logClientSystemEvent,
   requireClientEmployeeLeadCreateAccess,
-  requireClientHierarchyAccess,
 } from '@/lib/authHelpers';
+import { loadCompanyHierarchyApiPayload } from '@/lib/client360';
+import { timeAsync, timeRouteHandler } from '@/lib/performance';
 import { prisma } from '@/lib/prisma';
 
 export async function GET(
@@ -13,53 +16,41 @@ export async function GET(
 ) {
   try {
     const { id: clientId } = await params;
-    const auth = await requireClientHierarchyAccess(clientId, request);
+
+    const auth = await timeAsync('client360:hierarchy:auth', () =>
+      getAuthenticatedUserFromRequest(request)
+    );
     if (auth.error) {
       return auth.error;
     }
 
-    const client = await prisma.client.findUnique({
-      where: { id: clientId },
-      select: {
-        id: true,
-        name: true,
-        company: true,
-        employeeCount: true,
-      },
-    });
+    const allowed = await timeAsync('client360:hierarchy:access', () =>
+      canAccessClientHierarchy(auth.user.id, auth.user.role, clientId)
+    );
+    if (!allowed) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
 
-    if (!client) {
+    // Phase 2F: one combined SQL for target client + colleagues (no clientLookup).
+    // 404 vs 403: missing client still 404 for allowed callers (e.g. SUPER_ADMIN);
+    // outsiders without assignment remain 403 above (existence not revealed).
+    const payload = await timeRouteHandler(
+      `GET /api/clients/${clientId}/employees`,
+      async () => loadCompanyHierarchyApiPayload(clientId),
+      {
+        getMeta: (result) => ({
+          found: result !== null,
+          colleagueCount: result?.colleagueCount ?? 0,
+          colleaguesReturned: result?.colleagues.length ?? 0,
+        }),
+      }
+    );
+
+    if (!payload) {
       return NextResponse.json({ error: 'Client not found' }, { status: 404 });
     }
 
-    const colleagues =
-      client.company?.trim()
-        ? await prisma.client.findMany({
-            where: {
-              company: client.company,
-              id: { not: clientId },
-            },
-            select: {
-              id: true,
-              name: true,
-              roleInCompany: true,
-              status: true,
-            },
-            orderBy: { name: 'asc' },
-          })
-        : [];
-
-    return NextResponse.json({
-      client_id: client.id,
-      company: client.company,
-      employeeCount: client.employeeCount,
-      colleagues: colleagues.map((colleague) => ({
-        client_id: colleague.id,
-        name: colleague.name,
-        roleInCompany: colleague.roleInCompany,
-        status: colleague.status,
-      })),
-    });
+    return NextResponse.json(payload);
   } catch (error) {
     console.error('Failed to load company hierarchy:', error);
     return NextResponse.json(

@@ -13,6 +13,7 @@ import {
   type StrategyProjectionMilestoneType,
 } from '@prisma/client';
 import { NextResponse } from 'next/server';
+import { timeAsync } from '@/lib/performance';
 import { prisma } from '@/lib/prisma';
 
 type MoneyValue = { toString(): string } | number | null | undefined;
@@ -138,6 +139,7 @@ export const strategyProjectionMilestoneDetailSelect = {
       notes: true,
       createdAt: true,
       updatedAt: true,
+      // Journey chips only need title; keep stepType/sortOrder for DTO compatibility.
       step: { select: strategyCoveredByStepSelect },
     },
   },
@@ -165,6 +167,30 @@ export const strategyProjectionMilestoneDetailSelect = {
   },
 } as const;
 
+/**
+ * Intentionally narrow Strategy plan detail select (plan scalars + owners only).
+ * Child relations are loaded in parallel timed queries — see {@link loadStrategyPlanDetail}.
+ */
+export const strategyPlanDetailBaseSelect = {
+  id: true,
+  clientId: true,
+  title: true,
+  description: true,
+  clientGoal: true,
+  expectedOutcome: true,
+  status: true,
+  ownerUserId: true,
+  createdByUserId: true,
+  createdAt: true,
+  updatedAt: true,
+  owner: { select: { id: true, name: true, email: true } },
+  createdBy: { select: { id: true, name: true, email: true } },
+} as const;
+
+/**
+ * @deprecated Prefer {@link strategyPlanDetailBaseSelect} + parallel relation loads
+ * via {@link loadStrategyPlanDetail}. Kept for callers that still want one nested select.
+ */
 export const strategyPlanDetailInclude = {
   steps: {
     orderBy: [{ sortOrder: 'asc' as const }, { createdAt: 'asc' as const }],
@@ -560,18 +586,100 @@ export async function getStrategyPlanForClient(clientId: string, planId: string)
 }
 
 export async function loadStrategyPlanDetail(clientId: string, planId: string) {
-  const plan = await prisma.clientStrategyPlan.findFirst({
-    where: { id: planId, clientId },
-    include: strategyPlanDetailInclude,
-  });
+  return timeAsync(
+    'client360:strategyDetail',
+    async () => {
+      const base = await timeAsync('client360:strategyDetail:baseQuery', () =>
+        prisma.clientStrategyPlan.findFirst({
+          where: { id: planId, clientId },
+          select: strategyPlanDetailBaseSelect,
+        })
+      );
 
-  if (!plan) {
-    return {
-      error: NextResponse.json({ error: 'Strategy plan not found' }, { status: 404 }),
-    };
-  }
+      if (!base) {
+        return {
+          error: NextResponse.json(
+            { error: 'Strategy plan not found' },
+            { status: 404 }
+          ),
+        };
+      }
 
-  return { plan };
+      const relations = await timeAsync(
+        'client360:strategyDetail:relations',
+        async () => {
+          const [steps, connections, expenses, projectionMilestones] =
+            await Promise.all([
+              timeAsync('client360:strategyDetail:steps', () =>
+                prisma.clientStrategyStep.findMany({
+                  where: { strategyPlanId: planId },
+                  orderBy: [
+                    { sortOrder: 'asc' },
+                    { createdAt: 'asc' },
+                  ],
+                  select: strategyStepDetailSelect,
+                })
+              ),
+              timeAsync('client360:strategyDetail:connections', () =>
+                prisma.clientStrategyConnection.findMany({
+                  where: { strategyPlanId: planId },
+                  orderBy: { createdAt: 'asc' },
+                  select: strategyConnectionDetailSelect,
+                })
+              ),
+              timeAsync('client360:strategyDetail:expenses', () =>
+                prisma.clientStrategyExpense.findMany({
+                  where: { strategyPlanId: planId },
+                  orderBy: [
+                    { sortOrder: 'asc' },
+                    { createdAt: 'asc' },
+                  ],
+                  select: strategyExpenseDetailSelect,
+                })
+              ),
+              timeAsync('client360:strategyDetail:projectionMilestones', () =>
+                prisma.clientStrategyProjectionMilestone.findMany({
+                  where: { strategyPlanId: planId },
+                  orderBy: [
+                    { sortOrder: 'asc' },
+                    { year: 'asc' },
+                    { createdAt: 'asc' },
+                  ],
+                  select: strategyProjectionMilestoneDetailSelect,
+                })
+              ),
+            ]);
+
+          return { steps, connections, expenses, projectionMilestones };
+        },
+        (result) => ({
+          stepCount: result.steps.length,
+          connectionCount: result.connections.length,
+          expenseCount: result.expenses.length,
+          milestoneCount: result.projectionMilestones.length,
+          contributionCount: result.projectionMilestones.reduce(
+            (sum, milestone) =>
+              sum +
+              milestone.stepContributions.length +
+              milestone.expenseContributions.length,
+            0
+          ),
+        })
+      );
+
+      const plan: StrategyPlanDetailRecord = {
+        ...base,
+        ...relations,
+      };
+
+      return { plan };
+    },
+    (result) => ({
+      clientId,
+      planId,
+      found: !('error' in result && result.error),
+    })
+  );
 }
 
 export async function assertDealBelongsToClient(

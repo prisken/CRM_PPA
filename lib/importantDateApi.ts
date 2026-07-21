@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server';
 import {
   authorizeClientDetailsEdit,
+  canReadClientCore,
+  getAuthenticatedUserFromRequest,
   getClientOr404,
-  requireClientCoreReadAccess,
 } from '@/lib/authHelpers';
 import {
   logImportantDateEvent,
@@ -21,6 +22,7 @@ import {
   syncLegacyImportantDatesJson,
   type ImportantDateOwnerKind,
 } from '@/lib/importantDates';
+import { timeAsync, timeRouteHandler } from '@/lib/performance';
 import { prisma } from '@/lib/prisma';
 
 async function requireOwner(ownerId: string) {
@@ -53,6 +55,9 @@ function ownerPayload(
 /**
  * Shared list handler for client and lead important-date routes.
  * Leads are Client rows — storage uses clientId; lead API exposes leadId.
+ *
+ * Phase 2I.1: no separate getClientOr404 — existence comes from
+ * {@link listImportantDatesForOwner}'s Client read (null → 404 after access).
  */
 export async function handleListImportantDates(
   request: Request,
@@ -60,41 +65,84 @@ export async function handleListImportantDates(
   ownerKind: ImportantDateOwnerKind
 ) {
   try {
-    const auth = await requireClientCoreReadAccess(ownerId, request);
+    const auth = await timeAsync('client360:importantDates:auth', () =>
+      getAuthenticatedUserFromRequest(request)
+    );
     if (auth.error) {
       return auth.error;
     }
 
-    const ownerCheck = await requireOwner(ownerId);
-    if (ownerCheck.error) {
-      return ownerCheck.error;
+    const allowed = await timeAsync('client360:importantDates:access', () =>
+      canReadClientCore(auth.user.id, auth.user.role, ownerId)
+    );
+    if (!allowed) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
-    const { importantDates, recordType, dtos } =
-      await listImportantDatesForOwner(ownerId);
+    const listPath =
+      ownerKind === 'lead'
+        ? `GET /api/leads/${ownerId}/important-dates`
+        : `GET /api/clients/${ownerId}/important-dates`;
 
-    const items =
-      importantDates.length > 0
-        ? importantDates.map((entry) =>
-            formatImportantDateApiItem(entry, {
-              ownerId,
-              ownerKind,
-              recordType,
-            })
-          )
-        : dtos.map((entry) =>
-            formatImportantDateApiItem(entry, {
-              ownerId,
-              ownerKind,
-              recordType,
-            })
-          );
+    const payload = await timeRouteHandler(
+      listPath,
+      async () => {
+        return timeAsync(
+          'client360:importantDates',
+          async () => {
+            const listed = await timeAsync(
+              'client360:importantDates:query',
+              () => listImportantDatesForOwner(ownerId)
+            );
+            if (!listed) {
+              return null;
+            }
 
-    return NextResponse.json({
-      ...ownerPayload(ownerId, ownerKind),
-      recordType,
-      importantDates: items,
-    });
+            return timeAsync('client360:importantDates:map', async () => {
+              const { importantDates, recordType, dtos } = listed;
+              const items =
+                importantDates.length > 0
+                  ? importantDates.map((entry) =>
+                      formatImportantDateApiItem(entry, {
+                        ownerId,
+                        ownerKind,
+                        recordType,
+                      })
+                    )
+                  : dtos.map((entry) =>
+                      formatImportantDateApiItem(entry, {
+                        ownerId,
+                        ownerKind,
+                        recordType,
+                      })
+                    );
+
+              return {
+                ...ownerPayload(ownerId, ownerKind),
+                recordType,
+                importantDates: items,
+              };
+            });
+          },
+          (result) => ({
+            found: result !== null,
+            dateCount: result?.importantDates.length ?? 0,
+          })
+        );
+      },
+      {
+        getMeta: (result) => ({
+          found: result !== null,
+          dateCount: result?.importantDates.length ?? 0,
+        }),
+      }
+    );
+
+    if (!payload) {
+      return NextResponse.json({ error: 'Client not found' }, { status: 404 });
+    }
+
+    return NextResponse.json(payload);
   } catch (error) {
     console.error('Failed to fetch important dates:', error);
     return NextResponse.json(

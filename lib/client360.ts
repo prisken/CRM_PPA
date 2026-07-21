@@ -1,9 +1,9 @@
-import type {
-  ActivityLogType,
-  Client,
+import {
   Prisma,
-  Strategy,
-  User,
+  type ActivityLogType,
+  type Client,
+  type Strategy,
+  type User,
 } from '@prisma/client';
 import {
   calculateCommittedValue,
@@ -230,6 +230,145 @@ export function buildStrategyTasksWorkspace(
   };
 }
 
+/** True when Client.strategyText is blank and legacy Strategy take-1 may apply. */
+export function shouldFetchLegacyStrategyFallback(
+  strategyText: string | null | undefined
+): boolean {
+  return !(strategyText ?? '').trim();
+}
+
+const strategyTasksTaskSelect = {
+  id: true,
+  title: true,
+  description: true,
+  status: true,
+  dueDate: true,
+  createdAt: true,
+  updatedAt: true,
+  assignee: {
+    select: { id: true, name: true, email: true },
+  },
+} satisfies Prisma.TaskSelect;
+
+/**
+ * Phase 3D — load workspace strategy-tasks without Prisma nested sequential RTTs.
+ *
+ * Nested `client360StrategyTasksSelect` issues Client → Strategy → Tasks as
+ * sequential pooler round-trips (~3). This loader runs Client scalar + Tasks +
+ * legacy Strategy take-1 in **parallel** (one pooler wall RTT).
+ *
+ * Measured (empty sample): nested ~400 ms · hybrid (skip legacy after scalar)
+ * ~520–560 ms (two RTTs) · parallel-all **~260–300 ms**.
+ *
+ * Semantic short-circuit remains in {@link resolveStrategyText}: non-blank
+ * `strategyText` ignores Strategy rows. We still fetch Strategy in parallel so
+ * the empty first-paint path does not pay a second sequential RTT.
+ *
+ * Response shape matches {@link buildStrategyTasksWorkspace}. Domain stays on pooler.
+ */
+export async function loadStrategyTasksWorkspace(clientId: string) {
+  return timeAsync(
+    'client360:workspace:strategyTasks:domain',
+    async () => {
+      const [clientRow, tasks, strategies] = await timeAsync(
+        'client360:workspace:strategyTasks:parallelBase',
+        () =>
+          Promise.all([
+            timeAsync(
+              'client360:workspace:strategyTasks:clientScalar',
+              () =>
+                prisma.client.findUnique({
+                  where: { id: clientId },
+                  select: { id: true, strategyText: true },
+                }),
+              {
+                getMeta: (row) => ({
+                  transport: 'pooler',
+                  found: row !== null,
+                  strategyChars: (row?.strategyText ?? '').trim().length,
+                }),
+              }
+            ),
+            timeAsync(
+              'client360:workspace:strategyTasks:tasks',
+              () =>
+                prisma.task.findMany({
+                  where: { clientId },
+                  orderBy: [{ status: 'asc' }, { dueDate: 'asc' }],
+                  select: strategyTasksTaskSelect,
+                }),
+              {
+                getMeta: (rows) => ({
+                  transport: 'pooler',
+                  taskCount: rows.length,
+                }),
+              }
+            ),
+            timeAsync(
+              'client360:workspace:strategyTasks:legacyStrategy',
+              () =>
+                prisma.strategy.findMany({
+                  where: { clientId },
+                  orderBy: { updatedAt: 'desc' },
+                  take: 1,
+                  select: { description: true, updatedAt: true },
+                }),
+              {
+                getMeta: (rows) => ({
+                  transport: 'pooler',
+                  strategyCount: rows.length,
+                }),
+              }
+            ),
+          ]),
+        {
+          getMeta: ([row, taskRows, strategyRows]) => ({
+            transport: 'pooler',
+            found: row !== null,
+            taskCount: taskRows.length,
+            strategyCount: strategyRows.length,
+            wouldUseLegacy: row
+              ? shouldFetchLegacyStrategyFallback(row.strategyText)
+              : false,
+          }),
+        }
+      );
+
+      if (!clientRow) {
+        return null;
+      }
+
+      // Semantic short-circuit: ignore Strategy rows when strategyText is set.
+      const strategiesForResolve = shouldFetchLegacyStrategyFallback(
+        clientRow.strategyText
+      )
+        ? strategies
+        : [];
+
+      return timeAsync(
+        'client360:workspace:strategyTasks:map',
+        async () =>
+          buildStrategyTasksWorkspace({
+            strategyText: clientRow.strategyText,
+            strategies: strategiesForResolve,
+            tasks,
+          }),
+        (result) => ({
+          taskCount: result.tasks.length,
+          strategyChars: result.strategyText.length,
+          legacyApplied: strategiesForResolve.length > 0,
+        })
+      );
+    },
+    (result) => ({
+      transport: 'pooler',
+      found: result !== null,
+      taskCount: result?.tasks.length ?? 0,
+      strategyChars: result?.strategyText.length ?? 0,
+    })
+  );
+}
+
 export function buildActivityNotesWorkspace(
   client: Prisma.ClientGetPayload<{ select: typeof client360ActivitySelect }>
 ) {
@@ -377,8 +516,33 @@ const client360CoreScalarSelect = {
 } as const;
 
 /**
- * Full Client 360 core API select (assignments, contacts, dates, documents, legacy strategies).
- * Prefer this over include so unused Client scalars are not fetched.
+ * Narrow select for Client 360 core GET / RSC / core-slice refresh.
+ * Intentionally omits `documents` and `strategies` joins — DTO still returns
+ * `documents: []` and `strategyText` from `Client.strategyText` (workspace tab
+ * loads strategy/tasks separately). Assignments only need id/role + user
+ * id/name/email for team + stage permissions.
+ */
+export const client360CoreQuerySelect = {
+  ...client360CoreScalarSelect,
+  clientAssignments: { select: client360AssignmentSelect },
+  importantDateRecords: {
+    orderBy: { scheduledAt: 'asc' as const },
+    select: importantDateRecordSelect,
+  },
+  contacts: {
+    orderBy: [{ isPrimary: 'desc' as const }, { sortOrder: 'asc' as const }],
+    select: {
+      kind: true,
+      value: true,
+      isPrimary: true,
+      sortOrder: true,
+    },
+  },
+} satisfies Prisma.ClientSelect;
+
+/**
+ * Fuller core select (includes documents + legacy strategies) for callers that
+ * still need those relations on the same DTO shape (e.g. archive refresh).
  */
 export const client360CoreSelect = {
   ...client360CoreScalarSelect,
@@ -401,13 +565,8 @@ export const client360CoreSelect = {
   },
 } satisfies Prisma.ClientSelect;
 
-/** Lighter select for Client 360 server page load (no documents/strategies). */
-export const client360PageCoreSelect = {
-  ...client360CoreScalarSelect,
-  clientAssignments: client360CoreSelect.clientAssignments,
-  importantDateRecords: client360CoreSelect.importantDateRecords,
-  contacts: client360CoreSelect.contacts,
-} satisfies Prisma.ClientSelect;
+/** RSC page load uses the same narrow core query as GET /api/clients/[id]. */
+export const client360PageCoreSelect = client360CoreQuerySelect;
 
 /** @deprecated Prefer client360CoreSelect. Kept for callers still using include. */
 export const client360CoreInclude = {
@@ -418,11 +577,11 @@ export const client360CoreInclude = {
   strategies: client360CoreSelect.strategies,
 } satisfies Prisma.ClientInclude;
 
-/** @deprecated Prefer client360PageCoreSelect. */
+/** @deprecated Prefer client360PageCoreSelect / client360CoreQuerySelect. */
 export const client360PageCoreInclude = {
-  clientAssignments: client360CoreSelect.clientAssignments,
-  importantDateRecords: client360CoreSelect.importantDateRecords,
-  contacts: client360CoreSelect.contacts,
+  clientAssignments: client360CoreQuerySelect.clientAssignments,
+  importantDateRecords: client360CoreQuerySelect.importantDateRecords,
+  contacts: client360CoreQuerySelect.contacts,
 } satisfies Prisma.ClientInclude;
 
 export const client360StrategyTasksSelect = {
@@ -563,7 +722,7 @@ export const client360Include = {
 type Client360Record = Prisma.ClientGetPayload<{ include: typeof client360Include }>;
 type Client360CoreRecord = Prisma.ClientGetPayload<{ select: typeof client360CoreSelect }>;
 type Client360PageCoreRecord = Prisma.ClientGetPayload<{
-  select: typeof client360PageCoreSelect;
+  select: typeof client360CoreQuerySelect;
 }>;
 type Client360WorkspaceRecord = Prisma.ClientGetPayload<{
   select: typeof client360StrategyTasksSelect & typeof client360ActivitySelect;
@@ -607,7 +766,13 @@ export type Client360CompanyHierarchyData = {
     roleInCompany: string | null;
     status: string;
   }[];
+  /** Total same-company colleagues (may exceed `colleagues.length` when capped). */
+  colleagueCount: number;
+  colleaguesHasMore: boolean;
 };
+
+/** Cap colleagues returned on Client 360 hierarchy (newest-name order still name asc). */
+export const CLIENT360_HIERARCHY_COLLEAGUES_LIMIT = 50;
 
 export async function getClient360CoreData(
   clientId: string
@@ -615,16 +780,20 @@ export async function getClient360CoreData(
   return timeAsync(
     'client360:getClient360CoreData',
     async () => {
-      const client = await prisma.client.findUnique({
-        where: { id: clientId },
-        select: client360PageCoreSelect,
-      });
+      const client = await timeAsync('client360:core:query', () =>
+        prisma.client.findUnique({
+          where: { id: clientId },
+          select: client360CoreQuerySelect,
+        })
+      );
 
       if (!client) {
         return null;
       }
 
-      return buildClient360CoreResponse(client);
+      return timeAsync('client360:core:map', async () =>
+        buildClient360CoreResponse(client)
+      );
     },
     {
       payloadCategory: 'client360-core',
@@ -657,6 +826,113 @@ export type Client360CompanyHierarchyPreload = {
   employeeCount: number | null;
 };
 
+/** API/RSC hierarchy payload including target `client_id` (response contract). */
+export type Client360CompanyHierarchyPayload = Client360CompanyHierarchyData & {
+  client_id: string;
+};
+
+type HierarchyCombinedRow = {
+  target_id: string;
+  target_company: string | null;
+  target_employee_count: number | null;
+  colleague_id: string | null;
+  colleague_name: string | null;
+  colleague_role_in_company: string | null;
+  colleague_status: string | null;
+  colleague_total: number;
+};
+
+/**
+ * One round-trip: target client company fields + capped colleagues + total count.
+ * Replaces the old clientLookup → findMany/count sequence (Phase 2F).
+ */
+async function fetchCompanyHierarchyCombined(
+  clientId: string
+): Promise<HierarchyCombinedRow[] | null> {
+  const limit = CLIENT360_HIERARCHY_COLLEAGUES_LIMIT;
+  const rows = await prisma.$queryRaw<HierarchyCombinedRow[]>(Prisma.sql`
+    WITH target AS (
+      SELECT id, company, employee_count
+      FROM "Client"
+      WHERE id = ${clientId}
+    ),
+    scoped AS (
+      SELECT c.id, c.name, c.role_in_company, c.status::text AS status
+      FROM "Client" c
+      INNER JOIN target t
+        ON t.company IS NOT NULL
+        AND BTRIM(t.company) <> ''
+        AND c.company = t.company
+        AND c.id <> t.id
+    ),
+    counted AS (
+      SELECT COUNT(*)::int AS total FROM scoped
+    ),
+    limited AS (
+      SELECT id, name, role_in_company, status
+      FROM scoped
+      ORDER BY name ASC
+      LIMIT ${limit}
+    )
+    SELECT
+      t.id AS target_id,
+      t.company AS target_company,
+      t.employee_count AS target_employee_count,
+      l.id AS colleague_id,
+      l.name AS colleague_name,
+      l.role_in_company AS colleague_role_in_company,
+      l.status AS colleague_status,
+      c.total AS colleague_total
+    FROM target t
+    CROSS JOIN counted c
+    LEFT JOIN limited l ON TRUE
+  `);
+
+  return rows.length > 0 ? rows : null;
+}
+
+function mapHierarchyCombinedRows(
+  rows: HierarchyCombinedRow[]
+): Client360CompanyHierarchyPayload {
+  const first = rows[0];
+  const colleagues = rows
+    .filter((row) => row.colleague_id != null)
+    .map((row) => ({
+      client_id: row.colleague_id as string,
+      name: row.colleague_name as string,
+      roleInCompany: row.colleague_role_in_company,
+      status: row.colleague_status as string,
+    }));
+  const colleagueCount = Number(first.colleague_total);
+
+  return {
+    client_id: first.target_id,
+    company: first.target_company,
+    employeeCount: first.target_employee_count,
+    colleagues,
+    colleagueCount,
+    colleaguesHasMore: colleagueCount > colleagues.length,
+  };
+}
+
+/**
+ * GET /employees loader: single combined query (no separate clientLookup).
+ */
+export async function loadCompanyHierarchyApiPayload(
+  clientId: string
+): Promise<Client360CompanyHierarchyPayload | null> {
+  const rows = await timeAsync('client360:hierarchy:query', () =>
+    fetchCompanyHierarchyCombined(clientId)
+  );
+  if (!rows) {
+    return null;
+  }
+
+  return timeAsync('client360:hierarchy:map', async () =>
+    mapHierarchyCombinedRows(rows)
+  );
+}
+
 export async function getClient360CompanyHierarchyData(
   clientId: string,
   preload?: Client360CompanyHierarchyPreload
@@ -664,63 +940,90 @@ export async function getClient360CompanyHierarchyData(
   return timeAsync(
     'client360:getClient360CompanyHierarchyData',
     async () => {
-      let company: string | null;
-      let employeeCount: number | null;
-
+      // RSC already has company/employeeCount from core — reuse to skip target Client read.
       if (preload) {
-        company = preload.company;
-        employeeCount = preload.employeeCount;
-      } else {
-        const client = await prisma.client.findUnique({
-          where: { id: clientId },
-          select: {
-            id: true,
-            company: true,
-            employeeCount: true,
-          },
-        });
-
-        if (!client) {
-          return null;
-        }
-
-        company = client.company;
-        employeeCount = client.employeeCount;
+        return listCompanyHierarchyColleagues(
+          clientId,
+          preload.company,
+          preload.employeeCount
+        );
       }
 
-      const colleagues = company?.trim()
-        ? await prisma.client.findMany({
-            where: {
-              company,
-              id: { not: clientId },
-            },
-            select: {
-              id: true,
-              name: true,
-              roleInCompany: true,
-              status: true,
-            },
-            orderBy: { name: 'asc' },
-          })
-        : [];
+      const payload = await loadCompanyHierarchyApiPayload(clientId);
+      if (!payload) {
+        return null;
+      }
 
-      return {
-        company,
-        employeeCount,
-        colleagues: colleagues.map((colleague) => ({
-          client_id: colleague.id,
-          name: colleague.name,
-          roleInCompany: colleague.roleInCompany,
-          status: colleague.status,
-        })),
-      };
+      const { client_id: _clientId, ...hierarchy } = payload;
+      return hierarchy;
     },
     (result) => ({
       clientId,
       found: result !== null,
-      colleagueCount: result?.colleagues.length ?? 0,
+      colleagueCount: result?.colleagueCount ?? 0,
+      colleaguesReturned: result?.colleagues.length ?? 0,
+      colleaguesHasMore: result?.colleaguesHasMore ?? false,
+      colleaguesLimit: CLIENT360_HIERARCHY_COLLEAGUES_LIMIT,
     })
   );
+}
+
+/**
+ * Shared hierarchy list when company/employeeCount are already known (RSC preload).
+ * Colleague findMany + count only — no target clientLookup.
+ */
+export async function listCompanyHierarchyColleagues(
+  clientId: string,
+  company: string | null,
+  employeeCount: number | null
+): Promise<Client360CompanyHierarchyData> {
+  const trimmedCompany = company?.trim() ?? null;
+  if (!trimmedCompany) {
+    return {
+      company,
+      employeeCount,
+      colleagues: [],
+      colleagueCount: 0,
+      colleaguesHasMore: false,
+    };
+  }
+
+  const where = {
+    company: trimmedCompany,
+    id: { not: clientId },
+  };
+
+  const [colleagues, colleagueCount] = await timeAsync(
+    'client360:hierarchy:query',
+    () =>
+      Promise.all([
+        prisma.client.findMany({
+          where,
+          select: {
+            id: true,
+            name: true,
+            roleInCompany: true,
+            status: true,
+          },
+          orderBy: { name: 'asc' },
+          take: CLIENT360_HIERARCHY_COLLEAGUES_LIMIT,
+        }),
+        prisma.client.count({ where }),
+      ])
+  );
+
+  return timeAsync('client360:hierarchy:map', async () => ({
+    company,
+    employeeCount,
+    colleagues: colleagues.map((colleague) => ({
+      client_id: colleague.id,
+      name: colleague.name,
+      roleInCompany: colleague.roleInCompany,
+      status: colleague.status,
+    })),
+    colleagueCount,
+    colleaguesHasMore: colleagueCount > colleagues.length,
+  }));
 }
 
 export type LoadClient360PageDataOptions = {

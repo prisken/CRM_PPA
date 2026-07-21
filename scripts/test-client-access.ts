@@ -20,11 +20,14 @@ import {
 } from '@prisma/client';
 import {
   canAccessClientHierarchy,
+  canAccessDealParticipantPicker,
   canReadClientCore,
+  canViewClientDeals,
   requireClientCoreReadAccess,
   requireClientEmployeeLeadCreateAccess,
   requireClientHierarchyAccess,
 } from '../lib/authHelpers';
+import { resolveClient360PageAccess } from '../lib/client360PageAccess';
 import { signAuthToken } from '../lib/jwt';
 import { prisma } from '../lib/prisma';
 import {
@@ -34,6 +37,9 @@ import {
   GET as getEmployees,
   POST as postEmployees,
 } from '../src/app/api/clients/[id]/employees/route';
+import { GET as getSourceRecords } from '../src/app/api/clients/[id]/source-records/route';
+import { GET as getDealDetail } from '../src/app/api/clients/[id]/deals/[dealId]/route';
+import { GET as getParticipantUsers } from '../src/app/api/clients/[id]/deals/participant-users/route';
 
 const RUN_ID = Date.now();
 const TEST_EMAIL_DOMAIN = 'example.test';
@@ -235,6 +241,101 @@ async function main() {
     'denied'
   );
 
+  // Phase 2I.2 light deal view / picker gates
+  record(
+    'canViewClientDeals (assigned RELATIONSHIP)',
+    await canViewClientDeals(assignedUser.id, assignedUser.role, client.id),
+    'allowed'
+  );
+  record(
+    'canViewClientDeals (DOCTOR participant)',
+    await canViewClientDeals(
+      participantOnly.id,
+      participantOnly.role,
+      client.id
+    ),
+    'allowed'
+  );
+  record(
+    'canViewClientDeals (outsider)',
+    !(await canViewClientDeals(outsider.id, outsider.role, client.id)),
+    'denied'
+  );
+  record(
+    'canAccessDealParticipantPicker (assigned)',
+    await canAccessDealParticipantPicker(
+      assignedUser.id,
+      assignedUser.role,
+      client.id
+    ),
+    'allowed'
+  );
+  record(
+    'canAccessDealParticipantPicker (outsider)',
+    !(await canAccessDealParticipantPicker(
+      outsider.id,
+      outsider.role,
+      client.id
+    )),
+    'denied'
+  );
+
+  // Phase 2K: RSC page access resolve-once
+  {
+    const adminPageAccess = await resolveClient360PageAccess(superAdmin, client.id);
+    record(
+      'resolveClient360PageAccess (SUPER_ADMIN)',
+      Boolean(adminPageAccess?.dealAccess.canView) &&
+        Boolean(adminPageAccess?.dealAccess.canManageAll) &&
+        (adminPageAccess?.dealAccess.manageableDealIds.length ?? -1) === 0 &&
+        Boolean(adminPageAccess?.strategyAccess.canManage) &&
+        Boolean(adminPageAccess?.canViewHierarchy),
+      adminPageAccess
+        ? `manageAll=${adminPageAccess.dealAccess.canManageAll} ids=${adminPageAccess.dealAccess.manageableDealIds.length}`
+        : 'null'
+    );
+
+    const assignedPageAccess = await resolveClient360PageAccess(
+      assignedUser,
+      client.id
+    );
+    record(
+      'resolveClient360PageAccess (assigned RELATIONSHIP)',
+      Boolean(assignedPageAccess?.dealAccess.canView) &&
+        Boolean(assignedPageAccess?.dealAccess.canCreate) &&
+        assignedPageAccess?.strategyAccess.canView === true &&
+        assignedPageAccess?.strategyAccess.canManage === false &&
+        Boolean(assignedPageAccess?.canViewHierarchy),
+      assignedPageAccess
+        ? `canCreate=${assignedPageAccess.dealAccess.canCreate} hierarchy=${assignedPageAccess.canViewHierarchy}`
+        : 'null'
+    );
+
+    const participantPageAccess = await resolveClient360PageAccess(
+      participantOnly,
+      client.id
+    );
+    record(
+      'resolveClient360PageAccess (DOCTOR participant)',
+      Boolean(participantPageAccess?.dealAccess.canView) &&
+        participantPageAccess?.canViewHierarchy === false &&
+        participantPageAccess?.strategyAccess.canManage === true,
+      participantPageAccess
+        ? `hierarchy=${participantPageAccess.canViewHierarchy} manageStrategy=${participantPageAccess.strategyAccess.canManage}`
+        : 'null'
+    );
+
+    const outsiderPageAccess = await resolveClient360PageAccess(
+      outsider,
+      client.id
+    );
+    record(
+      'resolveClient360PageAccess (outsider null)',
+      outsiderPageAccess === null,
+      outsiderPageAccess ? 'allowed unexpectedly' : 'null'
+    );
+  }
+
   record(
     'canAccessClientHierarchy (outsider denied)',
     !(await canAccessClientHierarchy(outsider.id, outsider.role, client.id)),
@@ -339,6 +440,165 @@ async function main() {
     outsiderGet.status === 403,
     `status ${outsiderGet.status}`
   );
+
+  // Phase 2I.1: source-records 403-first; conditional clientLookup for admin empty miss
+  {
+    const missingClientId = `missing-client-sources-${RUN_ID}`;
+    const outsiderSources = await getSourceRecords(
+      await authRequest(
+        `/api/clients/${client.id}/source-records`,
+        await signAuthToken(outsider)
+      ),
+      { params }
+    );
+    record(
+      'GET /source-records (outsider existing client 403)',
+      outsiderSources.status === 403,
+      `status ${outsiderSources.status}`
+    );
+
+    const outsiderSourcesMissing = await getSourceRecords(
+      await authRequest(
+        `/api/clients/${missingClientId}/source-records`,
+        await signAuthToken(outsider)
+      ),
+      { params: Promise.resolve({ id: missingClientId }) }
+    );
+    record(
+      'GET /source-records (outsider missing client 403)',
+      outsiderSourcesMissing.status === 403,
+      `status ${outsiderSourcesMissing.status}`
+    );
+
+    const adminSourcesMissing = await getSourceRecords(
+      await authRequest(
+        `/api/clients/${missingClientId}/source-records`,
+        await signAuthToken(superAdmin)
+      ),
+      { params: Promise.resolve({ id: missingClientId }) }
+    );
+    const adminSourcesBody = (await adminSourcesMissing.json()) as {
+      error?: string;
+    };
+    record(
+      'GET /source-records (SUPER_ADMIN missing client 404)',
+      adminSourcesMissing.status === 404 &&
+        adminSourcesBody.error === 'Client not found',
+      `status ${adminSourcesMissing.status} error=${adminSourcesBody.error ?? ''}`
+    );
+
+    const assignedSources = await getSourceRecords(
+      await authRequest(
+        `/api/clients/${client.id}/source-records`,
+        await signAuthToken(assignedUser)
+      ),
+      { params }
+    );
+    const assignedSourcesBody = (await assignedSources.json()) as {
+      sourceRecords?: unknown[];
+    };
+    record(
+      'GET /source-records (assigned empty 200)',
+      assignedSources.status === 200 &&
+        Array.isArray(assignedSourcesBody.sourceRecords),
+      `status ${assignedSources.status} count=${assignedSourcesBody.sourceRecords?.length ?? 'n/a'}`
+    );
+  }
+
+  // Phase 2I.2: deal detail + participant-users light gates (403-first)
+  {
+    const dealParams = Promise.resolve({ id: client.id, dealId: deal.id });
+    const missingClientId = `missing-client-deals-${RUN_ID}`;
+    const missingDealParams = Promise.resolve({
+      id: missingClientId,
+      dealId: `missing-deal-${RUN_ID}`,
+    });
+
+    const outsiderDetail = await getDealDetail(
+      await authRequest(
+        `/api/clients/${client.id}/deals/${deal.id}`,
+        await signAuthToken(outsider)
+      ),
+      { params: dealParams }
+    );
+    record(
+      'GET /deals/[dealId] (outsider existing 403)',
+      outsiderDetail.status === 403,
+      `status ${outsiderDetail.status}`
+    );
+
+    const outsiderDetailMissing = await getDealDetail(
+      await authRequest(
+        `/api/clients/${missingClientId}/deals/missing-deal-${RUN_ID}`,
+        await signAuthToken(outsider)
+      ),
+      { params: missingDealParams }
+    );
+    record(
+      'GET /deals/[dealId] (outsider missing client 403)',
+      outsiderDetailMissing.status === 403,
+      `status ${outsiderDetailMissing.status}`
+    );
+
+    const adminDetailMissing = await getDealDetail(
+      await authRequest(
+        `/api/clients/${missingClientId}/deals/missing-deal-${RUN_ID}`,
+        await signAuthToken(superAdmin)
+      ),
+      { params: missingDealParams }
+    );
+    const adminDetailMissingBody = (await adminDetailMissing.json()) as {
+      error?: string;
+    };
+    record(
+      'GET /deals/[dealId] (SUPER_ADMIN missing client 404)',
+      adminDetailMissing.status === 404 &&
+        adminDetailMissingBody.error === 'Client not found',
+      `status ${adminDetailMissing.status} error=${adminDetailMissingBody.error ?? ''}`
+    );
+
+    const assignedDetail = await getDealDetail(
+      await authRequest(
+        `/api/clients/${client.id}/deals/${deal.id}`,
+        await signAuthToken(assignedUser)
+      ),
+      { params: dealParams }
+    );
+    record(
+      'GET /deals/[dealId] (assigned 200)',
+      assignedDetail.status === 200,
+      `status ${assignedDetail.status}`
+    );
+
+    const outsiderPicker = await getParticipantUsers(
+      await authRequest(
+        `/api/clients/${client.id}/deals/participant-users`,
+        await signAuthToken(outsider)
+      ),
+      { params }
+    );
+    record(
+      'GET /participant-users (outsider 403)',
+      outsiderPicker.status === 403,
+      `status ${outsiderPicker.status}`
+    );
+
+    const assignedPicker = await getParticipantUsers(
+      await authRequest(
+        `/api/clients/${client.id}/deals/participant-users`,
+        await signAuthToken(assignedUser)
+      ),
+      { params }
+    );
+    const assignedPickerBody = (await assignedPicker.json()) as {
+      users?: unknown[];
+    };
+    record(
+      'GET /participant-users (assigned 200)',
+      assignedPicker.status === 200 && Array.isArray(assignedPickerBody.users),
+      `status ${assignedPicker.status} users=${assignedPickerBody.users?.length ?? 'n/a'}`
+    );
+  }
 
   const outsiderEmployeesGet = await getEmployees(
     await authRequest(

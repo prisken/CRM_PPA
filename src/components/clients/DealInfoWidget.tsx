@@ -1,8 +1,8 @@
 'use client';
 
 import { DealParticipantRole } from '@prisma/client';
+import dynamic from 'next/dynamic';
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
-import DealEditModal from '@/components/clients/DealEditModal';
 import type {
   AssignedUser,
   CurrentUserInfo,
@@ -24,6 +24,11 @@ import {
 } from '@/lib/dealParticipantCalculations';
 import { authenticatedFetch } from '@/lib/authenticatedFetch';
 import { formatMoneyRequired } from '@/lib/formatMoney';
+
+const DealEditModal = dynamic(
+  () => import('@/components/clients/DealEditModal'),
+  { ssr: false }
+);
 
 const DEAL_MONEY_OPTIONS = {
   maximumFractionDigits: 0,

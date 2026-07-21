@@ -163,6 +163,11 @@ export const dealResponseSelect = {
   },
 } as const;
 
+/**
+ * Intentionally narrow Client 360 deals list select (Phase 2G).
+ * Omits participant notes; edit modal loads {@link dealResponseSelect}.
+ * Includes commission/returnable fields the DealInfoWidget list renders.
+ */
 export const dealListResponseSelect = {
   id: true,
   name: true,

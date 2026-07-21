@@ -6,6 +6,10 @@ import { useClient360RefreshOptional } from '@/components/clients/client360Refre
 import SectionCard from '@/components/ui/SectionCard';
 import { useDisplayDensity } from '@/components/ui/DisplayDensityProvider';
 import { getTightStackSpacingClass } from '@/components/ui/displayDensity';
+import {
+  applySourceRecordsCollapsedChange,
+  shouldFetchClient360SourceRecords,
+} from '@/lib/client360LoadGuards';
 import { authenticatedFetch } from '@/lib/authenticatedFetch';
 
 type SourceRecord = {
@@ -57,13 +61,19 @@ function formatPayload(payload: unknown) {
   }
 }
 
+/**
+ * Phase 2L/2M: defaultCollapsed card — defer GET /source-records until first expand
+ * (and on later sourceRecords slice refreshes after expand).
+ * Policy: {@link shouldFetchClient360SourceRecords} / {@link applySourceRecordsCollapsedChange}.
+ */
 export default memo(function ClientSourceRecordsWidget({
   clientId,
 }: ClientSourceRecordsWidgetProps) {
   const { density } = useDisplayDensity();
   const recordListSpacingClass = getTightStackSpacingClass(density);
   const [records, setRecords] = useState<SourceRecord[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [hasExpanded, setHasExpanded] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showAllRecords, setShowAllRecords] = useState(false);
   const client360Refresh = useClient360RefreshOptional();
@@ -71,6 +81,10 @@ export default memo(function ClientSourceRecordsWidget({
     client360Refresh?.sliceKeys.sourceRecords ?? 0;
 
   useEffect(() => {
+    if (!shouldFetchClient360SourceRecords({ hasExpanded })) {
+      return;
+    }
+
     let cancelled = false;
 
     async function loadSourceRecords() {
@@ -115,7 +129,7 @@ export default memo(function ClientSourceRecordsWidget({
     return () => {
       cancelled = true;
     };
-  }, [clientId, sourceRecordsSliceKey]);
+  }, [clientId, hasExpanded, sourceRecordsSliceKey]);
 
   const uniqueSourceLabels = useMemo(
     () => [...new Set(records.map((record) => formatSourceLabel(record.source)))],
@@ -135,6 +149,10 @@ export default memo(function ClientSourceRecordsWidget({
   }, [records]);
 
   const collapsedSummary = useMemo(() => {
+    if (!hasExpanded) {
+      return 'Expand to view external ingest history.';
+    }
+
     if (isLoading) {
       return 'Loading source records…';
     }
@@ -157,7 +175,14 @@ export default memo(function ClientSourceRecordsWidget({
         )}
       </div>
     );
-  }, [error, isLoading, latestReceivedAt, records.length, uniqueSourceLabels]);
+  }, [
+    error,
+    hasExpanded,
+    isLoading,
+    latestReceivedAt,
+    records.length,
+    uniqueSourceLabels,
+  ]);
 
   const visibleRecords = showAllRecords ? records : records.slice(0, 3);
   const hiddenRecordCount = Math.max(records.length - visibleRecords.length, 0);
@@ -168,6 +193,14 @@ export default memo(function ClientSourceRecordsWidget({
       description={collapsedSummary}
       collapsible
       defaultCollapsed
+      onCollapsedChange={(collapsed) => {
+        setHasExpanded((current) =>
+          applySourceRecordsCollapsedChange({
+            collapsed,
+            hasExpanded: current,
+          }).hasExpanded
+        );
+      }}
       className="shadow-sm"
     >
       {isLoading ? (

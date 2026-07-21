@@ -10,6 +10,7 @@ import {
   normalizePhone,
 } from '@/lib/leadNormalization';
 import { buildContactSearchOr } from '@/lib/clientContacts';
+import { timeAsync } from '@/lib/performance';
 import { prisma } from '@/lib/prisma';
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
@@ -79,6 +80,8 @@ export type LeadCommandCenterPreview = LeadCommandCenterRow & {
   employeeCount: number | null;
   expectations: string | null;
   sources: LeadCommandCenterSource[];
+  /** True when `sources` is truncated vs `sourceRecordCount`. */
+  sourcesHasMore: boolean;
   firstSourceLabel: string | null;
   latestSourceLabel: string | null;
   lastActivityAt: string | null;
@@ -88,6 +91,9 @@ export type LeadCommandCenterPreview = LeadCommandCenterRow & {
 
 /** How many recent source rows to sample for inbox badges (full history is preview-only). */
 const INBOX_SOURCE_SAMPLE_LIMIT = 8;
+
+/** Cap source history rows on LCC preview (total remains in `sourceRecordCount`). */
+export const PREVIEW_SOURCE_RECORD_LIMIT = 20;
 
 export type LeadCommandCenterFilters = {
   search?: string;
@@ -265,7 +271,7 @@ export const leadCommandCenterInboxSelect = {
   },
 } satisfies Prisma.ClientSelect;
 
-/** Preview / search detail query — full source history + tags + profile fields. */
+/** Preview drawer select — capped recent sources + tags + profile fields. */
 export const leadCommandCenterPreviewSelect = {
   id: true,
   name: true,
@@ -285,12 +291,28 @@ export const leadCommandCenterPreviewSelect = {
   clientAssignments: {
     select: leadCommandCenterAssignmentSelect,
   },
+  // Loaded with the base row so preview skips a second contacts round-trip.
+  contacts: {
+    where: {
+      kind: { in: [ClientContactKind.EMAIL, ClientContactKind.PHONE] },
+    },
+    select: {
+      kind: true,
+      normalizedValue: true,
+    },
+  },
   sourceRecords: {
     orderBy: { receivedAt: 'desc' as const },
+    take: PREVIEW_SOURCE_RECORD_LIMIT,
     select: {
       source: true,
       externalId: true,
       receivedAt: true,
+    },
+  },
+  _count: {
+    select: {
+      sourceRecords: true,
     },
   },
   tags: {
@@ -528,6 +550,103 @@ async function loadDuplicateClientIdsForCandidates(
   }
 
   return finalizeDuplicateSets(emailGroups, phoneGroups);
+}
+
+/**
+ * Preview-only duplicate flags for a single client.
+ * Same semantics as {@link loadDuplicateClientIdsForCandidates} for warnings on
+ * this clientId, but uses peer `findFirst` existence checks instead of loading
+ * full peer row sets (inbox batch path keeps the candidate peer lookup).
+ */
+async function loadDuplicateFlagsForPreviewCandidate(
+  candidate: DuplicateCandidate
+): Promise<DuplicateClientIds> {
+  const emailKeys = new Set<string>();
+  const phoneKeys = new Set<string>();
+  const rawPhones = new Set<string>();
+
+  const normalizedEmail = normalizeEmail(candidate.email);
+  if (normalizedEmail) {
+    emailKeys.add(normalizedEmail);
+  }
+
+  const normalizedPhone = normalizePhone(candidate.phone);
+  if (normalizedPhone) {
+    phoneKeys.add(normalizedPhone);
+  }
+
+  if (candidate.phone?.trim()) {
+    rawPhones.add(candidate.phone.trim());
+  }
+
+  for (const contact of candidate.contacts ?? []) {
+    if (!contact.normalizedValue) {
+      continue;
+    }
+    if (contact.kind === ClientContactKind.EMAIL) {
+      emailKeys.add(contact.normalizedValue);
+    } else if (contact.kind === ClientContactKind.PHONE) {
+      phoneKeys.add(contact.normalizedValue);
+    }
+  }
+
+  const emailKeyList = [...emailKeys].slice(0, MAX_DUP_KEYS_PER_KIND);
+  const phoneKeyList = [...phoneKeys].slice(0, MAX_DUP_KEYS_PER_KIND);
+  const rawPhoneList = [...rawPhones].slice(0, MAX_DUP_KEYS_PER_KIND);
+
+  const [emailContactPeer, phoneContactPeer, emailScalarPeer, phoneScalarPeer] =
+    await Promise.all([
+      emailKeyList.length === 0
+        ? Promise.resolve(null)
+        : prisma.clientContact.findFirst({
+            where: {
+              clientId: { not: candidate.id },
+              kind: ClientContactKind.EMAIL,
+              normalizedValue: { in: emailKeyList },
+            },
+            select: { id: true },
+          }),
+      phoneKeyList.length === 0
+        ? Promise.resolve(null)
+        : prisma.clientContact.findFirst({
+            where: {
+              clientId: { not: candidate.id },
+              kind: ClientContactKind.PHONE,
+              normalizedValue: { in: phoneKeyList },
+            },
+            select: { id: true },
+          }),
+      emailKeyList.length === 0
+        ? Promise.resolve(null)
+        : prisma.client.findFirst({
+            where: {
+              id: { not: candidate.id },
+              email: { in: emailKeyList, mode: 'insensitive' },
+            },
+            select: { id: true },
+          }),
+      rawPhoneList.length === 0
+        ? Promise.resolve(null)
+        : prisma.client.findFirst({
+            where: {
+              id: { not: candidate.id },
+              phone: { in: rawPhoneList },
+            },
+            select: { id: true },
+          }),
+    ]);
+
+  const emailDuplicates = new Set<string>();
+  const phoneDuplicates = new Set<string>();
+
+  if (emailContactPeer || emailScalarPeer) {
+    emailDuplicates.add(candidate.id);
+  }
+  if (phoneContactPeer || phoneScalarPeer) {
+    phoneDuplicates.add(candidate.id);
+  }
+
+  return { emailDuplicates, phoneDuplicates };
 }
 
 async function loadContactsForClientIds(
@@ -1211,16 +1330,21 @@ function mapInboxClientToRow(
   };
 }
 
-function mapPreviewClientToDetail(
+async function mapPreviewClientToDetail(
   client: PreviewClientWithRelations,
   duplicateClientIds: DuplicateClientIds,
   latestActivity: LatestActivityRow | undefined
-): LeadCommandCenterPreview {
+): Promise<LeadCommandCenterPreview> {
   const assignedUsers = mapAssignedUsers(client.clientAssignments);
 
-  const sourcePresentation = buildSourcePresentation(
-    client.sourceRecords,
-    client.leadSource
+  const sourcePresentation = await timeAsync(
+    'leadCommandCenter:preview:sources',
+    async () =>
+      buildSourcePresentation(
+        client.sourceRecords,
+        client.leadSource,
+        client._count.sourceRecords
+      )
   );
 
   const dataQualityWarnings = buildDataQualityWarnings({
@@ -1267,6 +1391,8 @@ function mapPreviewClientToDetail(
     lastModified: client.lastModified.toISOString(),
     assignedUsers,
     sources: sourcePresentation.sources,
+    sourcesHasMore:
+      sourcePresentation.sourceRecordCount > sourcePresentation.sources.length,
     sourceLabels: sourcePresentation.sourceLabels,
     firstSourceLabel: sourcePresentation.firstSourceLabel,
     latestSourceLabel: sourcePresentation.latestSourceLabel,
@@ -1482,29 +1608,62 @@ export async function fetchLeadCommandCenterPreview(
     return null;
   }
 
-  const [client, latestActivity] = await Promise.all([
-    prisma.client.findUnique({
-      where: { id: trimmedId },
-      select: leadCommandCenterPreviewSelect,
-    }),
-    loadLatestActivityForClient(trimmedId),
-  ]);
+  return timeAsync(
+    'leadCommandCenter:preview',
+    async () => {
+      const [client, latestActivity] = await Promise.all([
+        timeAsync(
+          'leadCommandCenter:preview:baseQuery',
+          () =>
+            prisma.client.findUnique({
+              where: { id: trimmedId },
+              select: leadCommandCenterPreviewSelect,
+            }),
+          (row) => ({
+            sourceRowsReturned: row?.sourceRecords.length ?? 0,
+            sourceRecordCount: row?._count.sourceRecords ?? 0,
+            contactRows: row?.contacts.length ?? 0,
+          })
+        ),
+        timeAsync('leadCommandCenter:preview:activity', () =>
+          loadLatestActivityForClient(trimmedId)
+        ),
+      ]);
 
-  if (!client) {
-    return null;
-  }
+      if (!client) {
+        return null;
+      }
 
-  const contactsByClientId = await loadContactsForClientIds([client.id]);
-  const duplicateClientIds = await loadDuplicateClientIdsForCandidates([
-    {
-      id: client.id,
-      email: client.email,
-      phone: client.phone,
-      contacts: contactsByClientId.get(client.id) ?? [],
+      // Contacts already on the base row — keep the substep for timing continuity.
+      const contacts = await timeAsync(
+        'leadCommandCenter:preview:contacts',
+        async () =>
+          client.contacts.map((contact) => ({
+            kind: contact.kind,
+            normalizedValue: contact.normalizedValue,
+          }))
+      );
+
+      const duplicateClientIds = await timeAsync(
+        'leadCommandCenter:preview:duplicates',
+        () =>
+          loadDuplicateFlagsForPreviewCandidate({
+            id: client.id,
+            email: client.email,
+            phone: client.phone,
+            contacts,
+          })
+      );
+
+      return timeAsync('leadCommandCenter:preview:map', async () =>
+        mapPreviewClientToDetail(client, duplicateClientIds, latestActivity)
+      );
     },
-  ]);
-
-  return mapPreviewClientToDetail(client, duplicateClientIds, latestActivity);
+    (result) => ({
+      clientId: trimmedId,
+      found: result !== null,
+    })
+  );
 }
 
 const SEARCH_CANDIDATE_LIMIT = 40;

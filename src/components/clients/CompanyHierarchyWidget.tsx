@@ -31,7 +31,30 @@ function parseHierarchyPayload(
       roleInCompany?: string | null;
       status?: string;
     }>;
+    colleagueCount?: number;
+    colleaguesHasMore?: boolean;
   };
+
+  const colleagues = Array.isArray(data.colleagues)
+    ? data.colleagues
+        .filter(
+          (colleague) =>
+            typeof colleague.client_id === 'string' &&
+            typeof colleague.name === 'string' &&
+            typeof colleague.status === 'string'
+        )
+        .map((colleague) => ({
+          client_id: colleague.client_id as string,
+          name: colleague.name as string,
+          roleInCompany: colleague.roleInCompany ?? null,
+          status: colleague.status as string,
+        }))
+    : fallback.colleagues;
+
+  const colleagueCount =
+    typeof data.colleagueCount === 'number'
+      ? data.colleagueCount
+      : colleagues.length;
 
   return {
     company: data.company ?? fallback.company,
@@ -39,21 +62,12 @@ function parseHierarchyPayload(
       data.employeeCount !== undefined
         ? data.employeeCount
         : fallback.employeeCount,
-    colleagues: Array.isArray(data.colleagues)
-      ? data.colleagues
-          .filter(
-            (colleague) =>
-              typeof colleague.client_id === 'string' &&
-              typeof colleague.name === 'string' &&
-              typeof colleague.status === 'string'
-          )
-          .map((colleague) => ({
-            client_id: colleague.client_id as string,
-            name: colleague.name as string,
-            roleInCompany: colleague.roleInCompany ?? null,
-            status: colleague.status as string,
-          }))
-      : fallback.colleagues,
+    colleagues,
+    colleagueCount,
+    colleaguesHasMore:
+      typeof data.colleaguesHasMore === 'boolean'
+        ? data.colleaguesHasMore
+        : colleagueCount > colleagues.length,
   };
 }
 
@@ -99,14 +113,15 @@ export default memo(function CompanyHierarchyWidget({
       return `${companyLabel} · No colleagues yet`;
     }
 
-    return `${companyLabel} · ${hierarchyState.colleagues.length} colleague${
-      hierarchyState.colleagues.length === 1 ? '' : 's'
-    }`;
+    return `${companyLabel} · ${hierarchyState.colleagueCount} colleague${
+      hierarchyState.colleagueCount === 1 ? '' : 's'
+    }${hierarchyState.colleaguesHasMore ? ' (showing first page)' : ''}`;
   }, [
     companyLabel,
     hasColleagues,
     hierarchyState.company,
-    hierarchyState.colleagues.length,
+    hierarchyState.colleagueCount,
+    hierarchyState.colleaguesHasMore,
   ]);
 
   async function refreshHierarchy() {

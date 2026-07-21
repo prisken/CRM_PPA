@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/prisma';
+import { timeAsync } from '@/lib/performance';
 import {
   dealListResponseSelect,
   dealResponseSelect,
@@ -68,13 +69,18 @@ export async function resolveClientTotalCommission(
 export async function listClientDealsForClient360(
   clientId: string
 ): Promise<DealListItem[]> {
-  const deals = await prisma.deal.findMany({
-    where: { clientId },
-    orderBy: { createdAt: 'asc' },
-    select: dealListResponseSelect,
-  });
+  // Intentionally narrow: dealListResponseSelect (no notes; edit loads full detail).
+  const deals = await timeAsync('client360:deals:query', () =>
+    prisma.deal.findMany({
+      where: { clientId },
+      orderBy: { createdAt: 'asc' },
+      select: dealListResponseSelect,
+    })
+  );
 
-  return deals.map(formatDealListItem);
+  return timeAsync('client360:deals:map', async () =>
+    deals.map(formatDealListItem)
+  );
 }
 
 /** Full deal detail for edit modal / mutations. */

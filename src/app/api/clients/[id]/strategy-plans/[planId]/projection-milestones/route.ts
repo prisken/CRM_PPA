@@ -1,9 +1,7 @@
 import { NextResponse } from 'next/server';
+import { resolveClient360Context } from '@/lib/client360RequestContext';
 import { logClientStrategyEvent } from '@/lib/clientStrategyActivity';
-import {
-  requireStrategyManageAccess,
-  requireStrategyViewAccess,
-} from '@/lib/clientStrategyPermissions';
+import { requireStrategyManageAccess } from '@/lib/clientStrategyPermissions';
 import {
   assertMilestoneSourceExpensesBelongToPlan,
   assertMilestoneSourceStepsBelongToPlan,
@@ -15,12 +13,15 @@ import {
   strategyProjectionMilestoneDetailSelect,
 } from '@/lib/clientStrategyPlans';
 import { createStrategyProjectionMilestoneSchema } from '@/lib/clientStrategyValidation';
+import { timeAsync } from '@/lib/performance';
 import { prisma } from '@/lib/prisma';
 
 export const dynamic = 'force-dynamic';
 
 /**
  * GET — list projection milestones for a plan.
+ * Phase 3A: resolveClient360Context (`strategy:view`) + PERF labels; same ACL
+ * as requireStrategyViewAccess.
  * POST — create a milestone (manual only; no auto-generation or helper overwrite).
  */
 export async function GET(
@@ -28,28 +29,45 @@ export async function GET(
   { params }: { params: Promise<{ id: string; planId: string }> }
 ) {
   const { id: clientId, planId } = await params;
-  const auth = await requireStrategyViewAccess(clientId, request);
-  if (auth.error) {
-    return auth.error;
+
+  const resolved = await resolveClient360Context({
+    clientId,
+    request,
+    capability: 'strategy:view',
+    perfPrefix: 'client360:projectionMilestones',
+  });
+  if (!resolved.ok) {
+    return resolved.error;
   }
 
-  const planCheck = await getStrategyPlanForClient(clientId, planId);
+  const planCheck = await timeAsync(
+    'client360:projectionMilestones:planLookup',
+    () => getStrategyPlanForClient(clientId, planId)
+  );
   if (planCheck.error) {
     return planCheck.error;
   }
 
-  const projectionMilestones =
-    await prisma.clientStrategyProjectionMilestone.findMany({
-      where: { strategyPlanId: planId },
-      orderBy: [{ sortOrder: 'asc' }, { year: 'asc' }, { createdAt: 'asc' }],
-      select: strategyProjectionMilestoneDetailSelect,
-    });
+  const projectionMilestones = await timeAsync(
+    'client360:projectionMilestones:query',
+    () =>
+      prisma.clientStrategyProjectionMilestone.findMany({
+        where: { strategyPlanId: planId },
+        orderBy: [{ sortOrder: 'asc' }, { year: 'asc' }, { createdAt: 'asc' }],
+        select: strategyProjectionMilestoneDetailSelect,
+      })
+  );
 
-  return NextResponse.json({
-    projectionMilestones: projectionMilestones.map(
-      formatStrategyProjectionMilestone
-    ),
-  });
+  const body = await timeAsync(
+    'client360:projectionMilestones:map',
+    async () => ({
+      projectionMilestones: projectionMilestones.map(
+        formatStrategyProjectionMilestone
+      ),
+    })
+  );
+
+  return NextResponse.json(body);
 }
 
 export async function POST(

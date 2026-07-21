@@ -2,13 +2,15 @@ import {
   AssignmentRole,
   DealStatus,
   DealType,
+  UserRole,
 } from '@prisma/client';
 import { NextResponse } from 'next/server';
 import {
+  canViewClientDeals,
   getClientOr404,
+  getAuthenticatedUserFromRequest,
   logClientSystemEvent,
   requireDealCreateAccess,
-  requireDealViewAccess,
 } from '@/lib/authHelpers';
 import {
   createCommissionReturnablesForWonDeal,
@@ -26,7 +28,7 @@ import {
   toParticipantCreateInput,
   type NormalizedDealParticipant,
 } from '@/lib/dealParticipants';
-import { timeRouteHandler } from '@/lib/performance';
+import { timeAsync, timeRouteHandler } from '@/lib/performance';
 import { prisma } from '@/lib/prisma';
 
 async function resolveDealParticipants({
@@ -86,34 +88,68 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id: clientId } = await params;
-  const auth = await requireDealViewAccess(clientId, request);
+
+  const auth = await timeAsync('client360:deals:auth', () =>
+    getAuthenticatedUserFromRequest(request)
+  );
   if (auth.error) {
     return auth.error;
   }
 
-  const clientCheck = await getClientOr404(clientId);
-  if (clientCheck.error) {
-    return clientCheck.error;
+  // Phase 2G: list view only needs canView — avoid getDealAccessForClient's
+  // SUPER_ADMIN findMany of all deal ids (manageableDealIds unused on this route).
+  const canView = await timeAsync('client360:deals:access', () =>
+    canViewClientDeals(auth.user.id, auth.user.role, clientId)
+  );
+  if (!canView) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
   const payload = await timeRouteHandler(
     `GET /api/clients/${clientId}/deals`,
     async () => {
-      const deals = await listClientDealsForClient360(clientId);
+      return timeAsync(
+        'client360:deals',
+        async () => {
+          const deals = await listClientDealsForClient360(clientId);
 
-      return {
-        client_id: clientId,
-        deals,
-      };
+          // Existence check only when the list is empty and access did not prove the
+          // client exists (SUPER_ADMIN bypass). Assigned/participant canView implies
+          // a live client row — skip the extra Client round-trip.
+          if (deals.length === 0 && auth.user.role === UserRole.SUPER_ADMIN) {
+            const clientCheck = await timeAsync(
+              'client360:deals:clientLookup',
+              () => getClientOr404(clientId)
+            );
+            if (clientCheck.error) {
+              return null;
+            }
+          }
+
+          return {
+            client_id: clientId,
+            deals,
+          };
+        },
+        (result) => ({
+          found: result !== null,
+          dealCount: result?.deals.length ?? 0,
+        })
+      );
     },
     {
       payloadCategory: 'deals',
       getMeta: (result) => ({
-        dealCount: result.deals.length,
+        found: result !== null,
+        dealCount: result?.deals.length ?? 0,
         dealListView: 'summary',
       }),
     }
   );
+
+  if (!payload) {
+    return NextResponse.json({ error: 'Client not found' }, { status: 404 });
+  }
 
   return NextResponse.json(payload);
 }

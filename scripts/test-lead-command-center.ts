@@ -118,6 +118,7 @@ async function main() {
       clientId: preview.clientId,
       sourceRecordCount: preview.sourceRecordCount,
       sourcesReturned: preview.sources.length,
+      sourcesHasMore: preview.sourcesHasMore,
       tagsReturned: preview.tags.length,
       lastActivitySummary: preview.lastActivitySummary,
       roleInCompany: preview.roleInCompany,
@@ -126,6 +127,21 @@ async function main() {
 
     if (!Array.isArray(preview.duplicateWarnings)) {
       throw new Error('Preview missing duplicateWarnings array');
+    }
+    if (typeof preview.sourcesHasMore !== 'boolean') {
+      throw new Error('Preview missing sourcesHasMore boolean');
+    }
+    if (preview.sources.length > 20) {
+      throw new Error(
+        `Preview returned ${preview.sources.length} sources (cap is 20)`
+      );
+    }
+    const expectedHasMore =
+      preview.sourceRecordCount > preview.sources.length;
+    if (preview.sourcesHasMore !== expectedHasMore) {
+      throw new Error(
+        `sourcesHasMore=${preview.sourcesHasMore} inconsistent with count=${preview.sourceRecordCount} returned=${preview.sources.length}`
+      );
     }
   }
 

@@ -310,6 +310,7 @@ export async function listImportantDatesForClient(
 /**
  * List for API routes — includes Lead vs Client classification for calendar later.
  * ownerId is always a Client.id (leads share the Client model).
+ * Returns `null` when the owner Client row is missing (caller maps to 404 after access).
  */
 export async function listImportantDatesForOwner(
   ownerId: string,
@@ -318,7 +319,7 @@ export async function listImportantDatesForOwner(
   importantDates: ImportantDateRecordLike[];
   recordType: 'Lead' | 'Client';
   dtos: ImportantDateDto[];
-}> {
+} | null> {
   const [records, client] = await Promise.all([
     db.clientImportantDate.findMany({
       where: { clientId: ownerId },
@@ -331,9 +332,12 @@ export async function listImportantDatesForOwner(
     }),
   ]);
 
-  const recordType = classifyImportantDateRecordType(
-    client?.status ?? 'NEW_LEAD'
-  );
+  // Existence comes from this Client read — callers should not also run getClientOr404.
+  if (!client) {
+    return null;
+  }
+
+  const recordType = classifyImportantDateRecordType(client.status);
 
   if (records.length > 0) {
     return {
@@ -343,7 +347,7 @@ export async function listImportantDatesForOwner(
     };
   }
 
-  const dtos = normalizeLegacyImportantDatesJson(client?.importantDates ?? null);
+  const dtos = normalizeLegacyImportantDatesJson(client.importantDates ?? null);
   return {
     importantDates: [],
     recordType,

@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { requireSuperAdminFromRequest } from '@/lib/authHelpers';
 import { fetchLeadCommandCenterPreview } from '@/lib/leadCommandCenter';
-import { timeRouteHandler } from '@/lib/performance';
+import { timeAsync, timeRouteHandler } from '@/lib/performance';
 
 export const dynamic = 'force-dynamic';
 
@@ -9,7 +9,9 @@ export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const auth = await requireSuperAdminFromRequest(request);
+  const auth = await timeAsync('leadCommandCenter:preview:auth', () =>
+    requireSuperAdminFromRequest(request)
+  );
   if (auth.error) {
     return auth.error;
   }

@@ -1,15 +1,15 @@
-import { DealStatus } from '@prisma/client';
+import { DealStatus, UserRole } from '@prisma/client';
 import { NextResponse } from 'next/server';
 import {
+  canViewClientDeals,
+  getAuthenticatedUserFromRequest,
   getClientOr404,
   logClientSystemEvent,
   requireDealManageAccess,
-  requireDealViewAccess,
 } from '@/lib/authHelpers';
 import {
   createCommissionReturnablesForWonDeal,
 } from '@/lib/commissionReturnables';
-import { getClientDealDetail } from '@/lib/clientDeals';
 import { calculateParticipantAmount } from '@/lib/dealCommissionTemplates';
 import {
   dealResponseSelect,
@@ -22,7 +22,7 @@ import {
   toParticipantCreateInput,
   type NormalizedDealParticipant,
 } from '@/lib/dealParticipants';
-import { timeRouteHandler } from '@/lib/performance';
+import { timeAsync, timeRouteHandler } from '@/lib/performance';
 import { prisma } from '@/lib/prisma';
 
 async function getDealForClient(clientId: string, dealId: string) {
@@ -50,39 +50,86 @@ export async function GET(
   { params }: { params: Promise<{ id: string; dealId: string }> }
 ) {
   const { id: clientId, dealId } = await params;
-  const auth = await requireDealViewAccess(clientId, request);
+
+  const auth = await timeAsync('client360:dealDetail:auth', () =>
+    getAuthenticatedUserFromRequest(request)
+  );
   if (auth.error) {
     return auth.error;
   }
 
-  const clientCheck = await getClientOr404(clientId);
-  if (clientCheck.error) {
-    return clientCheck.error;
+  // Phase 2I.2: client-level view gate — do not enumerate all deal ids for SUPER_ADMIN.
+  const canView = await timeAsync('client360:dealDetail:access', () =>
+    canViewClientDeals(auth.user.id, auth.user.role, clientId)
+  );
+  if (!canView) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
-  const payload = await timeRouteHandler(
+  const outcome = await timeRouteHandler(
     `GET /api/clients/${clientId}/deals/${dealId}`,
     async () => {
-      const deal = await getClientDealDetail(clientId, dealId);
-      if (!deal) {
-        return { error: 'not_found' as const };
-      }
-      return { client_id: clientId, deal };
+      return timeAsync(
+        'client360:dealDetail',
+        async () => {
+          const row = await timeAsync('client360:dealDetail:query', () =>
+            prisma.deal.findFirst({
+              where: { id: dealId, clientId },
+              select: dealResponseSelect,
+            })
+          );
+
+          if (!row) {
+            // Preserve Client vs Deal 404 messages for admin; assigned viewers
+            // already proved a live client via access.
+            if (auth.user.role === UserRole.SUPER_ADMIN) {
+              const clientCheck = await timeAsync(
+                'client360:dealDetail:clientLookup',
+                () => getClientOr404(clientId)
+              );
+              if (clientCheck.error) {
+                return { kind: 'client_missing' as const };
+              }
+            }
+            return { kind: 'deal_missing' as const };
+          }
+
+          const deal = await timeAsync('client360:dealDetail:map', async () =>
+            formatDealResponse(row)
+          );
+
+          return {
+            kind: 'ok' as const,
+            body: { client_id: clientId, deal },
+          };
+        },
+        (result) => ({
+          found: result.kind === 'ok',
+          dealDetail: true,
+        })
+      );
     },
     {
-      payloadCategory: 'deals',
+      // Measure success body size only; miss paths skip payloadCategory warn noise.
+      payloadCategory: undefined,
       getMeta: (result) => ({
         dealDetail: true,
-        found: !('error' in result),
+        found: result.kind === 'ok',
+        ...(result.kind === 'ok'
+          ? { payloadBytes: Buffer.byteLength(JSON.stringify(result.body)) }
+          : {}),
       }),
     }
   );
 
-  if ('error' in payload) {
+  if (outcome.kind === 'client_missing') {
+    return NextResponse.json({ error: 'Client not found' }, { status: 404 });
+  }
+  if (outcome.kind === 'deal_missing') {
     return NextResponse.json({ error: 'Deal not found' }, { status: 404 });
   }
 
-  return NextResponse.json(payload);
+  return NextResponse.json(outcome.body);
 }
 
 export async function PUT(

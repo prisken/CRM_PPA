@@ -9,6 +9,7 @@ import {
   getAuthenticatedUserFromRequest,
   getClientOr404,
   hasClientAssignment,
+  type AuthenticatedUser,
 } from '@/lib/authHelpers';
 import { prisma } from '@/lib/prisma';
 
@@ -17,6 +18,10 @@ export type ClientStrategyPermissionUser = {
   id: string;
   role: UserRole;
 };
+
+type StrategyAccessSuccess = { user: AuthenticatedUser; error?: undefined };
+type StrategyAccessFailure = { error: NextResponse; user?: undefined };
+type StrategyAccessResult = StrategyAccessSuccess | StrategyAccessFailure;
 
 /**
  * View: SUPER_ADMIN, any ClientAssignment, or any DealParticipant on the client
@@ -70,35 +75,53 @@ export async function canDeleteClientStrategy(
   return canManageClientStrategy(user, clientId);
 }
 
+/**
+ * Strategy plan view gate.
+ * Phase 2I.3: 403-first — do not call getClientOr404 before access (hide existence).
+ * Callers that need a missing-client 404 for authorized/admin users must check
+ * existence after access (e.g. empty list or missing plan).
+ *
+ * Phase 3A: pass `user` when auth was already resolved in this request to skip
+ * a second getAuthenticatedUserFromRequest (WeakMap/React cache also cover this).
+ */
 export async function requireStrategyViewAccess(
   clientId: string,
-  request: Request
-) {
-  const auth = await getAuthenticatedUserFromRequest(request);
-  if (auth.error) {
-    return auth;
+  request: Request,
+  options?: { user?: AuthenticatedUser }
+): Promise<StrategyAccessResult> {
+  let user: AuthenticatedUser;
+  if (options?.user) {
+    user = options.user;
+  } else {
+    const auth = await getAuthenticatedUserFromRequest(request);
+    if (auth.error) {
+      return auth;
+    }
+    user = auth.user;
   }
 
-  const clientCheck = await getClientOr404(clientId);
-  if (clientCheck.error) {
-    return clientCheck;
-  }
-
-  const allowed = await canViewClientStrategy(auth.user, clientId);
+  const allowed = await canViewClientStrategy(user, clientId);
   if (!allowed) {
     return { error: NextResponse.json({ error: 'Forbidden' }, { status: 403 }) };
   }
 
-  return auth;
+  return { user };
 }
 
 export async function requireStrategyManageAccess(
   clientId: string,
-  request: Request
-) {
-  const auth = await getAuthenticatedUserFromRequest(request);
-  if (auth.error) {
-    return auth;
+  request: Request,
+  options?: { user?: AuthenticatedUser }
+): Promise<StrategyAccessResult> {
+  let user: AuthenticatedUser;
+  if (options?.user) {
+    user = options.user;
+  } else {
+    const auth = await getAuthenticatedUserFromRequest(request);
+    if (auth.error) {
+      return auth;
+    }
+    user = auth.user;
   }
 
   const clientCheck = await getClientOr404(clientId);
@@ -106,21 +129,28 @@ export async function requireStrategyManageAccess(
     return clientCheck;
   }
 
-  const allowed = await canManageClientStrategy(auth.user, clientId);
+  const allowed = await canManageClientStrategy(user, clientId);
   if (!allowed) {
     return { error: NextResponse.json({ error: 'Forbidden' }, { status: 403 }) };
   }
 
-  return auth;
+  return { user };
 }
 
 export async function requireStrategyDeleteAccess(
   clientId: string,
-  request: Request
-) {
-  const auth = await getAuthenticatedUserFromRequest(request);
-  if (auth.error) {
-    return auth;
+  request: Request,
+  options?: { user?: AuthenticatedUser }
+): Promise<StrategyAccessResult> {
+  let user: AuthenticatedUser;
+  if (options?.user) {
+    user = options.user;
+  } else {
+    const auth = await getAuthenticatedUserFromRequest(request);
+    if (auth.error) {
+      return auth;
+    }
+    user = auth.user;
   }
 
   const clientCheck = await getClientOr404(clientId);
@@ -128,10 +158,10 @@ export async function requireStrategyDeleteAccess(
     return clientCheck;
   }
 
-  const allowed = await canDeleteClientStrategy(auth.user, clientId);
+  const allowed = await canDeleteClientStrategy(user, clientId);
   if (!allowed) {
     return { error: NextResponse.json({ error: 'Forbidden' }, { status: 403 }) };
   }
 
-  return auth;
+  return { user };
 }

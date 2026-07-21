@@ -1,10 +1,10 @@
 import { StrategyPlanStatus } from '@prisma/client';
 import { NextResponse } from 'next/server';
+import { resolveClient360Context } from '@/lib/client360RequestContext';
 import { logClientStrategyEvent } from '@/lib/clientStrategyActivity';
 import {
   requireStrategyDeleteAccess,
   requireStrategyManageAccess,
-  requireStrategyViewAccess,
 } from '@/lib/clientStrategyPermissions';
 import {
   formatStrategyPlanDetail,
@@ -14,32 +14,51 @@ import {
   strategyPlanListSelect,
 } from '@/lib/clientStrategyPlans';
 import { updateStrategyPlanSchema } from '@/lib/clientStrategyValidation';
-import { timeRouteHandler } from '@/lib/performance';
+import { timeAsync, timeRouteHandler } from '@/lib/performance';
 import { prisma } from '@/lib/prisma';
 
 export const dynamic = 'force-dynamic';
 
+/**
+ * Phase 2I.3 semantics via Phase 2J context:
+ * 403-first; SUPER_ADMIN clientLookup only on plan miss (Client vs Plan 404).
+ */
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string; planId: string }> }
 ) {
   const { id: clientId, planId } = await params;
-  const auth = await requireStrategyViewAccess(clientId, request);
-  if (auth.error) {
-    return auth.error;
+
+  const resolved = await resolveClient360Context({
+    clientId,
+    request,
+    capability: 'strategy:view',
+    perfPrefix: 'client360:strategyDetail',
+  });
+  if (!resolved.ok) {
+    return resolved.error;
   }
+  const { ctx } = resolved;
 
   const result = await timeRouteHandler(
     `GET /api/clients/${clientId}/strategy-plans/${planId}`,
     async () => {
       const planLoad = await loadStrategyPlanDetail(clientId, planId);
       if (planLoad.error) {
+        const missingClient = await ctx.ensureClientExistsForPrivilegedMiss();
+        if (missingClient) {
+          return { ok: false as const, error: missingClient };
+        }
         return { ok: false as const, error: planLoad.error };
       }
 
+      const body = await timeAsync('client360:strategyDetail:map', async () => ({
+        plan: formatStrategyPlanDetail(planLoad.plan),
+      }));
+
       return {
         ok: true as const,
-        body: { plan: formatStrategyPlanDetail(planLoad.plan) },
+        body,
       };
     },
     {

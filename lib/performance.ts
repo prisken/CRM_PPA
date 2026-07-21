@@ -8,13 +8,28 @@
  * status, durationMs, optional payloadBytes / cache). Does not change
  * API response shapes or product behavior.
  *
+ * Phase 4A: optional request-scoped context (`runWithPerfContext`) stamps
+ * `reqId` / role / sampleClass onto nested `[perf]` lines for waterfalls.
+ *
  * Prisma slow queries (≥200ms) log in development or when
  * PERF_LOGGING_ENABLED=true — see `lib/prisma.ts`.
  */
 
+import { AsyncLocalStorage } from 'async_hooks';
+
 type PerfMetaValue = string | number | boolean | null | undefined;
 
 export type PerfMeta = Record<string, PerfMetaValue>;
+
+export type PerfRequestContext = {
+  reqId: string;
+  role?: string;
+  sampleClass?: string;
+  clientIdPrefix?: string;
+  capability?: string;
+};
+
+const perfRequestStorage = new AsyncLocalStorage<PerfRequestContext>();
 
 /** Categories with payload size warning thresholds (bytes). */
 export type PayloadCategory =
@@ -66,6 +81,24 @@ export function shouldLogSlowPrismaQueries(): boolean {
 
 export function getSlowPrismaQueryThresholdMs(): number {
   return SLOW_PRISMA_QUERY_MS;
+}
+
+export function getPerfRequestContext(): PerfRequestContext | undefined {
+  return perfRequestStorage.getStore();
+}
+
+/** Run `fn` with request-scoped PERF metadata stamped onto nested logs. */
+export function runWithPerfContext<T>(
+  context: PerfRequestContext,
+  fn: () => T
+): T {
+  return perfRequestStorage.run(context, fn);
+}
+
+export function createPerfRequestId(prefix = 'req'): string {
+  return `${prefix}-${Date.now().toString(36)}-${Math.random()
+    .toString(36)
+    .slice(2, 8)}`;
 }
 
 function formatMeta(meta?: PerfMeta): string {
@@ -168,6 +201,20 @@ function buildPayloadMeta(
   return { payloadBytes, payloadCategory: category };
 }
 
+function requestContextMeta(): PerfMeta {
+  const ctx = getPerfRequestContext();
+  if (!ctx) {
+    return {};
+  }
+  return {
+    reqId: ctx.reqId,
+    ...(ctx.role ? { role: ctx.role } : {}),
+    ...(ctx.sampleClass ? { sampleClass: ctx.sampleClass } : {}),
+    ...(ctx.clientIdPrefix ? { clientIdPrefix: ctx.clientIdPrefix } : {}),
+    ...(ctx.capability ? { capability: ctx.capability } : {}),
+  };
+}
+
 function logStructuredPerf(fields: {
   method?: string;
   route?: string;
@@ -186,8 +233,45 @@ function logStructuredPerf(fields: {
     : `op=${fields.op ?? '-'}`;
 
   console.info(
-    `[perf] method=${method} ${label} status=${fields.status} durationMs=${fields.durationMs}${formatMeta(fields.meta)}`
+    `[perf] method=${method} ${label} status=${fields.status} durationMs=${fields.durationMs}${formatMeta(
+      {
+        ...requestContextMeta(),
+        ...fields.meta,
+      }
+    )}`
   );
+}
+
+/** Explicit PERF marker / waterfall span (Phase 4A). */
+export function logPerfOp(
+  operation: string,
+  durationMs: number,
+  meta?: PerfMeta,
+  status: string | number = 'ok'
+): void {
+  logStructuredPerf({
+    op: operation,
+    status,
+    durationMs,
+    meta,
+  });
+}
+
+/** Route-style PERF line (method + route=) for profilers. */
+export function logPerfRoute(
+  routeLabel: string,
+  durationMs: number,
+  meta?: PerfMeta,
+  status: string | number = 'ok'
+): void {
+  const parsed = parseRouteLabel(routeLabel);
+  logStructuredPerf({
+    method: parsed.method,
+    route: parsed.route,
+    status,
+    durationMs,
+    meta,
+  });
 }
 
 /** Log a slow Prisma query without binding parameter values. */

@@ -14,6 +14,8 @@ export type SectionCardProps = {
   children: ReactNode;
   defaultCollapsed?: boolean;
   collapsible?: boolean;
+  /** Fires when collapse state changes (Phase 2L/2M: defer child fetches until expand). */
+  onCollapsedChange?: (collapsed: boolean) => void;
   className?: string;
 };
 
@@ -24,6 +26,7 @@ function SectionCard({
   children,
   defaultCollapsed = false,
   collapsible = false,
+  onCollapsedChange,
   className = '',
 }: SectionCardProps) {
   const contentId = useId();
@@ -39,7 +42,7 @@ function SectionCard({
         <h3 className="text-sm font-semibold text-gray-900">{title}</h3>
       )}
       {description !== undefined && description !== null && description !== '' && (
-        <p className="mt-1 text-sm text-gray-500">{description}</p>
+        <div className="mt-1 text-sm text-gray-500">{description}</div>
       )}
     </div>
   );
@@ -53,7 +56,13 @@ function SectionCard({
           {collapsible ? (
             <button
               type="button"
-              onClick={() => setCollapsed((current) => !current)}
+              onClick={() => {
+                setCollapsed((current) => {
+                  const next = !current;
+                  onCollapsedChange?.(next);
+                  return next;
+                });
+              }}
               aria-expanded={!isCollapsed}
               aria-controls={contentId}
               className="-mx-1 flex min-w-0 flex-1 items-start gap-2 rounded-lg px-1 py-0.5 text-left hover:bg-gray-50"

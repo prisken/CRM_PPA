@@ -14,7 +14,14 @@
  * - `PROFILE_LEAD_ID` — LCC preview client id
  * - `PROFILE_CLIENT_ID` — Client 360 / strategy client id
  * - `PROFILE_STRATEGY_PLAN_ID` — strategy plan id (needs client id)
+ * - `PROFILE_DEAL_ID` — deal detail id (optional; discovered from newest deal)
+ * - `PROFILE_DEALS_CLIENT_ID` — Client 360 deals list client (prefer a client with deals)
  * - `PROFILE_SEARCH_Q` — search query string (default discovered from a name)
+ *
+ * Admin KPI cold path is measured via uncached lib call (not HTTP cache bypass).
+ * Client 360 full RSC HTML is not timed here — see server `[perf] client360:rscPageLoad`.
+ * Phase 2L/2M: probing `GET …/source-records` here is a **route** microbench only.
+ * Client 360 first paint must not call source-records until the aside card expands.
  *
  * ## Server-side perf logs
  *
@@ -26,16 +33,15 @@
  * ## Run
  *
  *   # Terminal 1 — app (this repo often uses 3001)
- *   npm run dev
+ *   PERF_LOGGING_ENABLED=true npm run dev -- -p 3001
  *
  *   # Terminal 2
- *   npx tsx scripts/profile-api-routes.ts
- *   TEST_BASE_URL=http://localhost:3000 npx tsx scripts/profile-api-routes.ts
  *   BASE_URL=http://localhost:3001 npx tsx scripts/profile-api-routes.ts
  *
  * Defaults: `BASE_URL` or `TEST_BASE_URL`, else `http://localhost:3001`.
  */
 import { UserRole } from '@prisma/client';
+import { loadAdminDashboardKpisUncached } from '../lib/adminAnalyticsCache';
 import { prisma } from '../lib/prisma';
 import { signAuthToken } from '../lib/jwt';
 
@@ -97,11 +103,6 @@ const STATIC_ROUTES: TimedRoute[] = [
     role: UserRole.SUPER_ADMIN,
   },
   {
-    label: 'Admin KPIs',
-    path: '/api/admin/dashboard-kpis',
-    role: UserRole.SUPER_ADMIN,
-  },
-  {
     label: 'Admin funnel',
     path: '/api/admin/funnel-data',
     role: UserRole.SUPER_ADMIN,
@@ -119,6 +120,11 @@ const STATIC_ROUTES: TimedRoute[] = [
   {
     label: 'Admin pipeline',
     path: '/api/admin/pipeline',
+    role: UserRole.SUPER_ADMIN,
+  },
+  {
+    label: 'Admin pipeline (mode=legacy)',
+    path: '/api/admin/pipeline?mode=legacy',
     role: UserRole.SUPER_ADMIN,
   },
   {
@@ -216,14 +222,22 @@ async function discoverSampleIds(): Promise<{
   leadId: string | null;
   clientId: string | null;
   strategyPlanId: string | null;
+  dealId: string | null;
+  /** Client used for deals list profiling (prefer dealful). */
+  dealsClientId: string | null;
+  primaryClientDealCount: number;
+  dealsClientDealCount: number;
+  assignedUserId: string | null;
   searchQ: string;
 }> {
   const envLead = process.env.PROFILE_LEAD_ID?.trim() || null;
   const envClient = process.env.PROFILE_CLIENT_ID?.trim() || null;
   const envPlan = process.env.PROFILE_STRATEGY_PLAN_ID?.trim() || null;
+  const envDeal = process.env.PROFILE_DEAL_ID?.trim() || null;
+  const envDealsClient = process.env.PROFILE_DEALS_CLIENT_ID?.trim() || null;
   const envSearch = process.env.PROFILE_SEARCH_Q?.trim();
 
-  const [lead, plan, namedClient] = await Promise.all([
+  const [lead, plan, namedClient, assignedUser, latestDeal] = await Promise.all([
     envLead
       ? Promise.resolve({ id: envLead })
       : prisma.client.findFirst({
@@ -242,6 +256,15 @@ async function discoverSampleIds(): Promise<{
       orderBy: { lastModified: 'desc' },
       select: { id: true, name: true },
     }),
+    prisma.user.findFirst({
+      where: { role: UserRole.STANDARD_USER, status: 'ACTIVE' },
+      select: { id: true },
+    }),
+    // Deterministic dealful sample: most recently updated deal.
+    prisma.deal.findFirst({
+      orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }],
+      select: { id: true, clientId: true },
+    }),
   ]);
 
   let clientId = envClient;
@@ -255,6 +278,51 @@ async function discoverSampleIds(): Promise<{
     clientId = assignment?.clientId ?? namedClient?.id ?? null;
   }
 
+  let dealId = envDeal;
+  let dealsClientId = envDealsClient;
+
+  if (envDeal) {
+    const envDealRow = await prisma.deal.findUnique({
+      where: { id: envDeal },
+      select: { id: true, clientId: true },
+    });
+    if (envDealRow) {
+      dealId = envDealRow.id;
+      if (!dealsClientId) {
+        dealsClientId = envDealRow.clientId;
+      }
+    }
+  }
+
+  if (!dealsClientId && latestDeal) {
+    dealsClientId = latestDeal.clientId;
+  }
+  if (!dealId && latestDeal && latestDeal.clientId === dealsClientId) {
+    dealId = latestDeal.id;
+  }
+  if (!dealId && dealsClientId) {
+    const dealOnDealsClient = await prisma.deal.findFirst({
+      where: { clientId: dealsClientId },
+      orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }],
+      select: { id: true },
+    });
+    dealId = dealOnDealsClient?.id ?? null;
+  }
+
+  // If primary client already has deals and no explicit deals client, reuse it.
+  const [primaryClientDealCount, dealsClientDealCount] = await Promise.all([
+    clientId
+      ? prisma.deal.count({ where: { clientId } })
+      : Promise.resolve(0),
+    dealsClientId
+      ? prisma.deal.count({ where: { clientId: dealsClientId } })
+      : Promise.resolve(0),
+  ]);
+
+  if (!dealsClientId && primaryClientDealCount > 0 && clientId) {
+    dealsClientId = clientId;
+  }
+
   const searchQ =
     envSearch ||
     namedClient?.name?.trim().slice(0, 3) ||
@@ -264,6 +332,11 @@ async function discoverSampleIds(): Promise<{
     leadId: lead?.id ?? null,
     clientId,
     strategyPlanId: plan?.id ?? envPlan,
+    dealId,
+    dealsClientId,
+    primaryClientDealCount,
+    dealsClientDealCount,
+    assignedUserId: assignedUser?.id ?? null,
     searchQ,
   };
 }
@@ -274,7 +347,7 @@ async function main() {
     'Auth: Bearer JWT from local ACTIVE STANDARD_USER / SUPER_ADMIN (DATABASE_URL).'
   );
   console.log(
-    'Optional: PROFILE_LEAD_ID, PROFILE_CLIENT_ID, PROFILE_STRATEGY_PLAN_ID, PROFILE_SEARCH_Q\n'
+    'Optional: PROFILE_LEAD_ID, PROFILE_CLIENT_ID, PROFILE_STRATEGY_PLAN_ID, PROFILE_DEAL_ID, PROFILE_DEALS_CLIENT_ID, PROFILE_SEARCH_Q\n'
   );
 
   const [standardToken, adminToken, samples] = await Promise.all([
@@ -294,11 +367,79 @@ async function main() {
     leadId: samples.leadId ?? '(none)',
     clientId: samples.clientId ?? '(none)',
     strategyPlanId: samples.strategyPlanId ?? '(none)',
+    dealId: samples.dealId ?? '(none)',
+    dealsClientId: samples.dealsClientId ?? '(none)',
+    primaryClientDealCount: samples.primaryClientDealCount,
+    dealsClientDealCount: samples.dealsClientDealCount,
+    assignedUserId: samples.assignedUserId ?? '(none)',
     searchQ: samples.searchQ,
   });
+  if (!samples.dealsClientId || samples.dealsClientDealCount < 1) {
+    console.log(
+      'Deals profiling: no dealful client found — dealful deals-list measurement will be SKIPPED.'
+    );
+  } else {
+    console.log(
+      `Deals profiling: dealful client ${samples.dealsClientId} has ${samples.dealsClientDealCount} deal(s).`
+    );
+  }
   console.log('');
 
   const results: TimedResult[] = [];
+
+  // Admin KPI cold path (lib, bypasses unstable_cache) then warm HTTP hits.
+  {
+    const start = performance.now();
+    try {
+      const kpis = await loadAdminDashboardKpisUncached();
+      const elapsed = Math.round(performance.now() - start);
+      const bytes = Buffer.byteLength(JSON.stringify(kpis), 'utf8');
+      results.push({
+        label: 'Admin KPIs (cold lib)',
+        path: 'lib:loadAdminDashboardKpisUncached',
+        status: 200,
+        elapsed,
+        bytes,
+        note: 'bypasses unstable_cache',
+      });
+    } catch (error) {
+      const elapsed = Math.round(performance.now() - start);
+      const message = error instanceof Error ? error.message : String(error);
+      results.push({
+        label: 'Admin KPIs (cold lib)',
+        path: 'lib:loadAdminDashboardKpisUncached',
+        status: 'SKIP',
+        elapsed,
+        bytes: 0,
+        note: message,
+      });
+    }
+
+    if (adminToken) {
+      results.push(
+        await timeRequest(
+          'Admin KPIs (HTTP warm #1)',
+          '/api/admin/dashboard-kpis',
+          adminToken
+        )
+      );
+      results.push(
+        await timeRequest(
+          'Admin KPIs (HTTP warm #2)',
+          '/api/admin/dashboard-kpis',
+          adminToken
+        )
+      );
+    } else {
+      results.push(
+        skip(
+          'Admin KPIs (HTTP warm)',
+          '/api/admin/dashboard-kpis',
+          'no ACTIVE SUPER_ADMIN'
+        )
+      );
+    }
+  }
 
   for (const route of STATIC_ROUTES) {
     const token =
@@ -317,7 +458,7 @@ async function main() {
   if (standardToken) {
     results.push(
       await timeRequest(
-        'Widget: important dates calendar',
+        'Widget: important dates calendar (assigned user)',
         calendarPath,
         standardToken
       )
@@ -325,9 +466,30 @@ async function main() {
   } else {
     results.push(
       skip(
-        'Widget: important dates calendar',
+        'Widget: important dates calendar (assigned user)',
         calendarPath,
         'no ACTIVE STANDARD_USER'
+      )
+    );
+  }
+
+  if (adminToken && samples.assignedUserId) {
+    const adminAssignedCalendar = `${calendarPath}&assignedUserId=${encodeURIComponent(samples.assignedUserId)}`;
+    results.push(
+      await timeRequest(
+        'Widget: important dates calendar (admin→assignedUserId)',
+        adminAssignedCalendar,
+        adminToken
+      )
+    );
+  } else {
+    results.push(
+      skip(
+        'Widget: important dates calendar (admin→assignedUserId)',
+        `${calendarPath}&assignedUserId=…`,
+        !adminToken
+          ? 'no ACTIVE SUPER_ADMIN'
+          : 'no ACTIVE STANDARD_USER to use as assignedUserId'
       )
     );
   }
@@ -371,6 +533,65 @@ async function main() {
     if (workspaceToken) {
       results.push(
         await timeRequest(
+          'Client 360 core',
+          `/api/clients/${samples.clientId}`,
+          workspaceToken
+        )
+      );
+      results.push(
+        await timeRequest(
+          'Client 360 hierarchy (employees)',
+          `/api/clients/${samples.clientId}/employees`,
+          workspaceToken
+        )
+      );
+      results.push(
+        await timeRequest(
+          'Client 360 important dates',
+          `/api/clients/${samples.clientId}/important-dates`,
+          workspaceToken
+        )
+      );
+      results.push(
+        await timeRequest(
+          'Client 360 source records',
+          `/api/clients/${samples.clientId}/source-records`,
+          workspaceToken
+        )
+      );
+
+      // Empty / primary-client deals list (historical baseline when primary has 0 deals).
+      if (samples.primaryClientDealCount === 0) {
+        results.push(
+          await timeRequest(
+            'Client deals list (empty)',
+            `/api/clients/${samples.clientId}/deals`,
+            workspaceToken
+          )
+        );
+      }
+
+      // Representative deals list: client with ≥1 deal (deterministic latest-deal client).
+      if (samples.dealsClientId && samples.dealsClientDealCount > 0) {
+        results.push(
+          await timeRequest(
+            'Client deals list (dealful)',
+            `/api/clients/${samples.dealsClientId}/deals`,
+            workspaceToken
+          )
+        );
+      } else {
+        results.push(
+          skip(
+            'Client deals list (dealful)',
+            '/api/clients/{id}/deals',
+            'no client with deals in DB (set PROFILE_DEALS_CLIENT_ID or seed deals)'
+          )
+        );
+      }
+
+      results.push(
+        await timeRequest(
           'Client 360 workspace (strategy-tasks)',
           `/api/clients/${samples.clientId}/workspace?tab=strategy-tasks`,
           workspaceToken
@@ -383,12 +604,67 @@ async function main() {
           workspaceToken
         )
       );
+
+      results.push(
+        await timeRequest(
+          'Client deal participant-users',
+          `/api/clients/${samples.clientId}/deals/participant-users`,
+          workspaceToken
+        )
+      );
+
+      if (samples.dealId && samples.dealsClientId) {
+        results.push(
+          await timeRequest(
+            'Client deal detail',
+            `/api/clients/${samples.dealsClientId}/deals/${samples.dealId}`,
+            workspaceToken
+          )
+        );
+      } else {
+        results.push(
+          skip(
+            'Client deal detail',
+            '/api/clients/{id}/deals/{dealId}',
+            'no deal id (set PROFILE_DEAL_ID or seed deals)'
+          )
+        );
+      }
     }
   } else {
     results.push(
       skip(
-        'Client 360 workspace',
-        '/api/clients/{id}/workspace',
+        'Client 360 APIs',
+        '/api/clients/{id}/…',
+        'no client id (set PROFILE_CLIENT_ID or seed assignments)'
+      )
+    );
+  }
+
+  if (samples.clientId) {
+    const planToken = adminToken ?? standardToken;
+    if (planToken) {
+      results.push(
+        await timeRequest(
+          'Strategy plan list',
+          `/api/clients/${samples.clientId}/strategy-plans`,
+          planToken
+        )
+      );
+    } else {
+      results.push(
+        skip(
+          'Strategy plan list',
+          `/api/clients/${samples.clientId}/strategy-plans`,
+          'no authenticated user'
+        )
+      );
+    }
+  } else {
+    results.push(
+      skip(
+        'Strategy plan list',
+        '/api/clients/{id}/strategy-plans',
         'no client id (set PROFILE_CLIENT_ID or seed assignments)'
       )
     );
@@ -454,6 +730,9 @@ async function main() {
 
   console.log(
     '\nCheck the dev server terminal for server-side `[perf]` lines (route + payloadBytes).'
+  );
+  console.log(
+    'Client 360 full RSC: open a client page with PERF_LOGGING_ENABLED and look for client360:rscPageLoad.'
   );
 }
 

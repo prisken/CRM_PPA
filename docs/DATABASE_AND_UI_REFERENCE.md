@@ -203,6 +203,107 @@ Auth: local ACTIVE `SUPER_ADMIN` / `STANDARD_USER` JWTs via `DATABASE_URL` (see 
 
 **Payload warn thresholds:** dashboard widgets 50KB · Client 360 core 100KB · deals 150KB · Strategy Planner 200KB · Lead Command Center 250KB · Admin master pipeline 150KB.
 
+#### Phase 2B substep audit (July 21, 2026 — cold + warm)
+
+**Environment:** local Next.js dev · `PERF_LOGGING_ENABLED=true` · port **3001** · process restarted immediately before the cold pass · two sequential `BASE_URL=http://localhost:3001 npx tsx scripts/profile-api-routes.ts` runs · sample client `cmqv35szi0000jp04jaejps9j` (0 deals; 0 hierarchy colleagues).
+
+**How to read:** *Client total* = profiler round-trip. *Server route* = `[perf] method=GET route=… durationMs=` (handler body after auth for some routes; auth/access are separate `op=` lines). Single-run only — not SLOs.
+
+| Route | Client total ms (cold → warm) | Server route ms (cold → warm) | Payload bytes | Dominant substep (server) | Likely next fix | Confidence |
+|-------|------------------------------:|------------------------------:|--------------:|---------------------------|-----------------|------------|
+| LCC lead preview | 2093 → 1536 | 1202 → 1282 | 1342 | **`preview:baseQuery`** 637–768ms (activity ∥ baseQuery; then contacts ~255–319 + duplicates ~243–257). Auth 246–338ms. Map/sources ≈0 | Slim preview select further; parallelize contacts with duplicates where safe; cache duplicate peers for drawer | **High** (baseQuery consistently largest DB chunk) |
+
+**Phase 2D follow-up (same sample):** client **1362 → 1354** ms · server route **1030 → 1093** ms · **`baseQuery` 696–840** ms (now includes slim contacts, `contactRows=4`) · **`contacts` ≈0** ms (no second round-trip) · **`duplicates` 248–328** ms (peer `findFirst` existence checks) · payload still **1342** B. Saved the serial contacts RTT (~250ms); residual cost is still pooler RTT on baseQuery + auth + 4 parallel dup checks.
+| Client 360 core | 1217 → 1242 | 959 → 897 | 1656 | **`client360:core:query`** 895–958ms. Auth 251–332ms. Access ≈0 (super-admin). Map ≈0 | Narrow `client360CoreSelect` (drop unused relations on GET); reuse page select for API if documents/strategies unused | **High** |
+
+**Phase 2C follow-up (same sample, after narrow `client360CoreQuerySelect`):** client **1007 → 961** ms · server route **718 → 617** ms · **`core:query` 716 → 616** ms · payload still **1656** B. Auth/access unchanged. Residual latency is still DB/pooler RTT on the remaining joins (assignments + contacts + important dates), not DTO size.
+| Client 360 hierarchy (`/employees`) | 850 → 966 | 598 → 578 | 144 | Split: **auth** 242–374 + **clientLookup** 224–284 + **query** 293–373. Access ≈0. Map ≈0 | Skip clientLookup when company known; combine count+findMany carefully; auth JWT/user lookup caching already present — watch pool latency | **Medium–high** (no single 80% step; auth+RTT add up) |
+
+**Phase 2F follow-up (same sample):** client **603 → 531** ms · server route **223 → 253** ms · payload **144** B. Substeps (warm): **`auth` 265–338** · **`access` ≈0** (super-admin) · **`query` 223–257** (single SQL: target client + capped colleagues + count) · **`map` ≈0**. **`clientLookup` eliminated** — folded into `query`. Residual cost is auth RTT + one hierarchy query RTT.
+| Client deals list | 1070 → 1168 | 232 → 279 *(handler only)* | 52 | **Auth+access** before handler (~510–595ms combined) often ≥ **query** 230–278ms. Map ≈0. Empty deal list (`dealCount=0`) | Keep slim list select; measure with non-empty deals; consider cheaper deal-view access path when assignment already known | **Medium** (empty sample understates query; auth/access clearly costly) |
+
+**Phase 2G follow-up (same primary sample = empty deals; DB had **0** deals total):**  
+- Profiler now selects a **dealful** client via latest `Deal.updatedAt` (or `PROFILE_DEALS_CLIENT_ID`). **Dealful measurement SKIPPED** — no deals in this environment.  
+- Empty list (cold → warm): client **841 → 955** ms · server route **480 → 588–644** ms · payload **52** B (client) / **52–78** B (server). Substeps (warm): **`auth` ~246–305** · **`access` ≈0** (super-admin via `canViewClientDeals`, no deal-id findMany) · **`query` ~272–282** · **`clientLookup` ~305–370** (only when empty + SUPER_ADMIN) · **`map` ≈0**.  
+- List select unchanged (`dealListResponseSelect` — already narrow; no notes). Access path slimmed; unconditional `getClientOr404` removed for assigned viewers / non-empty lists.
+| Strategy plan detail | 1809 → 1618 | 864 → 956 | 2284 | **Whole fat plan include** (no Phase 2B substeps yet). Payload still small vs latency | Strategy DTO split / view-specific includes (overview vs board) | **High** for “fat include”, **Low** for which relation until substeps exist |
+
+**Phase 2E follow-up (same sample, after narrow base select + parallel timed relations):** client **1814 → 1381** ms · server route **804 → 790** ms · payload **2265–2284** B. Substeps (warm): **`auth` 346** · **`access` 229** · **`baseQuery` 496** · **`relations` 293** wall (`steps` 251 ∥ `connections` 246 ∥ `expenses` 293 ∥ `projectionMilestones` 290; sample `stepCount=1` `expenseCount=2` `milestoneCount=0`) · **`map` ≈0**. Dominant cost is still per-query DB/pooler RTT (`baseQuery` + parallel relation RTTs), not payload size. Heavier plans in API tests show **`projectionMilestones`** as the slowest relation when contributions are present.
+
+**Cold-ish vs warm notes:** Second pass did **not** collapse these small-payload routes into sub-200ms — DB/auth RTT still dominates. Preview client ms improved (~2093→1536) while server preview route stayed ~1.2s. Hierarchy (Phase 2F): client **~850–966 → ~531–603**; server handler dropped to ~one query RTT after auth. Strategy (Phase 2E): warm client improved (~1814→1381); server handler ~800ms with parallel relations still bounded by per-query RTT.
+
+**Phase 2H (read-only):** Client 360 API auth/access/`getClientOr404` duplication audit — route matrix + Phase **2I** consolidation order in [`CRM_PERFORMANCE_REFACTOR_PLAN.md`](./CRM_PERFORMANCE_REFACTOR_PLAN.md) §6 Phase 2H. No runtime changes.
+
+**Phase 2I.1:** Important-dates GET drops separate `getClientOr404` (existence from `listImportantDatesForOwner`). Source-records GET uses conditional `clientLookup` only when empty + SUPER_ADMIN (same pattern as deals list). PERF: `client360:importantDates:*`, `client360:sourceRecords:*`.
+
+**Phase 2I.1 profiler (same sample):** important-dates client **~579–744** ms · server **267–328** ms · auth ~242–253 · access ≈0 · query ~266–327 · **no clientLookup** · payload **812** B. Source-records (empty list, SUPER_ADMIN) client **~721–816** ms · server **432–525** ms · auth ~222–255 · access ≈0 · query ~224–261 · **clientLookup ~207–275** (retained for empty+admin 404) · payload **20** B.
+
+**Phase 2I.2:** Deal detail GET + participant-users GET no longer call `getDealAccessForClient` (admin no longer `findMany` all deal ids for view/picker). Detail uses `canViewClientDeals`; picker uses `canAccessDealParticipantPicker`. Mutations still use full deal access. PERF: `client360:dealDetail:*`, `client360:participantUsers:*`.
+
+**Phase 2I.2 probe (ephemeral deal on sample client; SUPER_ADMIN):** deal detail client **~696** ms · auth ~285 · access **≈0** · query ~362 · map ≈0 · payload **389** B. Participant-users client **~496** ms · access **≈0** · query ~242–339 · payload **968** B (`userCount=8`). Before 2I.2, admin access alone paid a full deal-id `findMany` RTT (~0.2–0.4s class); that step is gone on these GETs.
+
+**Phase 2I.3:** Strategy list + detail GET use **403-first** (`canViewClientStrategy` before any client existence check). `requireStrategyViewAccess` no longer calls `getClientOr404` pre-access. List: conditional `clientLookup` only when empty + SUPER_ADMIN. Detail: conditional `clientLookup` only when plan miss + SUPER_ADMIN (preserves Client vs Plan 404). PERF labels renamed to `client360:strategyList:*` / `client360:strategyDetail:*` (replacing `strategy:detail:*`).
+
+**Phase 2I.3 profiler (same sample client + plan; SUPER_ADMIN warm):**  
+- Strategy **list**: client **1095** ms · server total **416** ms · auth **226** · access **≈0** · query **415** · map **≈0** · **no clientLookup** (non-empty) · payload **750** B.  
+- Strategy **detail**: client **1512** ms · server total **828** ms · auth **227** · access **≈0** (was **~229** including pre-access `getClientOr404` in Phase 2E) · baseQuery **397** · relations **430** · map **≈0** · **no clientLookup** on hit · payload **2265** B.  
+Happy-path query count: list **1** (plans) vs prior **2** (client + plans); detail **1 base + parallel relations** vs prior **clientLookup + base + relations**.
+
+**Phase 2J:** Narrow `resolveClient360Context` (`lib/client360RequestContext.ts`) — auth + one light view capability + optional `ensureClientExistsForPrivilegedMiss` (SUPER_ADMIN-only, called after empty/miss). Migrated GETs: source-records, strategy list, strategy detail, **workspace** + **projection-milestones** (Phase **3A**). Not migrated: important-dates (loader-folded existence), deal detail (target-deal miss semantics), mutations/manage. Capability set: `core:read` | `strategy:view` | `deals:view` | `sourceRecords:view` | `workspace:view`. PERF prefixes unchanged where applicable (`client360:sourceRecords:*`, `client360:strategyList:*`, `client360:strategyDetail:*`, `client360:workspace:*`, `client360:projectionMilestones:*`).
+
+**Phase 2J profiler (same sample; SUPER_ADMIN):** source-records (empty) client **~1213** ms · auth ~319 · access ≈0 · query ~561 · clientLookup ~299 · map ≈0 · payload **20** B. Strategy list client **~887** ms · auth ~343 · access ≈0 · query ~490 · **no clientLookup** · payload **750** B. Strategy detail client **~1140** ms · auth ~246–264 · access ≈0 · baseQuery ~524–525 · relations ~307–312 · map ≈0 · payload **2265** B. Happy-path query counts unchanged vs Phase 2I (consolidation only).
+
+**Phase 2K:** Client 360 RSC page uses `resolveClient360PageAccess` (`lib/client360PageAccess.ts`) once for hierarchy/deals/strategy view+manage flags — drops repeated `canReadClientCore` / `canAccessClientHierarchy` / `canViewClientStrategy` / `canManageClientStrategy` / `getDealAccessForClient` chain. SUPER_ADMIN page access is **0 Deal-table reads** (`canManageAll` + empty `manageableDealIds`). `getDealAccessForClient` SUPER_ADMIN path similarly skips deal-id enumeration (permissions unchanged). API mutation routes still re-check on write. PERF: `client360:rscPageAccess` (+ optional `:queries` / `:anyParticipant`) before `client360:rscPageLoad`.
+
+**Phase 2L — Client 360 initial client fan-out (post-2K):**
+
+| Call on first paint | Visible? | Action |
+|---------------------|----------|--------|
+| RSC: core + deals + hierarchy loaders | Page shell | Eager (needed for aside + deals) |
+| `GET …/workspace?tab=strategy-tasks` | Default workspace tab | **Eager** — primary content |
+| `GET …/source-records` | Aside card **defaultCollapsed** | **Deferred** until first expand |
+| `GET …/important-dates` | Details panel | **Skipped** — `initialDates` from RSC core |
+| `GET …/deals`, `GET …/employees` | Deal / hierarchy widgets | **Skipped** on mount — RSC props + slice skip refs |
+| `GET …/strategy-plans` (+ detail) | Strategy Planner tab | **Deferred** until tab first opened |
+| `GET …/workspace?tab=activity-notes` | Activity tab | **Deferred** until tab opened |
+| `GET /api/admin/users` | Assign-user modal | **Deferred** until modal open |
+| Core / dates slice GETs | Refresh only | **Skipped** on first paint (`skip*SliceFetchRef`) |
+
+Change: `ClientSourceRecordsWidget` + `SectionCard.onCollapsedChange` — no source-records request until expand (still refetches on `sourceRecords` slice after expand). RSC/page flags not used for API auth.
+
+**Phase 2M — contract stabilization:** Pure load guards in `lib/client360LoadGuards.ts` + `npm run test:client360-load-guards` lock source-records deferral (no mount fetch; one fetch on first expand; no duplicate on re-expand; slice bump refetches after expand). Layer comments on `resolveClient360Context` / `resolveClient360PageAccess` reinforce: RSC flags ≠ API/mutation auth. Checklist in the performance refactor plan. `profile-api-routes` may still hit source-records as a route probe — that is not first-paint fan-out.
+
+**Phase 2N — workspace `strategy-tasks` (default tab):** Measured as the remaining eager Client 360 client API after 2L. Returns `{ tab, strategyText, tasks }` only (`client360StrategyTasksSelect`: `strategyText` + legacy `strategies` take-1 fallback + `tasks` with assignee). First paint uses all of that (Strategy & Tasks panel). Does **not** load deals, employees, activity, or assignments (assignedUsers come from RSC core props). Empty-sample profiler: client **~641–871** ms · server route **~409–561** ms · payload **53** B — cost is auth + DB RTT, not fat payload. **No select/response trim** (would risk legacy Strategy fallback or response-shape churn without a duplicate/hidden-data win). Added PERF: `client360:workspace:auth|access` + `strategyTasks:query|map`. After instrumentation (same sample): client **~673** ms · auth **~225–311** · access **≈0** · query **~421** · map **≈0** · payload still **53** B. Contract test: `npm run test:client360-workspace`.
+
+**Phase 3A — auth/session overhead (Client 360 reads):** Inventory showed **no repeated auth/session work inside a single read route** (one `getAuthenticatedUserFromRequest` / context resolve). ~225–311 ms auth is one JWT verify + one `User` lookup RTT per HTTP request. Changes: Request `WeakMap` memo for auth; nested PERF `auth:bearer:jwt` / `auth:userLookup` / `auth:session:getSession`; request-scoped assignment/participant caches; `requireStrategy*Access({ user })`; workspace + projection-milestones GETs on `resolveClient360Context` (`workspace:view` | `strategy:view`). **No** cross-request User cache. Test: `npm run test:auth-request-scope`. After 3A (same sample workspace strategy-tasks): client **~741** ms · auth **~237** (jwt **~1–5** + userLookup **~230–300**) · access **≈0** · query **~465** · payload **53** B — confirms auth cost is User RTT, not duplicate JWT/session work.
+
+**Phase 3B — User lookup optimization:** Lookup is `User.findUnique({ where: { id } })` by JWT/`session.user.id` (PK). Select `id,role,name,email,status` (no joins). Index: PK only — DB EXPLAIN ~1.5 ms; wall was pooler RTT. **No new index.** Auth lookups use `lib/authUserPrisma.ts` (`DIRECT_URL` + `connection_limit=1`; opt-out `AUTH_USER_LOOKUP_DIRECT=false`). Valid JWT + missing User → 404 without session fallback. After 3B workspace strategy-tasks: client **~534** ms · auth **~51–56** · `auth:userLookup` **~47–80** ms warm (`transport=direct`) · payload **53** B.
+
+**Phase 3C — access-check RTTs:** Non-admin read gates (`hasClientAssignment`, `hasDealParticipantOnClient`, `canViewClientDeals`, `canAccessDealParticipantPicker`) use `lib/accessCheckPrisma.ts` (DIRECT_URL + `connection_limit=1`; opt-out `ACCESS_CHECK_LOOKUP_DIRECT=false`). DB ~0.04 ms; pooler wall was ~250 ms; warm direct **~50–75 ms**. PERF: `access:assignment` / `access:dealParticipant` + access meta (`capability`, `role`, `transport`). Domain queries stay on pooler. Warm: SUPER_ADMIN access **≈0** · assigned STANDARD_USER access **~59 ms** · denied **~53 ms** (403 client **~101 ms**).
+
+**Phase 3D — workspace strategy-tasks domain:** Nested Prisma select was **3 sequential** pooler queries (~400 ms). Now `loadStrategyTasksWorkspace` runs Client scalar + Tasks + legacy Strategy take-1 in **parallel** (~240–300 ms domain). Empty sample still fetches legacy (strategyText blank) but in the same wave. Payload **53 B**. Warm client: SUPER_ADMIN **~293 ms** · assigned STANDARD_USER **~475 ms** · denied **~109 ms** (no domain). PERF: `strategyTasks:parallelBase|clientScalar|tasks|legacyStrategy|domain|map`.
+
+**Phase 4A — strategy-tasks warm waterfall / residual floor:** Correlated `[perf]` via request ALS `reqId` + `client360:workspace:strategyTasks:waterfall` (authAccess / domain / serialize / residual / floorHint). Probe: `npx tsx scripts/probe-workspace-strategy-tasks-waterfall.ts`. Warm empty sample (53 B / denied 21 B): SUPER_ADMIN route **~302** (auth **~65** direct + domain **~237** pooler) · assigned STANDARD_USER **~344** (auth **~57** + access **~53** direct + domain **~233**) · denied **~85** (auth+access only, **no domain**). **Residual ≈ 0 ms** — remaining cost is still DB-adjacent (pooler domain RTT + direct auth/access), not route/runtime.
+
+**Phase 4B — auth-only baseline:** PERF-gated `GET /api/perf/client360-workspace-auth-only?clientId=` (same `workspace:view` resolve; `{ ok: true }` 11 B; no domain). Probe: `npx tsx scripts/probe-workspace-auth-only-baseline.ts`. Warm: SUPER_ADMIN auth-only route **~73** vs full **~367** (domain **~321**, **~87%**) · assigned auth-only **~105** vs full **~375** (domain **~247**, **~66%**) · denied full **~102** ≈ allow floor. **Verdict:** remaining totals are **domain-dominated** (pooler RTT), not map/serialize.
+
+**Phase 4C — domain direct-read risk (no migration):** Classified Client scalar / legacy Strategy as **maybe** direct; Tasks+assignee **no by default**. Measure script `measure-workspace-domain-direct-risk.ts` (pooler vs DIRECT_URL, no product wiring): hybrid direct scalar+legacy + pooler tasks estimates **~0 ms** savings because **pooler tasks still dominates** `parallelBase`. Connection budget already **2** reserved direct slots (auth+access); hybrid would add +1–2 with Supabase direct-cap risk. **Decision: keep all domain on pooler.**
+
+**Phase 4 close — deliverables / acceptance:** Full warm waterfalls (admin / assigned / denied), auth-only comparison, parallel-leg analysis (legs co-dominant pooler RTT; tiny scalar not cheaper on pooler), map+serialize **0 ms** on 53 B, direct-risk rejected, latency floor documented (~300 ms admin / ~350 ms assigned / ~80–100 ms denied). Acceptance: no response-shape / auth / mutation / cross-request cache / broad-domain-direct changes; rollback flags preserved; residual **0**; denied skips domain. See plan § Phase 4 deliverables.
+
+**Example substep lines (warm pass):**
+
+```text
+[perf] method=- op=leadCommandCenter:preview:baseQuery status=ok durationMs=768 sourceRowsReturned=0 sourceRecordCount=0
+[perf] method=GET route=/api/admin/leads/{id}/preview status=ok durationMs=1282 payloadBytes=1342 …
+[perf] method=- op=client360:core:query status=ok durationMs=895
+[perf] method=GET route=/api/clients/{id} status=ok durationMs=897 payloadBytes=1656 …
+[perf] method=- op=client360:hierarchy:auth|query … durationMs=338|252 (Phase 2F; clientLookup removed)
+[perf] method=- op=client360:deals:auth|access|query|clientLookup … (Phase 2G; empty SUPER_ADMIN still hits clientLookup)
+[perf] method=GET route=/api/clients/{id}/strategy-plans/{planId} status=ok durationMs=956 payloadBytes=2284 …
+[perf] method=- op=client360:strategyDetail:auth|access|baseQuery|relations|map … (Phase 2I.3; 403-first)
+```
+
 **Instrumented `[perf]` prefixes / fields:**
 
 | Prefix / field | Location |
@@ -218,6 +319,19 @@ Auth: local ACTIVE `SUPER_ADMIN` / `STANDARD_USER` JWTs via `DATABASE_URL` (see 
 | `activityFeed:*` | Activity feed SQL + grouping |
 | `builder:buildSuperAdminDashboard` | Super admin activity feed builder |
 | `client360:*` | Client 360 server loaders |
+| `client360:hierarchy:*` | Hierarchy auth/access/query/map (`clientLookup` removed in Phase 2F) |
+| `client360:deals:*` | Deals list auth/access/query/map; `clientLookup` only when empty + SUPER_ADMIN (Phase 2G) |
+| `client360:importantDates:*` | Important-dates list auth/access/query/map (Phase 2I.1; no separate clientLookup) |
+| `client360:sourceRecords:*` | Source-records auth/access/query/map; `clientLookup` only when empty + SUPER_ADMIN (Phase 2I.1; **2J** via `resolveClient360Context`) |
+| `client360:dealDetail:*` | Deal detail auth/access/query/map; light `canViewClientDeals` (Phase 2I.2) |
+| `client360:participantUsers:*` | Participant picker users list; light picker gate (Phase 2I.2) |
+| `strategy:detail*` | *(deprecated)* renamed to `client360:strategyDetail:*` in Phase 2I.3 |
+| `client360:rscPageAccess` | Phase **2K** Client360Page resolve-once view/manage flags (before `rscPageLoad`) |
+| `client360:workspace:*` | Workspace tab GETs auth/access + strategyTasks parallel domain (Phase **2N** / **3A** / **3D**) |
+| `auth:bearer:jwt` / `auth:userLookup` / `auth:session:getSession` | Nested auth breakdown (Phase **3A** / **3B**). `auth:userLookup` meta: `path`, `lookupKey=id`, `transport=direct\|pooler` |
+| `access:assignment` / `access:dealParticipant` | Phase **3C** existence checks (`transport`, `hit`, `roles`) |
+| `client360:strategyList:*` | Strategy plan list auth/access/query/map; conditional clientLookup (Phase 2I.3; **2J** context) |
+| `client360:strategyDetail:*` | Strategy plan detail auth/access/baseQuery/relations/map; conditional clientLookup (Phase 2I.3; **2J** context) |
 
 **Not instrumented (still dynamic):** Client 360 page server render (RSC) wall time as a single `[perf]` line, static assets, auth middleware edge time.
 
@@ -338,7 +452,7 @@ Standard users advance one stage at a time via **Move to Next Stage** + confirma
 
 ## 3. Database Overview
 
-- **Provider:** PostgreSQL via Supabase connection pooler (`DATABASE_URL`) + direct URL for migrations (`DIRECT_URL`).
+- **Provider:** PostgreSQL via Supabase connection pooler (`DATABASE_URL`) + direct URL for migrations (`DIRECT_URL`). Phase **3B** uses `DIRECT_URL` for authenticated **User** PK lookups; Phase **3C** uses a separate direct client for read **access-check** existence queries (`lib/accessCheckPrisma.ts`, `connection_limit=1`; opt-out `ACCESS_CHECK_LOOKUP_DIRECT=false`). Domain queries stay on the pooler.
 - **Migrations:** 20 applied (`prisma/migrations/`).
 - **IDs:** CUID strings (`@default(cuid())`).
 - **Naming:** Prisma models use PascalCase; several tables map to snake_case via `@@map`.
@@ -1626,7 +1740,7 @@ Per merge (pairwise step or full `mergeClients` call), in a **single Prisma tran
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
 | POST | `/api/clients` | Bearer or session | Create lead/client. Standard users auto-assigned `RELATIONSHIP`. Body: `name` (required), `company`, `email`, `phone`, `lead_source`, `role_in_company`, `employee_count`, `expectations`, `status`, `contactInfo` (legacy). Returns created client including new detail fields |
-| GET | `/api/clients/[id]` | Bearer or session — super admin, any client assignment, or any deal participant on the client | **Core** Client 360 payload — client details, team, documents, strategy text. **No** deals, tasks, or activity log |
+| GET | `/api/clients/[id]` | Bearer or session — super admin, any client assignment, or any deal participant on the client | **Core** Client 360 payload — details, team, contacts, important dates, `strategyText`. Uses narrow `client360CoreQuerySelect` (no `documents` / `strategies` joins; `documents` is `[]`). Deals / tasks / activity via split endpoints |
 | GET | `/api/clients/[id]/workspace` | Super admin or any client assignment (Bearer or session) | Lazy tab data. Query: `?tab=strategy-tasks` or `?tab=activity-notes` (alias: `activity`) |
 | PATCH | `/api/clients/[id]` | Bearer or session | Super admin: any field; standard user: `status` only (role-based). Returns core payload. Stage changes log system activity |
 | PUT | `/api/clients/[id]/details` | Super admin or `RELATIONSHIP` assignee (Bearer or session) | Name, company, email, phone, lead source, `roleInCompany`, `employeeCount`, `expectations`, `importantDates` (full replace; date + optional time) |
@@ -1844,9 +1958,11 @@ No CRM login required. All webhook routes validate header `x-webhook-secret` aga
   "status": "ACTIVE_CLIENT",
   "strategyText": "...",
   "assignedUsers": [{ "assignment_id": "...", "user_id": "...", "name": "...", "role": "DOCTOR" }],
-  "documents": [{ "id": "...", "fileName": "...", "downloadUrl": "...", "uploadedAt": "..." }]
+  "documents": []
 }
 ```
+
+`documents` is always `[]` on this narrow core GET (and RSC core load). Upload/list lifecycle uses `POST/DELETE /api/clients/[id]/documents`. `strategyText` comes from `Client.strategyText` (legacy `Strategy` rows are resolved on the strategy-tasks workspace tab).
 
 ### Client 360 workspace response (`GET /api/clients/[id]/workspace?tab=...`)
 
@@ -2232,7 +2348,7 @@ Unauthenticated users are redirected to `/login`. Missing client → `notFound()
 
 **Refresh after mutations:** `refreshClient360Slices([...])` bumps per-slice keys. Only `all` still calls `router.refresh()`. `core` client-fetches `GET /api/clients/[id]`; `importantDates` client-fetches dates; `hierarchy` / `deals` / `sourceRecords` widgets refetch on their keys. Workspace tabs reload on the `workspace` key.
 
-**Refresh coordination:** `Client360RefreshProvider` + `refreshClient360Slices`. Details save → `['core','importantDates']` (+ `hierarchy` if company/employeeCount changed). Important Dates panel CRUD → `['importantDates']` only. Stage / merge / archive / team still `['all']`.
+**Refresh coordination:** `Client360RefreshProvider` + `refreshClient360Slices`. Details save → `['core','importantDates']` (+ `hierarchy` if company/employeeCount changed). Important Dates panel CRUD → `['importantDates']` only. **Stage** → core DTO / `['core']` (no RSC). **Team assign/remove** → `['core','team']` (no RSC). Merge / archive / delete still `['all']` (full `router.refresh()`).
 
 **Header:** Logo, back to pipeline link, **More actions** menu (super admin: **Merge clients**, **Archive client**), client name, `LeadSourceBadges`, pipeline stage control:
 
@@ -2277,7 +2393,7 @@ Deep links: `#strategy-planner` opens Strategy Planner (when allowed); `#activit
 | Deal Info | `DealInfoWidget` + `DealEditModal` | Users with deal view access — participant table per deal, deal type label, committed/potential values, secured commission from participant rows. Amber **legacy fallback** warning when `usesLegacyCommissionFallback`. **Edit** when `canCreateDeal` / `canManageDeal(dealId)`. Anchors `#deal-info` / `#deal-{id}` for Strategy Planner View deal |
 | Assigned Team | `AssignedTeamWidget` | Super admin assigns **Relationship** and **Follow-up** only. Legacy client-level doctors in collapsed section. No new doctor assignments at client level |
 | Company Hierarchy | `CompanyHierarchyWidget` | Receives `hierarchy` prop from server; add employee leads via `POST /api/clients/[id]/employees` |
-| Lead Source Records | `ClientSourceRecordsWidget` | Fetches `GET /api/clients/[id]/source-records` on mount; collapsible raw payload per ingest |
+| Lead Source Records | `ClientSourceRecordsWidget` | Phase **2L**: fetches `GET /api/clients/[id]/source-records` on **first expand** (card `defaultCollapsed`); refetch on `sourceRecords` slice after expand |
 
 ---
 
@@ -2642,7 +2758,9 @@ npm run find:duplicate-clients
 | Variable | Purpose |
 |----------|---------|
 | `DATABASE_URL` | Postgres connection (pooler) |
-| `DIRECT_URL` | Direct Postgres URL for migrations |
+| `DIRECT_URL` | Direct Postgres URL for migrations; also used for auth User PK lookups (Phase **3B**) and read access-check existence queries (Phase **3C**) unless opted out |
+| `AUTH_USER_LOOKUP_DIRECT` | Optional. Set to `false` to force auth User lookups onto the pooler `DATABASE_URL` client |
+| `ACCESS_CHECK_LOOKUP_DIRECT` | Optional. Set to `false` to force assignment/participant existence checks onto the pooler |
 | `NEXT_PUBLIC_SUPABASE_URL` | Supabase project URL |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase anon key (client + middleware) |
 | `SUPABASE_SECRET_KEY` | Service role (registration, uploads) |
@@ -2793,7 +2911,12 @@ All exported functions in `lib/authHelpers.ts`:
 | `logClientSystemEvent(clientId, content, userId?)` | Write `ClientActivityLog` with `type: SYSTEM` |
 | `authorizePipelineStatusChange(...)` | Role-based pipeline stage advance check |
 | `canAssignmentRoleChangePipelineStatus` | Re-export from `lib/pipelinePermissions.ts` |
-| `getDealAccessForClient(userId, userRole, clientId)` | Returns `canView`, `canCreate`, `canManageAll`, `manageableDealIds` |
+| `getDealAccessForClient(userId, userRole, clientId)` | Returns `canView`, `canCreate`, `canManageAll`, `manageableDealIds` (manage/create; admin loads deal ids) |
+| `canViewClientDeals(userId, userRole, clientId)` | Lightweight list/detail view gate (Phase 2G / 2I.2); SUPER_ADMIN skips deal-id findMany |
+| `canAccessDealParticipantPicker(userId, userRole, clientId)` | Lightweight picker GET gate (Phase 2I.2); same allow-list as `canUseDealParticipantPicker` without deal-id enumeration |
+| `resolveClient360Context({ clientId, request, capability, perfPrefix })` | Phase **2J** narrow read-only setup: auth + one light view gate + optional `ensureClientExistsForPrivilegedMiss` (SUPER_ADMIN miss-path only). Capabilities: `core:read` \| `strategy:view` \| `deals:view` \| `sourceRecords:view`. Does not run domain queries. |
+| `resolveClient360PageAccess(user, clientId)` | Phase **2K** RSC resolve-once for Client360Page UI flags (hierarchy/deals/strategy view+manage). Returns `null` when caller cannot read (hide existence). Not for mutation auth. |
+| `shouldFetchClient360SourceRecords` / `client360LoadGuards` | Phase **2L/2M** pure first-paint vs expand-fetch contracts; covered by `npm run test:client360-load-guards` |
 | `requireDealViewAccess(clientId, request?)` | Bearer/session when `request` passed → deal list/read permission |
 | `requireDealCreateAccess(clientId, request?)` | Bearer/session when `request` passed → deal create permission |
 | `requireDealManageAccess(clientId, dealId, request?)` | Bearer/session when `request` passed → deal update/delete permission |

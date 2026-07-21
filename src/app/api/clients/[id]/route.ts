@@ -2,18 +2,18 @@ import { ClientStatus } from '@prisma/client';
 import { NextResponse } from 'next/server';
 import {
   buildClient360CoreResponse,
-  client360CoreSelect,
+  client360CoreQuerySelect,
 } from '@/lib/client360';
 import { replaceClientContacts } from '@/lib/clientContacts';
 import { prisma } from '@/lib/prisma';
 import {
   authorizePipelineStatusChange,
+  canReadClientCore,
   getAuthenticatedUserFromRequest,
-  requireClientCoreReadAccess,
   requireSuperAdminFromRequest,
   verifyAdminPassword,
 } from '@/lib/authHelpers';
-import { timeRouteHandler } from '@/lib/performance';
+import { timeAsync, timeRouteHandler } from '@/lib/performance';
 
 export const dynamic = 'force-dynamic';
 
@@ -38,24 +38,39 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const auth = await requireClientCoreReadAccess(id, request);
+
+  const auth = await timeAsync('client360:core:auth', () =>
+    getAuthenticatedUserFromRequest(request)
+  );
   if (auth.error) {
     return auth.error;
+  }
+
+  const allowed = await timeAsync('client360:core:access', () =>
+    canReadClientCore(auth.user.id, auth.user.role, id)
+  );
+  if (!allowed) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
   const payload = await timeRouteHandler(
     `GET /api/clients/${id}`,
     async () => {
-      const client = await prisma.client.findUnique({
-        where: { id },
-        select: client360CoreSelect,
-      });
+      const client = await timeAsync('client360:core:query', () =>
+        prisma.client.findUnique({
+          where: { id },
+          // Narrow select — same as RSC / core-slice refresh (no documents/strategies joins).
+          select: client360CoreQuerySelect,
+        })
+      );
 
       if (!client) {
         return null;
       }
 
-      return buildClient360CoreResponse(client);
+      return timeAsync('client360:core:map', async () =>
+        buildClient360CoreResponse(client)
+      );
     },
     {
       payloadCategory: 'client360-core',
@@ -182,7 +197,8 @@ export async function PATCH(
 
   const refreshedClient = await prisma.client.findUnique({
     where: { id: client.id },
-    select: client360CoreSelect,
+    // Same narrow core DTO as GET — keeps Phase 2A stage refresh consistent.
+    select: client360CoreQuerySelect,
   });
 
   if (!refreshedClient) {

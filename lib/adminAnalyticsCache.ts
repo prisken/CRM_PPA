@@ -385,6 +385,14 @@ export function getCachedAdminDashboardKpis() {
   return getCachedAdminDashboardKpisInternal();
 }
 
+/**
+ * Bypass `unstable_cache` for local profiling / cold-path measurement.
+ * Production routes must keep using {@link getCachedAdminDashboardKpis}.
+ */
+export function loadAdminDashboardKpisUncached() {
+  return loadAdminDashboardKpis();
+}
+
 export function getCachedAdminLeaderboardsData() {
   return getCachedAdminLeaderboardsDataInternal();
 }
