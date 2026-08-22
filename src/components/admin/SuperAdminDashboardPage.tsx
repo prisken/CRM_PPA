@@ -100,7 +100,7 @@ export default function SuperAdminDashboardPage() {
   const searchParams = useSearchParams();
   const { profile, loading: profileLoading, error: profileError } = useUserProfile();
 
-  const rawView = searchParams.get('view');
+  const rawView = searchParams?.get('view') ?? null;
   const viewFromQuery = parseAdminDashboardView(rawView);
 
   // Invalid `?view=` → home (refresh-safe canonical URL).
