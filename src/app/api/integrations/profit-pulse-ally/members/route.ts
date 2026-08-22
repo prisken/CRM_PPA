@@ -23,7 +23,21 @@ type ProfitPulseAllyMemberBody = {
   memberId?: unknown;
   signedUpAt?: unknown;
   provider?: unknown;
+  source?: unknown;
 };
+
+function resolveLeadSource(body: ProfitPulseAllyMemberBody): string {
+  const source = compactString(body.source);
+  if (source) {
+    return source;
+  }
+
+  if (compactString(body.provider) === 'Hub Cards') {
+    return 'Hub Cards';
+  }
+
+  return DEFAULT_LEAD_SOURCE;
+}
 
 function stringifyField(value: unknown) {
   if (value === undefined || value === null) {
@@ -123,9 +137,15 @@ export async function POST(request: Request) {
   const email = normalizeEmail(
     typeof body.email === 'string' ? body.email : null
   );
+  const phone = resolvePhone(body);
 
-  if (!email) {
-    return NextResponse.json({ error: 'email is required' }, { status: 400 });
+  // Phone-first funnels (e.g. Hub Cards recruit form) legitimately have no
+  // email field — accept a lead with at least one contact channel.
+  if (!email && !phone) {
+    return NextResponse.json(
+      { error: 'email or phone required' },
+      { status: 400 }
+    );
   }
 
   try {
@@ -137,9 +157,9 @@ export async function POST(request: Request) {
       lead: {
         name: resolveName(body),
         email,
-        phone: resolvePhone(body),
+        phone,
         company: compactString(body.company),
-        leadSource: DEFAULT_LEAD_SOURCE,
+        leadSource: resolveLeadSource(body),
         roleInCompany:
           compactString(body.roleInCompany) ?? compactString(body.role),
         expectations: compactString(body.expectations),
