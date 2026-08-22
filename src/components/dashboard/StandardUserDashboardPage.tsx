@@ -126,7 +126,7 @@ export default function StandardUserDashboardPage() {
   const searchParams = useSearchParams();
   const { profile, loading: profileLoading } = useUserProfile();
 
-  const rawView = searchParams.get('view');
+  const rawView = searchParams?.get('view') ?? null;
   const view = parseStandardDashboardView(rawView);
 
   // Invalid `?view=` → home (refresh-safe canonical URL).
