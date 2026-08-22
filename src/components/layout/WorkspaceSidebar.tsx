@@ -94,7 +94,7 @@ const WorkspaceSidebarNav = memo(function WorkspaceSidebarNav({
   collapsed: boolean;
   onNavigate?: () => void;
 }) {
-  const pathname = usePathname();
+  const pathname = usePathname() ?? '';
   const searchParams = useSearchParams();
   const search = searchParams?.toString() ?? '';
   const { density } = useDisplayDensity();
