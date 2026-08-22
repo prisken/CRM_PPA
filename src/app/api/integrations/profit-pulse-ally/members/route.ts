@@ -156,11 +156,11 @@ export async function POST(request: Request) {
       },
       { status: result.action === 'created' ? 201 : 200 }
     );
-  } catch {
-    console.error('[profit-pulse-ally] Failed to upsert member from webhook');
+  } catch (err) {
+    console.error('[profit-pulse-ally] Failed to upsert member from webhook', err);
 
     return NextResponse.json(
-      { error: 'Failed to save member lead' },
+      { error: 'Failed to save member lead', detail: String(err instanceof Error ? err.message : err) },
       { status: 500 }
     );
   }
