@@ -5,4 +5,7 @@ export const LEAD_SOURCE_SUGGESTIONS = [
   'Social Media',
   'Event',
   'Partner',
+  'Group Medical - Cold',
+  'Group Medical - Referral',
+  'Group Medical - Warm',
 ] as const;
