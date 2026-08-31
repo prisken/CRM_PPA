@@ -24,6 +24,7 @@ export const WORKSPACE_NAV_ITEM_IDS = {
   ADMIN_REVENUE: 'admin-revenue',
   ADMIN_LEADERBOARDS: 'admin-leaderboards',
   ADMIN_LEADS: 'admin-leads',
+  ADMIN_PRODUCTS: 'admin-products',
   ADMIN_USERS: 'admin-users',
   ADMIN_RECONCILIATION: 'admin-reconciliation',
   ADMIN_USER_DASHBOARD: 'admin-user-dashboard',
@@ -213,6 +214,11 @@ export function buildAdminDashboardNav(): WorkspaceNavConfig {
           label: 'Lead Command Center',
           href: '/admin/leads',
           badge: { label: 'LCC', tone: 'info' },
+        },
+        {
+          id: WORKSPACE_NAV_ITEM_IDS.ADMIN_PRODUCTS,
+          label: 'Product Targeting',
+          href: '/products',
         },
         {
           id: WORKSPACE_NAV_ITEM_IDS.ADMIN_PIPELINE,
