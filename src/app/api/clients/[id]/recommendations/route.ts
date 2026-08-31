@@ -2,7 +2,9 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getAuthenticatedUserFromRequest } from '@/lib/authHelpers';
 import {
-  scoreClient,
+  scoreClientDiverse,
+  compareCategory,
+  suitabilityStars,
   salesPlan,
   type Recommendation,
 } from '@/lib/recommendationEngine';
@@ -10,12 +12,11 @@ import {
 export const dynamic = 'force-dynamic';
 
 /**
- * GET /api/clients/[id]/recommendations
- * Runs the product matching engine over the client's stored profile traits.
- * Optional query: ?top=5
- * Returns top recommendations with features, fit, and sales plan + script.
+ * GET /api/clients/[id]/recommendations?top=5
+ * Category-diverse top-N (one product per category), each with fit + sales
+ * plan, plus per-category comparison rows (differences + suitability stars)
+ * so the rep can compare alternatives within a category.
  */
-
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -35,7 +36,7 @@ export async function GET(
 
   const client = await prisma.client.findUnique({
     where: { id },
-    select: { id: true, name: true, profileTraits: true },
+    select: { id: true, name: true, profileTraits: true, recommendedProducts: true },
   });
   if (!client) return NextResponse.json({ error: 'Client not found' }, { status: 404 });
 
@@ -43,11 +44,22 @@ export async function GET(
     ? (client.profileTraits as string[])
     : [];
 
-  const recs: Recommendation[] = scoreClient(traits, top);
-  const withPlans = recs.map((r) => ({
+  const { recommendations, by_category } = scoreClientDiverse(traits, top);
+
+  const withPlans = recommendations.map((r) => ({
     ...r,
+    stars: suitabilityStars(r.score),
     sales_plan: salesPlan(r, client.name || 'Client'),
   }));
+
+  // per-category comparisons for the categories represented in the top-N
+  const comparisons: Record<string, ReturnType<typeof compareCategory>> = {};
+  for (const cat of Object.keys(by_category)) {
+    const rows = by_category[cat];
+    if (rows && rows.length >= 1) {
+      comparisons[cat] = compareCategory(cat, rows);
+    }
+  }
 
   return NextResponse.json({
     client_id: client.id,
@@ -55,5 +67,10 @@ export async function GET(
     traits,
     count: withPlans.length,
     recommendations: withPlans,
+    by_category,
+    comparisons,
+    recommended_products: Array.isArray(client.recommendedProducts)
+      ? (client.recommendedProducts as string[])
+      : [],
   });
 }

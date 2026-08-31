@@ -220,6 +220,8 @@ model Client {
   expectations         String?      @db.Text
   /// Profile traits picked by the rep for product recommendation (JSON array of trait keys).
   profileTraits        Json?        @default("[]") @map("profile_traits") @db.JsonB
+  /// Curated product shortlist the rep has picked for this client (JSON array of product names).
+  recommendedProducts  Json?        @default("[]") @map("recommended_products") @db.JsonB
   /// @deprecated Prefer ClientImportantDate rows. Kept for rollback / dual-read during transition.
   importantDates       Json?        @default("[]") @map("important_dates") @db.JsonB
   status               ClientStatus @default(NEW_LEAD)

@@ -13,6 +13,7 @@ import LeadSourceBadges from '@/components/clients/LeadSourceBadges';
 import DealInfoWidget, { type ClientDeal } from '@/components/clients/DealInfoWidget';
 import WorkspacePanel from '@/components/clients/WorkspacePanel';
 import RecommendationsWidget from '@/components/clients/RecommendationsWidget';
+import RecommendedProductsWidget from '@/components/clients/RecommendedProductsWidget';
 import {
   Client360RefreshProvider,
   useClient360Refresh,
@@ -500,6 +501,7 @@ function Client360PageClientInner({
         <aside
           className={`order-2 min-w-0 w-full shrink-0 md:w-[20rem] lg:w-[22rem] ${asideSpacingClass}`}
         >
+          <RecommendedProductsWidget clientId={clientId} />
           <ClientDetailsWidget
             clientId={clientId}
             isLead={classifyImportantDateRecordType(client.status) === 'Lead'}

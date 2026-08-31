@@ -24,6 +24,7 @@ type Recommendation = {
   category: string;
   price_tier: string;
   score: number;
+  stars?: number;
   matched_traits: string[];
   persona_overlap: string[];
   features: string[];
@@ -75,6 +76,8 @@ export default function RecommendationsWidget({
     new Set(GROUP_ORDER.filter((_, i) => i !== 0))
   );
   const [error, setError] = useState<string | null>(null);
+  const [shortlist, setShortlist] = useState<string[]>([]);
+  const [compareCat, setCompareCat] = useState<string | null>(null);
 
   const knownTraits = useMemo(() => new Set<string>(VOCABULARY.keys()), []);
 
@@ -135,6 +138,9 @@ export default function RecommendationsWidget({
       const data = await res.json();
       if (res.ok) {
         setRecs(data.recommendations || []);
+        if (Array.isArray(data.recommended_products)) {
+          setShortlist(data.recommended_products);
+        }
       } else {
         setError(data.error || 'Failed to load recommendations');
       }
@@ -170,6 +176,31 @@ export default function RecommendationsWidget({
       await saveTraits(next);
     },
     [traits, saveTraits]
+  );
+
+  const addToShortlist = useCallback(
+    async (name: string) => {
+      if (shortlist.includes(name)) return;
+      const next = [...shortlist, name];
+      setShortlist(next);
+      try {
+        const res = await authenticatedFetch(
+          `/api/clients/${encodeURIComponent(clientId)}/recommended-products`,
+          {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ products: next }),
+          }
+        );
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          setError(data.error || 'Failed to add to shortlist');
+        }
+      } catch {
+        setError('Failed to add to shortlist');
+      }
+    },
+    [shortlist, clientId]
   );
 
   const toggleGroup = useCallback((group: string) => {
@@ -441,7 +472,12 @@ export default function RecommendationsWidget({
 
             {recs.length > 0 && (
               <div className="space-y-2">
-                {recs.map((r, i) => (
+                <div className="text-[11px] font-medium text-gray-500">
+                  One product per category — tap a category to compare alternatives with suitability stars.
+                </div>
+                {recs.map((r, i) => {
+                  const inShortlist = shortlist.includes(r.product);
+                  return (
                   <div
                     key={r.product}
                     className="rounded-md border border-gray-200 bg-gray-50 p-3"
@@ -452,16 +488,43 @@ export default function RecommendationsWidget({
                           {i + 1}. {r.product}
                         </div>
                         <div className="text-xs text-gray-500">
-                          {r.category} · {r.price_tier} tier · score {r.score}
+                          {r.category} · {r.price_tier} tier · score {r.score}{' '}
+                          {typeof r.stars === 'number' && (
+                            <span className="text-amber-500">
+                              {'★'.repeat(r.stars)}
+                              {'☆'.repeat(5 - r.stars)}
+                            </span>
+                          )}
                         </div>
+                        <button
+                          type="button"
+                          onClick={() => setCompareCat(compareCat === r.category ? null : r.category)}
+                          className="mt-1 rounded border border-gray-300 bg-white px-1.5 py-0.5 text-[10px] font-medium text-gray-500 hover:border-blue-400 hover:text-blue-600"
+                        >
+                          {compareCat === r.category ? 'Hide comparison' : 'Compare alternatives in category'}
+                        </button>
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => setExpanded(expanded === i ? null : i)}
-                        className="shrink-0 rounded border border-gray-300 bg-white px-2 py-1 text-xs font-medium text-gray-600 hover:border-blue-400 hover:text-blue-600"
-                      >
-                        {expanded === i ? 'Hide' : 'Plan + script'}
-                      </button>
+                      <div className="flex shrink-0 flex-col items-end gap-1">
+                        <button
+                          type="button"
+                          onClick={() => addToShortlist(r.product)}
+                          disabled={inShortlist}
+                          className={`rounded border px-2 py-1 text-xs font-medium ${
+                            inShortlist
+                              ? 'cursor-default border-green-300 bg-green-50 text-green-700'
+                              : 'border-blue-300 bg-white text-blue-700 hover:bg-blue-50'
+                          }`}
+                        >
+                          {inShortlist ? '✓ Shortlisted' : '+ Add to shortlist'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setExpanded(expanded === i ? null : i)}
+                          className="rounded border border-gray-300 bg-white px-2 py-1 text-xs font-medium text-gray-600 hover:border-blue-400 hover:text-blue-600"
+                        >
+                          {expanded === i ? 'Hide' : 'Plan + script'}
+                        </button>
+                      </div>
                     </div>
 
                     <div className="mt-1.5 text-xs text-gray-600">
@@ -472,6 +535,10 @@ export default function RecommendationsWidget({
                       <span className="font-medium text-gray-700">Features:</span>{' '}
                       {r.features.join('; ')}
                     </div>
+
+                    {compareCat === r.category && (
+                      <ComparisonPanel category={r.category} clientId={clientId} />
+                    )}
 
                     {expanded === i && r.sales_plan && (
                       <div className="mt-2 space-y-1.5 rounded-md border border-blue-100 bg-blue-50/60 p-2.5 text-xs">
@@ -502,12 +569,77 @@ export default function RecommendationsWidget({
                       </div>
                     )}
                   </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </>
         )}
       </div>
     </SectionCard>
+  );
+}
+
+
+/** Inline category comparison: alternatives + differences + suitability stars. */
+function ComparisonPanel({ category, clientId }: { category: string; clientId: string }) {
+  const [rows, setRows] = useState<Array<{
+    product: string; score: number; stars: number; price_tier: string;
+    features: string[]; matched_traits: string[]; gap?: string;
+  }> | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    authenticatedFetch(`/api/clients/${encodeURIComponent(clientId)}/recommendations?top=5`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (cancelled) return;
+        const byCat = data.comparisons?.[category];
+        if (byCat && Array.isArray(byCat.rows)) {
+          setRows(byCat.rows);
+        }
+        setLoading(false);
+      })
+      .catch(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [category, clientId]);
+
+  if (loading) return <div className="mt-2 text-xs text-gray-400">Comparing…</div>;
+  if (!rows || rows.length === 0) return null;
+
+  return (
+    <div className="mt-2 overflow-x-auto rounded-md border border-blue-100 bg-blue-50/50 p-2">
+      <p className="mb-1.5 text-[11px] font-semibold text-blue-800">
+        Compare — {category}
+      </p>
+      <table className="w-full text-left text-[11px]">
+        <thead>
+          <tr className="text-gray-500">
+            <th className="pb-1 pr-2 font-medium">Product</th>
+            <th className="pb-1 pr-2 font-medium">Fit</th>
+            <th className="pb-1 pr-2 font-medium">Tier</th>
+            <th className="pb-1 font-medium">Key differences</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => (
+            <tr key={row.product} className="align-top">
+              <td className="py-1 pr-2">
+                <span className="font-semibold text-gray-900">{row.product}</span>
+                <span className="ml-1 text-amber-500">
+                  {'★'.repeat(row.stars)}
+                  {'☆'.repeat(5 - row.stars)}
+                </span>
+              </td>
+              <td className="py-1 pr-2 text-gray-600">{row.matched_traits.length} traits</td>
+              <td className="py-1 pr-2 text-gray-600">{row.price_tier}</td>
+              <td className="py-1 text-gray-600">{row.features.slice(0, 2).join('; ')}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }

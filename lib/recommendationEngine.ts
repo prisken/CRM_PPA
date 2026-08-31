@@ -91,6 +91,16 @@ const HOOKS: Record<string, string> = {
     'Do what you love — with a safety net for the unexpected',
 };
 
+// Categories sold on emotion/aspiration (savings, investment, retirement, ILAS):
+// recommend more freely — soft signals (legacy, children, liquidity, milestones) carry
+// weight without requiring strict needs-matching.
+export const EMOTIONAL_CATEGORIES = new Set([
+  '儲蓄保險 (Savings)',
+  '投資成分保險 (Investment Focus)',
+  '退休收入 (Retirement Income)',
+  '投資相連壽險 (ILAS)',
+]);
+
 const GAP_BY_CAT: Record<string, string> = {
   '危疾保障 (Critical Illness)':
     'Covers the financial shock of critical illness — lump sum when you need it most',
@@ -196,6 +206,19 @@ export function scoreClient(traits: string[], topN = 5): Recommendation[] {
       norm.includes('net_worth_high')
     ) {
       score += tier === 'premium' ? 1.5 : tier === 'budget' ? -1.0 : 0;
+    }
+
+    // EMOTIONAL-CATEGORY RELAXATION: savings/investment/retirement/ILAS sell on
+    // aspiration. A client with ANY soft signal (children, legacy, milestones,
+    // liquidity, savings goals) gets a meaningful boost so these products surface
+    // even without strict needs-matching.
+    if (EMOTIONAL_CATEGORIES.has(prod.category)) {
+      const softHits = norm.filter((t) =>
+        SOFT_SIGNALS.has(t) || hits.includes(t)
+      ).length;
+      if (softHits > 0) {
+        score += Math.min(softHits, 3) * 1.0 + 0.5; // +1.5 to +3.5 emotional fit
+      }
     }
 
     if (score > 0) {
@@ -355,4 +378,92 @@ export function matchClientsForProduct(
   }
   out.sort((a, b) => b.score - a.score);
   return out;
+}
+
+
+// Soft/aspirational signals that indicate openness to emotional-category products.
+export const SOFT_SIGNALS = new Set([
+  'wants_legacy', 'has_children', 'life_milestones', 'wants_future_flexibility',
+  'wants_liquidity', 'wants_savings_and_protection', 'wants_long_term_growth',
+  'children_education_overseas', 'wants_multi_currency', 'wants_guaranteed_income',
+  'retirement_saving', 'lump_sum_available', 'existing_savings_significant',
+  'wants_income_soon', 'wants_multi_generational', 'wants_annual_dividends',
+  'planning_family', 'wants_capital_preservation', 'wants_whole_life',
+]);
+
+/**
+ * CATEGORY DIVERSITY: pick the top product per category first, then fill the
+ * remaining slots with the best next products from new categories — so the
+ * top-N never shows two products from the same category.
+ */
+export function scoreClientDiverse(
+  traits: string[],
+  topN = 5
+): { recommendations: Recommendation[]; by_category: Record<string, Recommendation[]> } {
+  const all = scoreClient(traits, 200);
+  const byCategory = new Map<string, Recommendation[]>();
+  for (const r of all) {
+    if (!byCategory.has(r.category)) byCategory.set(r.category, []);
+    byCategory.get(r.category)!.push(r);
+  }
+  const recommendations: Recommendation[] = [];
+  const usedCats = new Set<string>();
+  // round-robin: take the best unused-category product each pass
+  while (recommendations.length < topN && usedCats.size < byCategory.size) {
+    let picked: Recommendation | null = null;
+    for (const [cat, list] of byCategory) {
+      if (usedCats.has(cat)) continue;
+      const next = list.find((r) => !recommendations.includes(r));
+      if (next && (!picked || next.score > picked.score)) picked = next;
+    }
+    if (!picked) break;
+    recommendations.push(picked);
+    usedCats.add(picked.category);
+  }
+  const by_category: Record<string, Recommendation[]> = {};
+  for (const [cat, list] of byCategory) {
+    by_category[cat] = list.slice(0, 3);
+  }
+  return { recommendations, by_category };
+}
+
+/** Suitability stars 1-5 from a score (engine calibration). */
+export function suitabilityStars(score: number): number {
+  if (score >= 12) return 5;
+  if (score >= 9) return 4;
+  if (score >= 6) return 3;
+  if (score >= 3) return 2;
+  return 1;
+}
+
+export interface ComparisonRow {
+  product: string;
+  score: number;
+  stars: number;
+  price_tier: string;
+  features: string[];
+  matched_traits: string[];
+  gap?: string;
+}
+
+/**
+ * PRODUCT COMPARISON: for products in the same category, lay out differences
+ * side by side with suitability stars so the rep can explain the choice.
+ */
+export function compareCategory(
+  category: string,
+  products: Recommendation[]
+): { category: string; rows: ComparisonRow[] } {
+  return {
+    category,
+    rows: products.map((r) => ({
+      product: r.product,
+      score: r.score,
+      stars: suitabilityStars(r.score),
+      price_tier: r.price_tier,
+      features: r.features,
+      matched_traits: r.matched_traits,
+      gap: r.product_fit?.gap,
+    })),
+  };
 }
