@@ -5,6 +5,7 @@ import { ChevronDown } from 'lucide-react';
 import dynamic from 'next/dynamic';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import ActivityLog, { type ActivityLogEntry } from '@/components/clients/ActivityLog';
+import RecommendationsWidget from '@/components/clients/RecommendationsWidget';
 import StrategyAndTasks, {
   type StrategyCurrentUser,
   type StrategyTask,
@@ -47,6 +48,7 @@ const BASE_TABS = [
   { id: 'strategy-tasks', label: 'Strategy & Tasks' },
   { id: 'strategy-planner', label: 'Strategy Planner' },
   { id: 'activity-notes', label: 'Activity & Notes' },
+  { id: 'product-recs', label: 'Product Recommendations' },
 ] as const;
 
 type TabId = (typeof BASE_TABS)[number]['id'];
@@ -75,6 +77,9 @@ function readTabFromHash(canViewStrategyPlanner: boolean): TabId | null {
   const hash = window.location.hash;
   if (hash === '#activity-notes') {
     return 'activity-notes';
+  }
+  if (hash === '#product-recs') {
+    return 'product-recs';
   }
   if (hash === '#strategy-planner' && canViewStrategyPlanner) {
     return 'strategy-planner';
@@ -361,6 +366,10 @@ export default function WorkspacePanel({
         {!isStrategyPlanner ? (
           loadingTab === resolvedTab ? (
             <div className="h-48 animate-pulse rounded-lg bg-gray-100" />
+          ) : resolvedTab === 'product-recs' ? (
+            <div className="p-1">
+              <RecommendationsWidget clientId={clientId} />
+            </div>
           ) : resolvedTab === 'strategy-tasks' ? (
             <StrategyAndTasks
               clientId={clientId}

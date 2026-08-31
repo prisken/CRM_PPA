@@ -12,7 +12,6 @@ import ClientSourceRecordsWidget from '@/components/clients/ClientSourceRecordsW
 import LeadSourceBadges from '@/components/clients/LeadSourceBadges';
 import DealInfoWidget, { type ClientDeal } from '@/components/clients/DealInfoWidget';
 import WorkspacePanel from '@/components/clients/WorkspacePanel';
-import RecommendationsWidget from '@/components/clients/RecommendationsWidget';
 import RecommendedProductsWidget from '@/components/clients/RecommendedProductsWidget';
 import {
   Client360RefreshProvider,
@@ -487,7 +486,6 @@ function Client360PageClientInner({
 
       <div className="mx-auto flex max-w-7xl flex-col gap-6 overflow-x-hidden px-4 py-6 sm:px-6 md:flex-row md:items-start lg:px-8">
         <div className="order-1 min-w-0 w-full md:flex-1 md:basis-0">
-          <RecommendationsWidget clientId={clientId} clientName={client?.name} />
           <WorkspacePanel
             clientId={clientId}
             currentUser={workspaceCurrentUser}
