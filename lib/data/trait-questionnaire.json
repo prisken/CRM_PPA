@@ -1,179 +1,737 @@
 {
-  "meta": {
-    "title": "Client profile — quick questionnaire",
-    "subtitle": "Answer a few questions and we'll pick the traits for you. You can fine-tune after.",
-    "built": "2026-08-31",
-    "max_questions": 18
-  },
-  "questions": [
+ "meta": {
+  "title": "Client profile — quick questionnaire",
+  "subtitle": "Answer a few questions and we'll pick the traits for you. You can fine-tune after.",
+  "built": "2026-08-31",
+  "max_questions": 18,
+  "note": "18 questions = fact-finding baseline. Each question is skippable."
+ },
+ "questions": [
+  {
+   "id": "q_age",
+   "question": "What is the client's age range?",
+   "options": [
     {
-      "id": "q_age",
-      "question": "What is the client's age range?",
-      "options": [
-        { "label": "Under 35", "add": ["age_under_35"], "remove": ["age_35_50", "age_over_50", "age_over_60", "retired"] },
-        { "label": "35–50", "add": ["age_35_50"], "remove": ["age_under_35", "age_over_50", "age_over_60", "retired"] },
-        { "label": "Over 50", "add": ["age_over_50"], "remove": ["age_under_35", "age_35_50", "age_over_60", "retired"] },
-        { "label": "60+", "add": ["age_over_60"], "remove": ["age_under_35", "age_35_50", "age_over_50", "retired"] }
-      ]
+     "label": "Under 35",
+     "add": [
+      "age_under_35"
+     ],
+     "remove": [
+      "age_35_50",
+      "age_over_50",
+      "age_over_60",
+      "retired"
+     ]
     },
     {
-      "id": "q_family",
-      "question": "Marital / family situation?",
-      "options": [
-        { "label": "Single", "add": [], "remove": ["marital_status_married", "has_children", "caring_for_parents", "planning_family"] },
-        { "label": "Married / engaged", "add": ["marital_status_married"], "remove": [] },
-        { "label": "Married with children", "add": ["marital_status_married", "has_children"], "remove": ["planning_family"] },
-        { "label": "Planning a family", "add": ["planning_family"], "remove": ["has_children"] }
-      ]
+     "label": "35–50",
+     "add": [
+      "age_35_50"
+     ],
+     "remove": [
+      "age_under_35",
+      "age_over_50",
+      "age_over_60",
+      "retired"
+     ]
     },
     {
-      "id": "q_children_age",
-      "question": "If children, what age are they?",
-      "options": [
-        { "label": "No children", "add": [], "remove": ["children_age_0_12", "children_age_5_20", "wants_child_ci", "wants_family_bundle", "children_education_overseas"] },
-        { "label": "Under 12", "add": ["children_age_0_12", "wants_child_ci"], "remove": ["children_age_5_20"] },
-        { "label": "5–20", "add": ["children_age_5_20"], "remove": ["children_age_0_12"] },
-        { "label": "Planning / considering education abroad", "add": ["children_education_overseas"], "remove": [] }
-      ]
+     "label": "Over 50",
+     "add": [
+      "age_over_50"
+     ],
+     "remove": [
+      "age_under_35",
+      "age_35_50",
+      "age_over_60",
+      "retired"
+     ]
     },
     {
-      "id": "q_parents",
-      "question": "Caring for aging parents?",
-      "options": [
-        { "label": "Yes", "add": ["caring_for_parents"], "remove": [] },
-        { "label": "No", "add": [], "remove": ["caring_for_parents"] }
-      ]
-    },
-    {
-      "id": "q_income",
-      "question": "Client's income level?",
-      "options": [
-        { "label": "Entry / low", "add": ["income_low"], "remove": ["income_mid", "income_mid_high", "income_high", "income_very_high", "net_worth_high"] },
-        { "label": "Mid", "add": ["income_mid"], "remove": ["income_low", "income_mid_high", "income_high", "income_very_high", "net_worth_high"] },
-        { "label": "Mid–high", "add": ["income_mid_high"], "remove": ["income_low", "income_mid", "income_high", "income_very_high", "net_worth_high"] },
-        { "label": "High", "add": ["income_high"], "remove": ["income_low", "income_mid", "income_mid_high", "income_very_high", "net_worth_high"] },
-        { "label": "Very high / HNW", "add": ["income_very_high", "net_worth_high"], "remove": ["income_low", "income_mid", "income_mid_high", "income_high"] }
-      ]
-    },
-    {
-      "id": "q_budget",
-      "question": "Rough annual insurance budget?",
-      "options": [
-        { "label": "HK$2k–6k", "add": ["budget_low"], "remove": ["budget_mid", "budget_mid_high"] },
-        { "label": "HK$6k–40k", "add": ["budget_mid"], "remove": ["budget_low", "budget_mid_high"] },
-        { "label": "HK$40k+", "add": ["budget_mid_high"], "remove": ["budget_low", "budget_mid"] }
-      ]
-    },
-    {
-      "id": "q_coverage",
-      "question": "What protection does the client already have?",
-      "options": [
-        { "label": "None / minimal", "add": ["existing_ci_none", "has_no_medical", "existing_coverage_minimal", "protection_gap"], "remove": ["has_existing_ci", "existing_ci_basic", "existing_ci_insufficient", "has_base_plan", "has_ilas"] },
-        { "label": "Some CI, not enough", "add": ["has_existing_ci", "existing_ci_insufficient", "protection_gap"], "remove": ["existing_ci_none", "has_no_medical"] },
-        { "label": "Solid base plan", "add": ["has_base_plan", "has_existing_ci", "existing_ci_basic"], "remove": ["existing_ci_none", "has_no_medical", "existing_ci_insufficient"] },
-        { "label": "Has an ILAS / investment plan", "add": ["has_ilas", "has_base_plan"], "remove": ["has_no_medical"] }
-      ]
-    },
-    {
-      "id": "q_cancer",
-      "question": "Family history of cancer or high cancer awareness?",
-      "options": [
-        { "label": "Yes — family history", "add": ["family_history_cancer", "cancer_awareness_high"], "remove": [] },
-        { "label": "Just wants strong cancer cover", "add": ["cancer_awareness_high"], "remove": ["family_history_cancer"] },
-        { "label": "No particular concern", "add": [], "remove": ["family_history_cancer", "cancer_awareness_high"] }
-      ]
-    },
-    {
-      "id": "q_health",
-      "question": "Any chronic conditions (diabetes / hypertension / high lipids)?",
-      "options": [
-        { "label": "Yes — 'three high'", "add": ["three_high", "chronic_condition", "health_concerns"], "remove": [] },
-        { "label": "Other health concerns", "add": ["health_concerns"], "remove": ["three_high", "chronic_condition"] },
-        { "label": "Good health", "add": [], "remove": ["three_high", "chronic_condition", "health_concerns"] }
-      ]
-    },
-    {
-      "id": "q_goal",
-      "question": "What's the main financial goal?",
-      "options": [
-        { "label": "Protect the family", "add": ["wants_ci_comprehensive", "wants_multiple_claims"], "remove": ["wants_legacy", "wants_investment_wrapper", "wants_guaranteed_income"] },
-        { "label": "Grow wealth / savings", "add": ["wants_savings_and_protection", "wants_long_term_growth"], "remove": ["wants_guaranteed_income"] },
-        { "label": "Retirement income", "add": ["wants_guaranteed_income", "wants_income_soon"], "remove": ["wants_investment_wrapper"] },
-        { "label": "Legacy / pass to children", "add": ["wants_legacy", "wants_multi_generational"], "remove": [] },
-        { "label": "Invest via insurance wrapper", "add": ["wants_investment_wrapper", "wants_fund_access"], "remove": ["wants_guaranteed_income"] }
-      ]
-    },
-    {
-      "id": "q_retirement",
-      "question": "Retirement timeline?",
-      "options": [
-        { "label": "Already saving", "add": ["retirement_saving"], "remove": ["retiring_soon", "retirement_horizon_0_10"] },
-        { "label": "Retiring within 10 years", "add": ["retirement_horizon_0_10"], "remove": ["retiring_soon"] },
-        { "label": "Retiring soon / retired", "add": ["retiring_soon", "retired"], "remove": ["retirement_saving"] },
-        { "label": "Not a focus yet", "add": [], "remove": ["retirement_saving", "retirement_horizon_0_10", "retiring_soon"] }
-      ]
-    },
-    {
-      "id": "q_tax",
-      "question": "Interested in tax-deductible premiums (VHIS / QDAP)?",
-      "options": [
-        { "label": "Yes", "add": ["wants_tax_deduction"], "remove": [] },
-        { "label": "No / not applicable", "add": [], "remove": ["wants_tax_deduction"] }
-      ]
-    },
-    {
-      "id": "q_medical",
-      "question": "Hospital room preference?",
-      "options": [
-        { "label": "Ward is fine", "add": [], "remove": ["wants_private_medical", "wants_private_room", "wants_private_ward"] },
-        { "label": "Semi-private", "add": ["wants_private_ward", "wants_private_medical"], "remove": ["wants_private_room"] },
-        { "label": "Private room", "add": ["wants_private_room", "wants_private_medical"], "remove": ["wants_private_ward"] }
-      ]
-    },
-    {
-      "id": "q_crossborder",
-      "question": "Frequent travel to mainland / cross-border needs?",
-      "options": [
-        { "label": "Yes — frequent mainland travel", "add": ["cross_border", "frequent_mainland_travel", "wants_rmb"], "remove": [] },
-        { "label": "Travels internationally", "add": ["travels_frequently"], "remove": ["cross_border", "frequent_mainland_travel"] },
-        { "label": "Mostly in HK", "add": [], "remove": ["cross_border", "frequent_mainland_travel", "travels_frequently"] }
-      ]
-    },
-    {
-      "id": "q_lumpsum",
-      "question": "Is a lump sum available for a single-premium plan?",
-      "options": [
-        { "label": "Yes", "add": ["lump_sum_available", "existing_savings_significant"], "remove": [] },
-        { "label": "No — regular premiums only", "add": ["income_variable"], "remove": ["lump_sum_available"] },
-        { "label": "Not discussed yet", "add": [], "remove": ["lump_sum_available"] }
-      ]
-    },
-    {
-      "id": "q_sports",
-      "question": "Active sports / running?",
-      "options": [
-        { "label": "Runs / races", "add": ["plays_sports", "runs_marathons"], "remove": [] },
-        { "label": "Other sports", "add": ["plays_sports"], "remove": ["runs_marathons"] },
-        { "label": "Not active", "add": [], "remove": ["plays_sports", "runs_marathons"] }
-      ]
-    },
-    {
-      "id": "q_style",
-      "question": "Preference on plan style?",
-      "options": [
-        { "label": "Comprehensive / premium", "add": ["wants_ci_comprehensive", "wants_premium_ci", "wants_future_proof"], "remove": ["wants_simple", "wants_refundable"] },
-        { "label": "Simple / budget-friendly", "add": ["wants_simple", "wants_refundable"], "remove": ["wants_premium_ci", "wants_future_proof"] },
-        { "label": "Whole life savings", "add": ["wants_whole_life", "wants_savings_and_protection"], "remove": ["wants_term"] },
-        { "label": "Term protection (mortgage years)", "add": ["wants_term", "has_mortgage"], "remove": ["wants_whole_life"] }
-      ]
-    },
-    {
-      "id": "q_owner",
-      "question": "Is the client a business owner?",
-      "options": [
-        { "label": "Yes", "add": ["occupation_business_owner", "income_variable"], "remove": [] },
-        { "label": "No", "add": [], "remove": ["occupation_business_owner"] }
-      ]
+     "label": "60+",
+     "add": [
+      "age_over_60"
+     ],
+     "remove": [
+      "age_under_35",
+      "age_35_50",
+      "age_over_50",
+      "retired"
+     ]
     }
-  ]
+   ],
+   "section": "1 · Life stage"
+  },
+  {
+   "id": "q_family",
+   "question": "Marital / family situation?",
+   "options": [
+    {
+     "label": "Single",
+     "add": [],
+     "remove": [
+      "marital_status_married",
+      "has_children",
+      "caring_for_parents",
+      "planning_family"
+     ]
+    },
+    {
+     "label": "Married / engaged",
+     "add": [
+      "marital_status_married"
+     ],
+     "remove": []
+    },
+    {
+     "label": "Married with children",
+     "add": [
+      "marital_status_married",
+      "has_children"
+     ],
+     "remove": [
+      "planning_family"
+     ]
+    },
+    {
+     "label": "Planning a family",
+     "add": [
+      "planning_family"
+     ],
+     "remove": [
+      "has_children"
+     ]
+    }
+   ],
+   "section": "2 · Family"
+  },
+  {
+   "id": "q_children_age",
+   "question": "If children, what age are they?",
+   "options": [
+    {
+     "label": "No children",
+     "add": [],
+     "remove": [
+      "children_age_0_12",
+      "children_age_5_20",
+      "wants_child_ci",
+      "wants_family_bundle",
+      "children_education_overseas"
+     ]
+    },
+    {
+     "label": "Under 12",
+     "add": [
+      "children_age_0_12",
+      "wants_child_ci"
+     ],
+     "remove": [
+      "children_age_5_20"
+     ]
+    },
+    {
+     "label": "5–20",
+     "add": [
+      "children_age_5_20"
+     ],
+     "remove": [
+      "children_age_0_12"
+     ]
+    },
+    {
+     "label": "Planning / considering education abroad",
+     "add": [
+      "children_education_overseas"
+     ],
+     "remove": []
+    }
+   ],
+   "section": "2 · Family"
+  },
+  {
+   "id": "q_parents",
+   "question": "Caring for aging parents?",
+   "options": [
+    {
+     "label": "Yes",
+     "add": [
+      "caring_for_parents"
+     ],
+     "remove": []
+    },
+    {
+     "label": "No",
+     "add": [],
+     "remove": [
+      "caring_for_parents"
+     ]
+    }
+   ],
+   "section": "2 · Family"
+  },
+  {
+   "id": "q_income",
+   "question": "Client's income level?",
+   "options": [
+    {
+     "label": "Entry / low",
+     "add": [
+      "income_low"
+     ],
+     "remove": [
+      "income_mid",
+      "income_mid_high",
+      "income_high",
+      "income_very_high",
+      "net_worth_high"
+     ]
+    },
+    {
+     "label": "Mid",
+     "add": [
+      "income_mid"
+     ],
+     "remove": [
+      "income_low",
+      "income_mid_high",
+      "income_high",
+      "income_very_high",
+      "net_worth_high"
+     ]
+    },
+    {
+     "label": "Mid–high",
+     "add": [
+      "income_mid_high"
+     ],
+     "remove": [
+      "income_low",
+      "income_mid",
+      "income_high",
+      "income_very_high",
+      "net_worth_high"
+     ]
+    },
+    {
+     "label": "High",
+     "add": [
+      "income_high"
+     ],
+     "remove": [
+      "income_low",
+      "income_mid",
+      "income_mid_high",
+      "income_very_high",
+      "net_worth_high"
+     ]
+    },
+    {
+     "label": "Very high / HNW",
+     "add": [
+      "income_very_high",
+      "net_worth_high"
+     ],
+     "remove": [
+      "income_low",
+      "income_mid",
+      "income_mid_high",
+      "income_high"
+     ]
+    }
+   ],
+   "section": "3 · Finances"
+  },
+  {
+   "id": "q_budget",
+   "question": "Rough annual insurance budget?",
+   "options": [
+    {
+     "label": "HK$2k–6k",
+     "add": [
+      "budget_low"
+     ],
+     "remove": [
+      "budget_mid",
+      "budget_mid_high"
+     ]
+    },
+    {
+     "label": "HK$6k–40k",
+     "add": [
+      "budget_mid"
+     ],
+     "remove": [
+      "budget_low",
+      "budget_mid_high"
+     ]
+    },
+    {
+     "label": "HK$40k+",
+     "add": [
+      "budget_mid_high"
+     ],
+     "remove": [
+      "budget_low",
+      "budget_mid"
+     ]
+    }
+   ],
+   "section": "3 · Finances"
+  },
+  {
+   "id": "q_coverage",
+   "question": "What protection does the client already have?",
+   "options": [
+    {
+     "label": "None / minimal",
+     "add": [
+      "existing_ci_none",
+      "has_no_medical",
+      "existing_coverage_minimal",
+      "protection_gap"
+     ],
+     "remove": [
+      "has_existing_ci",
+      "existing_ci_basic",
+      "existing_ci_insufficient",
+      "has_base_plan",
+      "has_ilas"
+     ]
+    },
+    {
+     "label": "Some CI, not enough",
+     "add": [
+      "has_existing_ci",
+      "existing_ci_insufficient",
+      "protection_gap"
+     ],
+     "remove": [
+      "existing_ci_none",
+      "has_no_medical"
+     ]
+    },
+    {
+     "label": "Solid base plan",
+     "add": [
+      "has_base_plan",
+      "has_existing_ci",
+      "existing_ci_basic"
+     ],
+     "remove": [
+      "existing_ci_none",
+      "has_no_medical",
+      "existing_ci_insufficient"
+     ]
+    },
+    {
+     "label": "Has an ILAS / investment plan",
+     "add": [
+      "has_ilas",
+      "has_base_plan"
+     ],
+     "remove": [
+      "has_no_medical"
+     ]
+    }
+   ],
+   "section": "4 · Current protection"
+  },
+  {
+   "id": "q_cancer",
+   "question": "Family history of cancer or high cancer awareness?",
+   "options": [
+    {
+     "label": "Yes — family history",
+     "add": [
+      "family_history_cancer",
+      "cancer_awareness_high"
+     ],
+     "remove": []
+    },
+    {
+     "label": "Just wants strong cancer cover",
+     "add": [
+      "cancer_awareness_high"
+     ],
+     "remove": [
+      "family_history_cancer"
+     ]
+    },
+    {
+     "label": "No particular concern",
+     "add": [],
+     "remove": [
+      "family_history_cancer",
+      "cancer_awareness_high"
+     ]
+    }
+   ],
+   "section": "5 · Health"
+  },
+  {
+   "id": "q_health",
+   "question": "Any chronic conditions (diabetes / hypertension / high lipids)?",
+   "options": [
+    {
+     "label": "Yes — 'three high'",
+     "add": [
+      "three_high",
+      "chronic_condition",
+      "health_concerns"
+     ],
+     "remove": []
+    },
+    {
+     "label": "Other health concerns",
+     "add": [
+      "health_concerns"
+     ],
+     "remove": [
+      "three_high",
+      "chronic_condition"
+     ]
+    },
+    {
+     "label": "Good health",
+     "add": [],
+     "remove": [
+      "three_high",
+      "chronic_condition",
+      "health_concerns"
+     ]
+    }
+   ],
+   "section": "5 · Health"
+  },
+  {
+   "id": "q_goal",
+   "question": "What's the main financial goal?",
+   "options": [
+    {
+     "label": "Protect the family",
+     "add": [
+      "wants_ci_comprehensive",
+      "wants_multiple_claims"
+     ],
+     "remove": [
+      "wants_legacy",
+      "wants_investment_wrapper",
+      "wants_guaranteed_income"
+     ]
+    },
+    {
+     "label": "Grow wealth / savings",
+     "add": [
+      "wants_savings_and_protection",
+      "wants_long_term_growth"
+     ],
+     "remove": [
+      "wants_guaranteed_income"
+     ]
+    },
+    {
+     "label": "Retirement income",
+     "add": [
+      "wants_guaranteed_income",
+      "wants_income_soon"
+     ],
+     "remove": [
+      "wants_investment_wrapper"
+     ]
+    },
+    {
+     "label": "Legacy / pass to children",
+     "add": [
+      "wants_legacy",
+      "wants_multi_generational"
+     ],
+     "remove": []
+    },
+    {
+     "label": "Invest via insurance wrapper",
+     "add": [
+      "wants_investment_wrapper",
+      "wants_fund_access"
+     ],
+     "remove": [
+      "wants_guaranteed_income"
+     ]
+    }
+   ],
+   "section": "6 · Goals"
+  },
+  {
+   "id": "q_retirement",
+   "question": "Retirement timeline?",
+   "options": [
+    {
+     "label": "Already saving",
+     "add": [
+      "retirement_saving"
+     ],
+     "remove": [
+      "retiring_soon",
+      "retirement_horizon_0_10"
+     ]
+    },
+    {
+     "label": "Retiring within 10 years",
+     "add": [
+      "retirement_horizon_0_10"
+     ],
+     "remove": [
+      "retiring_soon"
+     ]
+    },
+    {
+     "label": "Retiring soon / retired",
+     "add": [
+      "retiring_soon",
+      "retired"
+     ],
+     "remove": [
+      "retirement_saving"
+     ]
+    },
+    {
+     "label": "Not a focus yet",
+     "add": [],
+     "remove": [
+      "retirement_saving",
+      "retirement_horizon_0_10",
+      "retiring_soon"
+     ]
+    }
+   ],
+   "section": "6 · Goals"
+  },
+  {
+   "id": "q_tax",
+   "question": "Interested in tax-deductible premiums (VHIS / QDAP)?",
+   "options": [
+    {
+     "label": "Yes",
+     "add": [
+      "wants_tax_deduction"
+     ],
+     "remove": []
+    },
+    {
+     "label": "No / not applicable",
+     "add": [],
+     "remove": [
+      "wants_tax_deduction"
+     ]
+    }
+   ],
+   "section": "6 · Goals"
+  },
+  {
+   "id": "q_medical",
+   "question": "Hospital room preference?",
+   "options": [
+    {
+     "label": "Ward is fine",
+     "add": [],
+     "remove": [
+      "wants_private_medical",
+      "wants_private_room",
+      "wants_private_ward"
+     ]
+    },
+    {
+     "label": "Semi-private",
+     "add": [
+      "wants_private_ward",
+      "wants_private_medical"
+     ],
+     "remove": [
+      "wants_private_room"
+     ]
+    },
+    {
+     "label": "Private room",
+     "add": [
+      "wants_private_room",
+      "wants_private_medical"
+     ],
+     "remove": [
+      "wants_private_ward"
+     ]
+    }
+   ],
+   "section": "6 · Goals"
+  },
+  {
+   "id": "q_crossborder",
+   "question": "Frequent travel to mainland / cross-border needs?",
+   "options": [
+    {
+     "label": "Yes — frequent mainland travel",
+     "add": [
+      "cross_border",
+      "frequent_mainland_travel",
+      "wants_rmb"
+     ],
+     "remove": []
+    },
+    {
+     "label": "Travels internationally",
+     "add": [
+      "travels_frequently"
+     ],
+     "remove": [
+      "cross_border",
+      "frequent_mainland_travel"
+     ]
+    },
+    {
+     "label": "Mostly in HK",
+     "add": [],
+     "remove": [
+      "cross_border",
+      "frequent_mainland_travel",
+      "travels_frequently"
+     ]
+    }
+   ],
+   "section": "7 · Lifestyle"
+  },
+  {
+   "id": "q_lumpsum",
+   "question": "Is a lump sum available for a single-premium plan?",
+   "options": [
+    {
+     "label": "Yes",
+     "add": [
+      "lump_sum_available",
+      "existing_savings_significant"
+     ],
+     "remove": []
+    },
+    {
+     "label": "No — regular premiums only",
+     "add": [
+      "income_variable"
+     ],
+     "remove": [
+      "lump_sum_available"
+     ]
+    },
+    {
+     "label": "Not discussed yet",
+     "add": [],
+     "remove": [
+      "lump_sum_available"
+     ]
+    }
+   ],
+   "section": "3 · Finances"
+  },
+  {
+   "id": "q_sports",
+   "question": "Active sports / running?",
+   "options": [
+    {
+     "label": "Runs / races",
+     "add": [
+      "plays_sports",
+      "runs_marathons"
+     ],
+     "remove": []
+    },
+    {
+     "label": "Other sports",
+     "add": [
+      "plays_sports"
+     ],
+     "remove": [
+      "runs_marathons"
+     ]
+    },
+    {
+     "label": "Not active",
+     "add": [],
+     "remove": [
+      "plays_sports",
+      "runs_marathons"
+     ]
+    }
+   ],
+   "section": "7 · Lifestyle"
+  },
+  {
+   "id": "q_style",
+   "question": "Preference on plan style?",
+   "options": [
+    {
+     "label": "Comprehensive / premium",
+     "add": [
+      "wants_ci_comprehensive",
+      "wants_premium_ci",
+      "wants_future_proof"
+     ],
+     "remove": [
+      "wants_simple",
+      "wants_refundable"
+     ]
+    },
+    {
+     "label": "Simple / budget-friendly",
+     "add": [
+      "wants_simple",
+      "wants_refundable"
+     ],
+     "remove": [
+      "wants_premium_ci",
+      "wants_future_proof"
+     ]
+    },
+    {
+     "label": "Whole life savings",
+     "add": [
+      "wants_whole_life",
+      "wants_savings_and_protection"
+     ],
+     "remove": [
+      "wants_term"
+     ]
+    },
+    {
+     "label": "Term protection (mortgage years)",
+     "add": [
+      "wants_term",
+      "has_mortgage"
+     ],
+     "remove": [
+      "wants_whole_life"
+     ]
+    }
+   ],
+   "section": "6 · Goals"
+  },
+  {
+   "id": "q_owner",
+   "question": "Is the client a business owner?",
+   "options": [
+    {
+     "label": "Yes",
+     "add": [
+      "occupation_business_owner",
+      "income_variable"
+     ],
+     "remove": []
+    },
+    {
+     "label": "No",
+     "add": [],
+     "remove": [
+      "occupation_business_owner"
+     ]
+    }
+   ],
+   "section": "3 · Finances"
+  }
+ ]
 }

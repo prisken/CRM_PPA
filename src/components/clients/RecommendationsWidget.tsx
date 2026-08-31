@@ -14,6 +14,7 @@ type Vocabulary = { groups: Record<string, TraitGroup>; labels: Record<string, s
 
 type Question = {
   id: string;
+  section?: string;
   question: string;
   options: { label: string; add?: string[]; remove?: string[] }[];
 };
@@ -63,6 +64,7 @@ export default function RecommendationsWidget({
 
   const [mode, setMode] = useState<'questions' | 'picker'>('questions');
   const [answers, setAnswers] = useState<Record<string, string>>({});
+  const [skipped, setSkipped] = useState<Set<string>>(new Set());
   const [traits, setTraits] = useState<string[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -186,6 +188,39 @@ export default function RecommendationsWidget({
   const answeredCount = Object.keys(answers).length;
   const hasTraits = traits.length > 0;
 
+  const questionSections = useMemo(() => {
+    const map = new Map<string, Question[]>();
+    for (const q of QUESTIONS) {
+      const sec = q.section || 'Questions';
+      if (!map.has(sec)) map.set(sec, []);
+      map.get(sec)!.push(q);
+    }
+    return [...map.entries()];
+  }, []);
+
+  const skipQuestion = useCallback((qid: string) => {
+    setAnswers((prev) => {
+      const nextSet = { ...prev };
+      delete nextSet[qid];
+      return nextSet;
+    });
+    setSkipped((prev) => {
+      const nextSet = new Set(prev);
+      nextSet.add(qid);
+      return nextSet;
+    });
+  }, []);
+
+  const answerQuestion = useCallback((qid: string, label: string) => {
+    setAnswers((prev) => ({ ...prev, [qid]: label }));
+    setSkipped((prev) => {
+      if (!prev.has(qid)) return prev;
+      const nextSet = new Set(prev);
+      nextSet.delete(qid);
+      return nextSet;
+    });
+  }, []);
+
   return (
     <SectionCard
       title="Product recommendations"
@@ -217,42 +252,92 @@ export default function RecommendationsWidget({
                 Skip — pick traits directly →
               </button>
             </div>
-            <div className="max-h-80 space-y-3 overflow-y-auto rounded-md border border-gray-200 p-3">
-              {QUESTIONS.map((q) => (
-                <div key={q.id} className="rounded-md bg-gray-50 p-2.5">
-                  <p className="text-sm font-medium text-gray-800">{q.question}</p>
-                  <div className="mt-2 flex flex-wrap gap-1.5">
-                    {q.options.map((opt) => {
-                      const active = answers[q.id] === opt.label;
+            <div className="h-1.5 w-full overflow-hidden rounded-full bg-gray-200">
+              <div
+                className="h-full bg-blue-600 transition-all"
+                style={{ width: `${Math.round((answeredCount / QUESTIONS.length) * 100)}%` }}
+              />
+            </div>
+            <div className="max-h-80 space-y-4 overflow-y-auto rounded-md border border-gray-200 p-3">
+              {questionSections.map(([section, qs]) => (
+                <div key={section}>
+                  <p className="mb-1.5 border-b border-gray-100 pb-1 text-[11px] font-semibold uppercase tracking-wide text-gray-400">
+                    {section}
+                  </p>
+                  <div className="space-y-3">
+                    {qs.map((q) => {
+                      const answered = answers[q.id] !== undefined;
+                      const isSkipped = skipped.has(q.id);
                       return (
-                        <button
-                          key={opt.label}
-                          type="button"
-                          onClick={() =>
-                            setAnswers((prev) => ({ ...prev, [q.id]: opt.label }))
-                          }
-                          className={`rounded-full border px-2.5 py-1 text-xs transition-colors ${
-                            active
-                              ? 'border-blue-600 bg-blue-600 text-white'
-                              : 'border-gray-300 bg-white text-gray-700 hover:border-blue-400 hover:text-blue-600'
+                        <div
+                          key={q.id}
+                          className={`rounded-md p-2.5 ${
+                            isSkipped ? 'bg-gray-50 opacity-60' : 'bg-gray-50'
                           }`}
                         >
-                          {opt.label}
-                        </button>
+                          <div className="flex items-start justify-between gap-2">
+                            <p className="text-sm font-medium text-gray-800">
+                              {q.question}
+                              {answered && (
+                                <span className="ml-1.5 text-[10px] font-semibold text-green-600">
+                                  ✓
+                                </span>
+                              )}
+                              {isSkipped && (
+                                <span className="ml-1.5 text-[10px] font-semibold text-gray-400">
+                                  skipped
+                                </span>
+                              )}
+                            </p>
+                            <button
+                              type="button"
+                              onClick={() => skipQuestion(q.id)}
+                              disabled={isSkipped}
+                              className="shrink-0 rounded border border-gray-300 bg-white px-1.5 py-0.5 text-[10px] font-medium text-gray-500 hover:border-gray-400 disabled:cursor-default disabled:opacity-40"
+                            >
+                              Skip
+                            </button>
+                          </div>
+                          <div className="mt-2 flex flex-wrap gap-1.5">
+                            {q.options.map((opt) => {
+                              const active = answers[q.id] === opt.label;
+                              return (
+                                <button
+                                  key={opt.label}
+                                  type="button"
+                                  onClick={() => answerQuestion(q.id, opt.label)}
+                                  className={`rounded-full border px-2.5 py-1 text-xs transition-colors ${
+                                    active
+                                      ? 'border-blue-600 bg-blue-600 text-white'
+                                      : 'border-gray-300 bg-white text-gray-700 hover:border-blue-400 hover:text-blue-600'
+                                  }`}
+                                >
+                                  {opt.label}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
                       );
                     })}
                   </div>
                 </div>
               ))}
             </div>
-            <button
-              type="button"
-              onClick={applyAnswers}
-              disabled={answeredCount === 0 || saving}
-              className="rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {saving ? 'Applying…' : `Apply answers → pick traits (${answeredCount} answered)`}
-            </button>
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-xs text-gray-500">
+                {answeredCount} answered · {skipped.size} skipped ·{' '}
+                {QUESTIONS.length - answeredCount - skipped.size} remaining
+              </p>
+              <button
+                type="button"
+                onClick={applyAnswers}
+                disabled={(answeredCount === 0 && skipped.size === 0) || saving}
+                className="rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {saving ? 'Applying…' : answeredCount > 0 ? `Apply answers → pick traits` : 'Continue without answers'}
+              </button>
+            </div>
           </div>
         ) : (
           <>
