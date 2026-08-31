@@ -78,6 +78,7 @@ export default function RecommendationsWidget({
   const [error, setError] = useState<string | null>(null);
   const [shortlist, setShortlist] = useState<string[]>([]);
   const [compareCat, setCompareCat] = useState<string | null>(null);
+  const [comparisons, setComparisons] = useState<Record<string, ComparisonBundle>>({});
 
   const knownTraits = useMemo(() => new Set<string>(VOCABULARY.keys()), []);
 
@@ -140,6 +141,9 @@ export default function RecommendationsWidget({
         setRecs(data.recommendations || []);
         if (Array.isArray(data.recommended_products)) {
           setShortlist(data.recommended_products);
+        }
+        if (data.comparisons && typeof data.comparisons === 'object') {
+          setComparisons(data.comparisons);
         }
       } else {
         setError(data.error || 'Failed to load recommendations');
@@ -537,7 +541,12 @@ export default function RecommendationsWidget({
                     </div>
 
                     {compareCat === r.category && (
-                      <ComparisonPanel category={r.category} clientId={clientId} />
+                      <ComparisonPanel
+                        category={r.category}
+                        comparisons={comparisons}
+                        shortlist={shortlist}
+                        onAdd={addToShortlist}
+                      />
                     )}
 
                     {expanded === i && r.sales_plan && (
@@ -582,31 +591,20 @@ export default function RecommendationsWidget({
 
 
 /** Inline category comparison: alternatives + differences + suitability stars. */
-function ComparisonPanel({ category, clientId }: { category: string; clientId: string }) {
-  const [rows, setRows] = useState<Array<{
-    product: string; score: number; stars: number; price_tier: string;
-    features: string[]; matched_traits: string[]; gap?: string;
-  }> | null>(null);
-  const [loading, setLoading] = useState(false);
+function ComparisonPanel({
+  category,
+  comparisons,
+  shortlist,
+  onAdd,
+}: {
+  category: string;
+  comparisons: Record<string, ComparisonBundle>;
+  shortlist: string[];
+  onAdd: (name: string) => void;
+}) {
+  const bundle = comparisons[category];
+  const rows = bundle?.rows;
 
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    authenticatedFetch(`/api/clients/${encodeURIComponent(clientId)}/recommendations?top=5`)
-      .then((res) => res.json())
-      .then((data) => {
-        if (cancelled) return;
-        const byCat = data.comparisons?.[category];
-        if (byCat && Array.isArray(byCat.rows)) {
-          setRows(byCat.rows);
-        }
-        setLoading(false);
-      })
-      .catch(() => { if (!cancelled) setLoading(false); });
-    return () => { cancelled = true; };
-  }, [category, clientId]);
-
-  if (loading) return <div className="mt-2 text-xs text-gray-400">Comparing…</div>;
   if (!rows || rows.length === 0) return null;
 
   return (
@@ -620,26 +618,57 @@ function ComparisonPanel({ category, clientId }: { category: string; clientId: s
             <th className="pb-1 pr-2 font-medium">Product</th>
             <th className="pb-1 pr-2 font-medium">Fit</th>
             <th className="pb-1 pr-2 font-medium">Tier</th>
-            <th className="pb-1 font-medium">Key differences</th>
+            <th className="pb-1 pr-2 font-medium">Key differences</th>
+            <th className="pb-1 font-medium">Shortlist</th>
           </tr>
         </thead>
         <tbody>
-          {rows.map((row) => (
-            <tr key={row.product} className="align-top">
-              <td className="py-1 pr-2">
-                <span className="font-semibold text-gray-900">{row.product}</span>
-                <span className="ml-1 text-amber-500">
-                  {'★'.repeat(row.stars)}
-                  {'☆'.repeat(5 - row.stars)}
-                </span>
-              </td>
-              <td className="py-1 pr-2 text-gray-600">{row.matched_traits.length} traits</td>
-              <td className="py-1 pr-2 text-gray-600">{row.price_tier}</td>
-              <td className="py-1 text-gray-600">{row.features.slice(0, 2).join('; ')}</td>
-            </tr>
-          ))}
+          {rows.map((row) => {
+            const inList = shortlist.includes(row.product);
+            return (
+              <tr key={row.product} className="align-top">
+                <td className="py-1 pr-2">
+                  <span className="font-semibold text-gray-900">{row.product}</span>
+                  <span className="ml-1 text-amber-500">
+                    {'★'.repeat(row.stars)}
+                    {'☆'.repeat(5 - row.stars)}
+                  </span>
+                </td>
+                <td className="py-1 pr-2 text-gray-600">{row.matched_traits.length} traits</td>
+                <td className="py-1 pr-2 text-gray-600">{row.price_tier}</td>
+                <td className="py-1 pr-2 text-gray-600">{row.features.slice(0, 2).join('; ')}</td>
+                <td className="py-1">
+                  <button
+                    type="button"
+                    onClick={() => onAdd(row.product)}
+                    disabled={inList}
+                    className={`rounded border px-1.5 py-0.5 text-[10px] font-medium ${
+                      inList
+                        ? 'cursor-default border-green-300 bg-green-50 text-green-700'
+                        : 'border-blue-300 bg-white text-blue-700 hover:bg-blue-50'
+                    }`}
+                  >
+                    {inList ? '✓ Added' : '+ Add'}
+                  </button>
+                </td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>
   );
 }
+
+type ComparisonBundle = {
+  category: string;
+  rows: Array<{
+    product: string;
+    score: number;
+    stars: number;
+    price_tier: string;
+    features: string[];
+    matched_traits: string[];
+    gap?: string;
+  }>;
+};
