@@ -70,10 +70,6 @@
     "label": "Low income"
    },
    {
-    "trait": "income_band_low_to_mid",
-    "label": "Low-mid income"
-   },
-   {
     "trait": "income_mid",
     "label": "Mid income"
    },

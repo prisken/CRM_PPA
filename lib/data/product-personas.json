@@ -19,7 +19,11 @@
    "family_history_cancer",
    "has_children",
    "existing_ci_insufficient",
-   "wants_multiple_claims"
+   "wants_multiple_claims",
+   "marital_status_married",
+   "children_age_0_12",
+   "children_age_5_20",
+   "age_35_50"
   ],
   "brochure_slug": "on-your-side-insurance-plan-2-on-your-side-insurance-plan-2",
   "price_tier": "mid",
@@ -115,7 +119,8 @@
   "signals": [
    "budget_low",
    "existing_ci_none",
-   "age_under_35"
+   "age_under_35",
+   "income_low"
   ],
   "brochure_slug": "easyguard-care-essence",
   "price_tier": "budget",
@@ -146,7 +151,8 @@
   "signals": [
    "budget_low",
    "existing_ci_none",
-   "wants_simple"
+   "wants_simple",
+   "income_low"
   ],
   "brochure_slug": "simple-care-essence",
   "price_tier": "budget",
@@ -177,7 +183,8 @@
   "signals": [
    "budget_mid",
    "existing_ci_basic",
-   "wants_more_cover"
+   "wants_more_cover",
+   "income_mid"
   ],
   "brochure_slug": "simple-care-essence-pearl",
   "price_tier": "budget",
@@ -211,7 +218,9 @@
    "income_high",
    "wants_premium_ci",
    "wants_multiple_claims",
-   "has_children"
+   "has_children",
+   "children_age_0_12",
+   "children_age_5_20"
   ],
   "brochure_slug": "smart-elite-ultra-critical-illness-insurance-plan",
   "price_tier": "premium",
@@ -276,7 +285,8 @@
   "signals": [
    "income_high",
    "wants_premium_ci",
-   "wants_return_of_premium"
+   "wants_return_of_premium",
+   "age_35_50"
   ],
   "brochure_slug": "executive-care-pro-critical-illness-insurance-plan-2",
   "price_tier": "premium",
@@ -531,7 +541,9 @@
   "signals": [
    "has_children",
    "wants_child_ci",
-   "wants_payor_waiver"
+   "wants_payor_waiver",
+   "children_age_0_12",
+   "children_age_5_20"
   ],
   "brochure_slug": "prime-care-rider",
   "price_tier": "mid",
@@ -627,7 +639,8 @@
   "signals": [
    "wants_tax_deduction",
    "has_no_medical",
-   "budget_low"
+   "budget_low",
+   "income_low"
   ],
   "brochure_slug": "aia-voluntary-health-insurance-standard-scheme",
   "price_tier": "budget",
@@ -1007,7 +1020,8 @@
   "signals": [
    "wants_hospital_cash",
    "budget_low",
-   "wants_refundable"
+   "wants_refundable",
+   "income_mid"
   ],
   "brochure_slug": "flexi-mediguard-hospital-income-plan",
   "price_tier": "premium",
@@ -1037,7 +1051,8 @@
   ],
   "signals": [
    "wants_hospital_cash",
-   "wants_refundable"
+   "wants_refundable",
+   "income_mid"
   ],
   "brochure_slug": "here-for-you-refundable-hospital-cash",
   "price_tier": "premium",
@@ -1163,7 +1178,8 @@
   "signals": [
    "wants_private_medical",
    "travels_frequently",
-   "budget_mid"
+   "budget_mid",
+   "income_mid"
   ],
   "brochure_slug": "super-good-health-medical-plan-2",
   "price_tier": "premium",
@@ -1487,7 +1503,8 @@
   ],
   "signals": [
    "wants_accident",
-   "wants_lifetime_cover"
+   "wants_lifetime_cover",
+   "income_low"
   ],
   "brochure_slug": "secure-first",
   "price_tier": "premium",
@@ -1517,7 +1534,8 @@
   ],
   "signals": [
    "wants_accident",
-   "wants_refundable"
+   "wants_refundable",
+   "marital_status_married"
   ],
   "brochure_slug": "secure-first-plus",
   "price_tier": "premium",
@@ -1548,7 +1566,8 @@
   ],
   "signals": [
    "wants_accident_comprehensive",
-   "has_base_plan"
+   "has_base_plan",
+   "occupation_business_owner"
   ],
   "brochure_slug": "pac-select-3",
   "price_tier": "mid",
@@ -1611,7 +1630,8 @@
   "signals": [
    "wants_accident",
    "budget_low",
-   "existing_coverage_minimal"
+   "existing_coverage_minimal",
+   "income_low"
   ],
   "brochure_slug": "xtra-protect",
   "price_tier": "premium",
@@ -1674,7 +1694,9 @@
   ],
   "signals": [
    "has_children",
-   "wants_family_accident"
+   "wants_family_accident",
+   "children_age_0_12",
+   "children_age_5_20"
   ],
   "brochure_slug": "super-kids-shield-super-adults-shield-super-seniors-shield",
   "price_tier": "mid",
@@ -1790,7 +1812,8 @@
   "signals": [
    "cross_border",
    "frequent_mainland_travel",
-   "wants_travel_cover"
+   "wants_travel_cover",
+   "occupation_business_owner"
   ],
   "brochure_slug": "china-assist-protection-plan",
   "price_tier": "premium",
@@ -1853,7 +1876,8 @@
   "signals": [
    "wants_whole_life",
    "wants_savings_and_protection",
-   "has_children"
+   "has_children",
+   "wants_annual_dividends"
   ],
   "brochure_slug": "admire-life-insurance-plan-2",
   "price_tier": "mid",
@@ -1886,7 +1910,8 @@
   "signals": [
    "wants_savings_and_protection",
    "wants_reverse_mortgage_eligible",
-   "life_milestones"
+   "life_milestones",
+   "wants_annual_dividends"
   ],
   "brochure_slug": "prosperlife-insurance-plan",
   "price_tier": "mid",
@@ -1916,7 +1941,8 @@
   ],
   "signals": [
    "wants_whole_life",
-   "wants_protection_first"
+   "wants_protection_first",
+   "age_35_50"
   ],
   "brochure_slug": "bonus-power-life-insurance-plan-2-enhanced-protection",
   "price_tier": "mid",
@@ -2066,7 +2092,8 @@
   "signals": [
    "age_over_50",
    "wants_no_medical_exam",
-   "wants_whole_life"
+   "wants_whole_life",
+   "declined_before"
   ],
   "brochure_slug": "guaranteed-issue-whole-life-plan",
   "price_tier": "mid",
@@ -2098,7 +2125,8 @@
   "signals": [
    "has_mortgage",
    "budget_low",
-   "wants_term"
+   "wants_term",
+   "marital_status_married"
   ],
   "brochure_slug": "easyguard-term-life-plan",
   "price_tier": "budget",
@@ -2246,7 +2274,9 @@
   "signals": [
    "wants_flexible_premium",
    "wants_liquidity",
-   "multi_purpose"
+   "multi_purpose",
+   "occupation_business_owner",
+   "income_variable"
   ],
   "brochure_slug": "globalflexi-savings-insurance-plan",
   "price_tier": "mid",
@@ -2279,7 +2309,8 @@
    "wants_multi_currency",
    "wants_wealth_growth",
    "cross_border",
-   "children_education_overseas"
+   "children_education_overseas",
+   "age_35_50"
   ],
   "brochure_slug": "global-power-multi-currency-savings-insurance-plan-3",
   "price_tier": "mid",
@@ -2311,7 +2342,9 @@
   "signals": [
    "wants_liquidity",
    "wants_legacy",
-   "net_worth_high"
+   "net_worth_high",
+   "occupation_business_owner",
+   "income_variable"
   ],
   "brochure_slug": "wealth-flexi-savings-insurance-plan",
   "price_tier": "mid",
@@ -2431,7 +2464,9 @@
   "signals": [
    "retirement_horizon_0_10",
    "wants_guaranteed_income",
-   "wants_tax_deduction"
+   "wants_tax_deduction",
+   "occupation_business_owner",
+   "age_35_50"
   ],
   "brochure_slug": "aia-deferred-annuity-plan-2",
   "price_tier": "mid",
@@ -2462,7 +2497,8 @@
   "signals": [
    "retiring_soon",
    "wants_guaranteed_income",
-   "wants_monthly_income"
+   "wants_monthly_income",
+   "existing_savings_significant"
   ],
   "brochure_slug": "golden-years-income-plan",
   "price_tier": "mid",
@@ -2493,7 +2529,8 @@
   "signals": [
    "wants_income_soon",
    "wants_guaranteed_income",
-   "lump_sum_available"
+   "lump_sum_available",
+   "existing_savings_significant"
   ],
   "brochure_slug": "spring-income-insurance-plan",
   "price_tier": "mid",
@@ -2524,7 +2561,8 @@
   "signals": [
    "wants_guaranteed_returns",
    "retirement_saving",
-   "wants_no_medical_exam"
+   "wants_no_medical_exam",
+   "declined_before"
   ],
   "brochure_slug": "fortune-promise-savings-insurance-plan-2",
   "price_tier": "mid",
@@ -2556,7 +2594,8 @@
   "signals": [
    "wants_periodic_income",
    "wants_legacy",
-   "has_children"
+   "has_children",
+   "marital_status_married"
   ],
   "brochure_slug": "forever-love-coupon-insurance-plan-5",
   "price_tier": "mid",
@@ -2588,7 +2627,8 @@
   "signals": [
    "wants_legacy",
    "wants_multi_generational",
-   "wants_no_medical_exam"
+   "wants_no_medical_exam",
+   "declined_before"
   ],
   "brochure_slug": "simply-love-encore-savings-insurance-plan-5",
   "price_tier": "mid",
@@ -2650,7 +2690,10 @@
   "signals": [
    "wants_investment_wrapper",
    "lump_sum_available",
-   "risk_appetite_mid_high"
+   "risk_appetite_mid_high",
+   "wants_fund_access",
+   "occupation_business_owner",
+   "existing_savings_significant"
   ],
   "brochure_slug": "treasure-master-plus-2",
   "price_tier": "mid",
@@ -2682,7 +2725,9 @@
   ],
   "signals": [
    "wants_protection_and_investment",
-   "wants_regular_premium"
+   "wants_regular_premium",
+   "wants_fund_access",
+   "income_variable"
   ],
   "brochure_slug": "aia-2-in-1-protection-linked-plan-regular-premium",
   "price_tier": "mid",
@@ -2713,7 +2758,10 @@
   ],
   "signals": [
    "lump_sum_available",
-   "wants_protection_and_investment"
+   "wants_protection_and_investment",
+   "wants_fund_access",
+   "occupation_business_owner",
+   "existing_savings_significant"
   ],
   "brochure_slug": "aia-2-in-1-protection-linked-plan-single-premium",
   "price_tier": "mid",
