@@ -227,40 +227,22 @@ export function buildAdminDashboardNav(): WorkspaceNavConfig {
           exact: true,
         },
         {
-          id: WORKSPACE_NAV_ITEM_IDS.ADMIN_ACTIVITY,
-          label: 'Activity',
-          href: adminDashboardHref('activity'),
-          exact: true,
-        },
-        {
           id: WORKSPACE_NAV_ITEM_IDS.ADMIN_ANALYTICS,
-          label: 'Analytics',
+          label: 'Reports',
           href: adminDashboardHref('analytics'),
-          exact: true,
-        },
-        {
-          id: WORKSPACE_NAV_ITEM_IDS.ADMIN_REVENUE,
-          label: 'Revenue',
-          href: adminDashboardHref('revenue'),
-          exact: true,
-        },
-        {
-          id: WORKSPACE_NAV_ITEM_IDS.ADMIN_LEADERBOARDS,
-          label: 'Leaderboards',
-          href: adminDashboardHref('leaderboards'),
           exact: true,
         },
       ]),
       section('admin-tools', 'Tools', [
         {
-          id: WORKSPACE_NAV_ITEM_IDS.ADMIN_USERS,
-          label: 'User Management',
-          href: '/admin/users',
-        },
-        {
           id: WORKSPACE_NAV_ITEM_IDS.ADMIN_RECONCILIATION,
           label: 'Commission / Returnables',
           href: '/admin/reconciliation',
+        },
+        {
+          id: WORKSPACE_NAV_ITEM_IDS.ADMIN_USERS,
+          label: 'User Management',
+          href: '/admin/users',
         },
       ]),
       section('admin-account', 'Account', [

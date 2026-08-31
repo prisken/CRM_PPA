@@ -19,14 +19,6 @@ import {
   type AdminDashboardView,
 } from '@/components/layout/workspaceNavConfig';
 
-/** Subset of KPI payload used for Home snapshot only — avoids importing KpiBar. */
-type HomeKpiSnapshot = {
-  totalCommittedRevenue?: number;
-  totalPotentialRevenue?: number;
-  activeDeals?: number;
-  companyOverheadEarnings?: number;
-};
-
 const HOME_LINKS: Array<{
   href: string;
   label: string;
@@ -50,48 +42,11 @@ const HOME_LINKS: Array<{
     description: 'Important dates across clients and leads',
   },
   {
-    href: adminDashboardHref('activity'),
-    label: 'Activity',
-    description: 'Recent updates across all clients',
-  },
-  {
     href: adminDashboardHref('analytics'),
-    label: 'Analytics',
-    description: 'KPIs, company earnings, and conversion funnel',
-  },
-  {
-    href: adminDashboardHref('revenue'),
-    label: 'Revenue',
-    description: 'Revenue tracker over time',
-  },
-  {
-    href: adminDashboardHref('leaderboards'),
-    label: 'Leaderboards',
-    description: 'Commission and deals rankings',
-  },
-  {
-    href: '/admin/reconciliation',
-    label: 'Commission / Returnables',
-    description: 'Global returnables reconciliation',
-  },
-  {
-    href: '/admin/users',
-    label: 'User Management',
-    description: 'Deactivate or permanently delete users',
+    label: 'Reports',
+    description: 'KPIs, revenue, funnel, and leaderboards',
   },
 ];
-
-function formatMoney(value: number | null | undefined) {
-  if (typeof value !== 'number' || Number.isNaN(value)) {
-    return '—';
-  }
-
-  return new Intl.NumberFormat(undefined, {
-    style: 'currency',
-    currency: 'USD',
-    maximumFractionDigits: 0,
-  }).format(value);
-}
 
 export default function AdminHomeView({
   displayName,
@@ -100,50 +55,6 @@ export default function AdminHomeView({
   displayName: string;
   onAddClient: () => void;
 }) {
-  const [kpiData, setKpiData] = useState<HomeKpiSnapshot | null>(null);
-  const [kpiLoading, setKpiLoading] = useState(true);
-  const [kpiError, setKpiError] = useState<string | null>(null);
-
-  // Home-owned light fetch only. Heavy section APIs must not run here.
-  useEffect(() => {
-    let cancelled = false;
-
-    async function loadKpis() {
-      setKpiLoading(true);
-      setKpiError(null);
-
-      try {
-        const res = await fetch('/api/admin/dashboard-kpis');
-        if (!res.ok) {
-          const data = await res.json().catch(() => ({}));
-          throw new Error(
-            typeof data.error === 'string' ? data.error : 'Failed to load KPIs'
-          );
-        }
-
-        const data = (await res.json()) as HomeKpiSnapshot;
-        if (!cancelled) {
-          setKpiData(data);
-        }
-      } catch (err) {
-        if (!cancelled) {
-          setKpiError(err instanceof Error ? err.message : 'Failed to load KPIs');
-          setKpiData(null);
-        }
-      } finally {
-        if (!cancelled) {
-          setKpiLoading(false);
-        }
-      }
-    }
-
-    void loadKpis();
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
   return (
     <div className="min-w-0 space-y-4">
       <section className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm sm:p-5">
@@ -151,8 +62,7 @@ export default function AdminHomeView({
           Welcome{displayName ? `, ${displayName}` : ''}
         </h2>
         <p className="mt-1 text-sm text-gray-600">
-          Open a workspace section from the sidebar. Heavy charts and lists load only
-          when selected.
+          Everything you need, one click away.
         </p>
         <div className="mt-4 flex flex-wrap gap-2">
           <Link
@@ -181,58 +91,6 @@ export default function AdminHomeView({
             Account Settings
           </Link>
         </div>
-      </section>
-
-      <section className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm sm:p-5">
-        <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
-          Snapshot (cached KPIs)
-        </p>
-        {kpiLoading ? (
-          <p className="mt-2 text-sm text-gray-500">Loading summary…</p>
-        ) : kpiError ? (
-          <p className="mt-2 text-sm text-red-600">{kpiError}</p>
-        ) : (
-          <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <div className="min-w-0 rounded-lg bg-gray-50 px-3 py-2">
-              <p className="text-[11px] font-medium uppercase tracking-wide text-gray-500">
-                Committed revenue
-              </p>
-              <p className="mt-1 truncate text-lg font-semibold text-gray-900">
-                {formatMoney(kpiData?.totalCommittedRevenue)}
-              </p>
-            </div>
-            <div className="min-w-0 rounded-lg bg-gray-50 px-3 py-2">
-              <p className="text-[11px] font-medium uppercase tracking-wide text-gray-500">
-                Potential revenue
-              </p>
-              <p className="mt-1 truncate text-lg font-semibold text-gray-900">
-                {formatMoney(kpiData?.totalPotentialRevenue)}
-              </p>
-            </div>
-            <div className="min-w-0 rounded-lg bg-gray-50 px-3 py-2">
-              <p className="text-[11px] font-medium uppercase tracking-wide text-gray-500">
-                Active deals
-              </p>
-              <p className="mt-1 truncate text-lg font-semibold text-gray-900">
-                {kpiData?.activeDeals ?? '—'}
-              </p>
-            </div>
-            <div className="min-w-0 rounded-lg bg-gray-50 px-3 py-2">
-              <p className="text-[11px] font-medium uppercase tracking-wide text-gray-500">
-                Company overhead
-              </p>
-              <p className="mt-1 truncate text-lg font-semibold text-gray-900">
-                {formatMoney(kpiData?.companyOverheadEarnings)}
-              </p>
-            </div>
-          </div>
-        )}
-        <Link
-          href={adminDashboardHref('analytics' as AdminDashboardView)}
-          className="mt-3 inline-flex text-sm font-medium text-blue-600 hover:underline"
-        >
-          Open full analytics →
-        </Link>
       </section>
 
       <section aria-label="Admin workspace shortcuts">

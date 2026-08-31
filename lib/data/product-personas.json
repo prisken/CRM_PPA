@@ -1,0 +1,2764 @@
+[
+ {
+  "name": "On Your Side Insurance Plan 2 / First Gift",
+  "category": "危疾保障 (Critical Illness)",
+  "features": [
+   "Multi-pay critical illness (cancer/stroke/heart) up to multiple claims",
+   "Child version 'First Gift' from birth",
+   "Premium waiver on claim",
+   "Life protection included"
+  ],
+  "audience": "Families wanting repeat-claim CI for all ages",
+  "personas": [
+   "P03",
+   "P04",
+   "P11",
+   "P13"
+  ],
+  "signals": [
+   "family_history_cancer",
+   "has_children",
+   "existing_ci_insufficient",
+   "wants_multiple_claims"
+  ],
+  "brochure_slug": "on-your-side-insurance-plan-2-on-your-side-insurance-plan-2",
+  "price_tier": "mid",
+  "product_fit": {
+   "gap": "Covers the financial shock of critical illness — lump sum when you need it most",
+   "best_for": "Families wanting repeat-claim CI for all ages",
+   "key_features": [
+    "Multi-pay critical illness (cancer/stroke/heart) up to multiple claims",
+    "Child version 'First Gift' from birth",
+    "Premium waiver on claim",
+    "Life protection included"
+   ],
+   "price_position": "mid"
+  }
+ },
+ {
+  "name": "Essence – On Your Side Insurance Plan",
+  "category": "危疾保障 (Critical Illness)",
+  "features": [
+   "Essential multi-pay CI, lower premium than full version",
+   "Covers cancer/stroke/heart",
+   "Simple structure"
+  ],
+  "audience": "Budget-conscious families wanting multi-pay CI",
+  "personas": [
+   "P01",
+   "P02",
+   "P03"
+  ],
+  "signals": [
+   "budget_low",
+   "has_children",
+   "wants_ci_basic"
+  ],
+  "brochure_slug": "essence-on-your-side-insurance-plan",
+  "price_tier": "budget",
+  "product_fit": {
+   "gap": "Covers the financial shock of critical illness — lump sum when you need it most",
+   "best_for": "Budget-conscious families wanting multi-pay CI",
+   "key_features": [
+    "Essential multi-pay CI, lower premium than full version",
+    "Covers cancer/stroke/heart",
+    "Simple structure"
+   ],
+   "price_position": "budget"
+  }
+ },
+ {
+  "name": "AIA Assemble Critical Illness Insurance Plan",
+  "category": "危疾保障 (Critical Illness)",
+  "features": [
+   "Modular CI — build your own protection bundle",
+   "Addresses protection gap (survey: avg gap HK$1.84M)",
+   "Flexible assembly + bundle savings"
+  ],
+  "audience": "CI top-up / under-insured clients wanting tailored build",
+  "personas": [
+   "P04",
+   "P05",
+   "P10"
+  ],
+  "signals": [
+   "existing_ci_insufficient",
+   "wants_customizable",
+   "protection_gap"
+  ],
+  "brochure_slug": "aia-assemble-critical-illness-insurance-plan",
+  "price_tier": "mid",
+  "product_fit": {
+   "gap": "Covers the financial shock of critical illness — lump sum when you need it most",
+   "best_for": "CI top-up / under-insured clients wanting tailored build",
+   "key_features": [
+    "Modular CI — build your own protection bundle",
+    "Addresses protection gap (survey: avg gap HK$1.84M)",
+    "Flexible assembly + bundle savings"
+   ],
+   "price_position": "mid"
+  }
+ },
+ {
+  "name": "EasyGuard Care Essence",
+  "category": "危疾保障 (Critical Illness)",
+  "features": [
+   "Yearly-renewable plan covering cancer, heart attack, stroke",
+   "Guaranteed renewal to age 85",
+   "Budget-friendly core protection"
+  ],
+  "audience": "Young/price-sensitive first-time CI",
+  "personas": [
+   "P01",
+   "P02"
+  ],
+  "signals": [
+   "budget_low",
+   "existing_ci_none",
+   "age_under_35"
+  ],
+  "brochure_slug": "easyguard-care-essence",
+  "price_tier": "budget",
+  "product_fit": {
+   "gap": "Covers the financial shock of critical illness — lump sum when you need it most",
+   "best_for": "Young/price-sensitive first-time CI",
+   "key_features": [
+    "Yearly-renewable plan covering cancer, heart attack, stroke",
+    "Guaranteed renewal to age 85",
+    "Budget-friendly core protection"
+   ],
+   "price_position": "budget"
+  }
+ },
+ {
+  "name": "Simple Care Essence",
+  "category": "危疾保障 (Critical Illness)",
+  "features": [
+   "Streamlined CI, core 60+ illnesses",
+   "Lower cost, easy to understand",
+   "Lump sum"
+  ],
+  "audience": "Price-sensitive first-time CI",
+  "personas": [
+   "P01",
+   "P13"
+  ],
+  "signals": [
+   "budget_low",
+   "existing_ci_none",
+   "wants_simple"
+  ],
+  "brochure_slug": "simple-care-essence",
+  "price_tier": "budget",
+  "product_fit": {
+   "gap": "Covers the financial shock of critical illness — lump sum when you need it most",
+   "best_for": "Price-sensitive first-time CI",
+   "key_features": [
+    "Streamlined CI, core 60+ illnesses",
+    "Lower cost, easy to understand",
+    "Lump sum"
+   ],
+   "price_position": "budget"
+  }
+ },
+ {
+  "name": "Simple Care Essence Pearl",
+  "category": "危疾保障 (Critical Illness)",
+  "features": [
+   "Enhanced version of Simple Care",
+   "Wider coverage incl. advanced stages",
+   "Still simplified"
+  ],
+  "audience": "Value seekers stepping up from basic CI",
+  "personas": [
+   "P02",
+   "P03"
+  ],
+  "signals": [
+   "budget_mid",
+   "existing_ci_basic",
+   "wants_more_cover"
+  ],
+  "brochure_slug": "simple-care-essence-pearl",
+  "price_tier": "budget",
+  "product_fit": {
+   "gap": "Covers the financial shock of critical illness — lump sum when you need it most",
+   "best_for": "Value seekers stepping up from basic CI",
+   "key_features": [
+    "Enhanced version of Simple Care",
+    "Wider coverage incl. advanced stages",
+    "Still simplified"
+   ],
+   "price_position": "budget"
+  }
+ },
+ {
+  "name": "Smart Elite Ultra Critical Illness Insurance Plan",
+  "category": "危疾保障 (Critical Illness)",
+  "features": [
+   "Covers 115 illnesses",
+   "Up to 3x cancer / 2x heart attack recurrence cover",
+   "Covers undetected congenital conditions in children",
+   "Rehabilitation + benign extra benefit"
+  ],
+  "audience": "Affluent wanting top-tier multi-claim CI incl. child congenital",
+  "personas": [
+   "P05",
+   "P06",
+   "P03"
+  ],
+  "signals": [
+   "income_high",
+   "wants_premium_ci",
+   "wants_multiple_claims",
+   "has_children"
+  ],
+  "brochure_slug": "smart-elite-ultra-critical-illness-insurance-plan",
+  "price_tier": "premium",
+  "product_fit": {
+   "gap": "Covers the financial shock of critical illness — lump sum when you need it most",
+   "best_for": "Affluent wanting top-tier multi-claim CI incl. child congenital",
+   "key_features": [
+    "Covers 115 illnesses",
+    "Up to 3x cancer / 2x heart attack recurrence cover",
+    "Covers undetected congenital conditions in children",
+    "Rehabilitation + benign extra benefit"
+   ],
+   "price_position": "premium"
+  }
+ },
+ {
+  "name": "Cancer Care Essence",
+  "category": "危疾保障 (Critical Illness)",
+  "features": [
+   "Cancer-specific lump sum",
+   "Multiple cancer claims",
+   "Early-stage cancer covered"
+  ],
+  "audience": "Cancer-focused protection seekers",
+  "personas": [
+   "P11",
+   "P04",
+   "P12"
+  ],
+  "signals": [
+   "family_history_cancer",
+   "cancer_awareness_high",
+   "existing_ci_insufficient"
+  ],
+  "brochure_slug": "cancer-care-essence",
+  "price_tier": "budget",
+  "product_fit": {
+   "gap": "Covers the financial shock of critical illness — lump sum when you need it most",
+   "best_for": "Cancer-focused protection seekers",
+   "key_features": [
+    "Cancer-specific lump sum",
+    "Multiple cancer claims",
+    "Early-stage cancer covered"
+   ],
+   "price_position": "budget"
+  }
+ },
+ {
+  "name": "Executive Care Pro Critical Illness Insurance Plan 2",
+  "category": "危疾保障 (Critical Illness)",
+  "features": [
+   "Executive-grade multi-pay CI",
+   "High limits, broad illness list",
+   "Return of premium on maturity"
+  ],
+  "audience": "Executives/professionals wanting comprehensive CI + savings recovery",
+  "personas": [
+   "P05",
+   "P06",
+   "P07"
+  ],
+  "signals": [
+   "income_high",
+   "wants_premium_ci",
+   "wants_return_of_premium"
+  ],
+  "brochure_slug": "executive-care-pro-critical-illness-insurance-plan-2",
+  "price_tier": "premium",
+  "product_fit": {
+   "gap": "Covers the financial shock of critical illness — lump sum when you need it most",
+   "best_for": "Executives/professionals wanting comprehensive CI + savings recovery",
+   "key_features": [
+    "Executive-grade multi-pay CI",
+    "High limits, broad illness list",
+    "Return of premium on maturity"
+   ],
+   "price_position": "premium"
+  }
+ },
+ {
+  "name": "Multiple Care Pro Critical Illness Insurance Plan 2",
+  "category": "危疾保障 (Critical Illness)",
+  "features": [
+   "Multi-pay CI up to high multiple of sum assured",
+   "Cancer/stroke/heart repeat claims",
+   "Child coverage option"
+  ],
+  "audience": "Families wanting maximum repeat-claim depth",
+  "personas": [
+   "P03",
+   "P04",
+   "P11"
+  ],
+  "signals": [
+   "family_history_cancer",
+   "has_children",
+   "wants_multiple_claims"
+  ],
+  "brochure_slug": "multiple-care-pro-critical-illness-insurance-plan-2",
+  "price_tier": "mid",
+  "product_fit": {
+   "gap": "Covers the financial shock of critical illness — lump sum when you need it most",
+   "best_for": "Families wanting maximum repeat-claim depth",
+   "key_features": [
+    "Multi-pay CI up to high multiple of sum assured",
+    "Cancer/stroke/heart repeat claims",
+    "Child coverage option"
+   ],
+   "price_position": "mid"
+  }
+ },
+ {
+  "name": "Prime Care Pro Critical Illness Insurance Plan 2",
+  "category": "危疾保障 (Critical Illness)",
+  "features": [
+   "Comprehensive multi-pay CI, family bundle",
+   "Covers adult + child in one",
+   "Return of premium option"
+  ],
+  "audience": "Family-oriented clients wanting bundled CI",
+  "personas": [
+   "P03",
+   "P04"
+  ],
+  "signals": [
+   "has_children",
+   "wants_family_bundle",
+   "wants_multiple_claims"
+  ],
+  "brochure_slug": "prime-care-pro-critical-illness-insurance-plan-2",
+  "price_tier": "mid",
+  "product_fit": {
+   "gap": "Covers the financial shock of critical illness — lump sum when you need it most",
+   "best_for": "Family-oriented clients wanting bundled CI",
+   "key_features": [
+    "Comprehensive multi-pay CI, family bundle",
+    "Covers adult + child in one",
+    "Return of premium option"
+   ],
+   "price_position": "mid"
+  }
+ },
+ {
+  "name": "Lady Care Pro",
+  "category": "危疾保障 (Critical Illness)",
+  "features": [
+   "Women-specific CI (breast, ovarian, cervical)",
+   "Maternity/complication riders",
+   "Cosmetic surgery benefit post-claim"
+  ],
+  "audience": "Female clients wanting female-focused CI",
+  "personas": [
+   "P12",
+   "P05"
+  ],
+  "signals": [
+   "gender_female",
+   "wants_female_specific",
+   "planning_family"
+  ],
+  "brochure_slug": "lady-care-pro",
+  "price_tier": "premium",
+  "product_fit": {
+   "gap": "Covers the financial shock of critical illness — lump sum when you need it most",
+   "best_for": "Female clients wanting female-focused CI",
+   "key_features": [
+    "Women-specific CI (breast, ovarian, cervical)",
+    "Maternity/complication riders",
+    "Cosmetic surgery benefit post-claim"
+   ],
+   "price_position": "premium"
+  }
+ },
+ {
+  "name": "Level-Up Protect Cancer Insurance Plan",
+  "category": "危疾保障 (Critical Illness)",
+  "features": [
+   "Cancer top-up plan (Cancer Shield Benefit) — up to 3 claims",
+   "Designed to FILL THE GAP for people who ALREADY have CI cover",
+   "Streamlined, cancer-specific"
+  ],
+  "audience": "Existing CI holders wanting extra cancer depth",
+  "personas": [
+   "P11",
+   "P04",
+   "P05"
+  ],
+  "signals": [
+   "has_existing_ci",
+   "family_history_cancer",
+   "wants_multiple_claims",
+   "wants_cancer_topup"
+  ],
+  "brochure_slug": "level-up-protect-cancer-insurance-plan",
+  "price_tier": "mid",
+  "product_fit": {
+   "gap": "Covers the financial shock of critical illness — lump sum when you need it most",
+   "best_for": "Existing CI holders wanting extra cancer depth",
+   "key_features": [
+    "Cancer top-up plan (Cancer Shield Benefit) — up to 3 claims",
+    "Designed to FILL THE GAP for people who ALREADY have CI cover",
+    "Streamlined, cancer-specific"
+   ],
+   "price_position": "mid"
+  }
+ },
+ {
+  "name": "Level-Up Protect Pearl Cancer Insurance Plan",
+  "category": "危疾保障 (Critical Illness)",
+  "features": [
+   "Pearl tier of Level-Up Protect — higher cancer limits",
+   "Up to 3 cancer claims",
+   "Gap-filler for existing CI holders"
+  ],
+  "audience": "Existing CI holders with higher budget",
+  "personas": [
+   "P11",
+   "P05",
+   "P06"
+  ],
+  "signals": [
+   "has_existing_ci",
+   "family_history_cancer",
+   "budget_mid_high",
+   "wants_cancer_topup"
+  ],
+  "brochure_slug": "level-up-protect-pearl-cancer-insurance-plan",
+  "price_tier": "mid",
+  "product_fit": {
+   "gap": "Covers the financial shock of critical illness — lump sum when you need it most",
+   "best_for": "Existing CI holders with higher budget",
+   "key_features": [
+    "Pearl tier of Level-Up Protect — higher cancer limits",
+    "Up to 3 cancer claims",
+    "Gap-filler for existing CI holders"
+   ],
+   "price_position": "mid"
+  }
+ },
+ {
+  "name": "Cheerful Term / Cheerful Prime Care Pro",
+  "category": "危疾保障 (Critical Illness)",
+  "features": [
+   "Unit-deducting term life + CI supplementary contracts",
+   "Attaches to SELECTED ILAS plans (investment-linked)",
+   "Extra protection on top of investment wrapper"
+  ],
+  "audience": "ILAS plan holders wanting extra life/CI cover",
+  "personas": [
+   "P05",
+   "P06",
+   "P07"
+  ],
+  "signals": [
+   "has_ilas",
+   "wants_term_topup",
+   "wants_protection_and_investment"
+  ],
+  "brochure_slug": "cheerful-term-cheerful-prime-care-pro",
+  "price_tier": "mid",
+  "product_fit": {
+   "gap": "Covers the financial shock of critical illness — lump sum when you need it most",
+   "best_for": "ILAS plan holders wanting extra life/CI cover",
+   "key_features": [
+    "Unit-deducting term life + CI supplementary contracts",
+    "Attaches to SELECTED ILAS plans (investment-linked)",
+    "Extra protection on top of investment wrapper"
+   ],
+   "price_position": "mid"
+  }
+ },
+ {
+  "name": "Enhanced Critical Illness Rider Pro And Critical Illness Rider Pro",
+  "category": "危疾保障 (Critical Illness)",
+  "features": [
+   "Riders adding CI to base life/savings plans",
+   "Cost-effective via rider",
+   "Early-stage + severe"
+  ],
+  "audience": "Clients with existing base plans wanting CI addition",
+  "personas": [
+   "P02",
+   "P04",
+   "P07"
+  ],
+  "signals": [
+   "has_base_plan",
+   "wants_ci_rider",
+   "existing_ci_none"
+  ],
+  "brochure_slug": "enhanced-critical-illness-rider-pro-and-critical-illness-rid",
+  "price_tier": "mid",
+  "product_fit": {
+   "gap": "Covers the financial shock of critical illness — lump sum when you need it most",
+   "best_for": "Clients with existing base plans wanting CI addition",
+   "key_features": [
+    "Riders adding CI to base life/savings plans",
+    "Cost-effective via rider",
+    "Early-stage + severe"
+   ],
+   "price_position": "mid"
+  }
+ },
+ {
+  "name": "Prime Care Rider",
+  "category": "危疾保障 (Critical Illness)",
+  "features": [
+   "CI rider for children on parent plans",
+   "Child early-stage CI",
+   "Premium waiver for parent"
+  ],
+  "audience": "Parents adding child CI to own plan",
+  "personas": [
+   "P03",
+   "P13"
+  ],
+  "signals": [
+   "has_children",
+   "wants_child_ci",
+   "wants_payor_waiver"
+  ],
+  "brochure_slug": "prime-care-rider",
+  "price_tier": "mid",
+  "product_fit": {
+   "gap": "Covers the financial shock of critical illness — lump sum when you need it most",
+   "best_for": "Parents adding child CI to own plan",
+   "key_features": [
+    "CI rider for children on parent plans",
+    "Child early-stage CI",
+    "Premium waiver for parent"
+   ],
+   "price_position": "mid"
+  }
+ },
+ {
+  "name": "Pretty Choice Rider Pro",
+  "category": "危疾保障 (Critical Illness)",
+  "features": [
+   "Female CI rider on savings/life base",
+   "Maternity complications",
+   "Affordable rider form"
+  ],
+  "audience": "Women adding female CI to existing plans",
+  "personas": [
+   "P12",
+   "P05"
+  ],
+  "signals": [
+   "gender_female",
+   "has_base_plan",
+   "planning_family"
+  ],
+  "brochure_slug": "pretty-choice-rider-pro",
+  "price_tier": "budget",
+  "product_fit": {
+   "gap": "Covers the financial shock of critical illness — lump sum when you need it most",
+   "best_for": "Women adding female CI to existing plans",
+   "key_features": [
+    "Female CI rider on savings/life base",
+    "Maternity complications",
+    "Affordable rider form"
+   ],
+   "price_position": "budget"
+  }
+ },
+ {
+  "name": "Super HealthGuard Pro",
+  "category": "危疾保障 (Critical Illness)",
+  "features": [
+   "Comprehensive CI with medical expense support",
+   "CI + medical dual protection",
+   "Senior-friendly entry"
+  ],
+  "audience": "Older clients needing CI + medical combo",
+  "personas": [
+   "P08",
+   "P09",
+   "P04"
+  ],
+  "signals": [
+   "age_over_50",
+   "wants_ci_and_medical",
+   "health_concerns"
+  ],
+  "brochure_slug": "super-healthguard-pro",
+  "price_tier": "mid",
+  "product_fit": {
+   "gap": "Covers the financial shock of critical illness — lump sum when you need it most",
+   "best_for": "Older clients needing CI + medical combo",
+   "key_features": [
+    "Comprehensive CI with medical expense support",
+    "CI + medical dual protection",
+    "Senior-friendly entry"
+   ],
+   "price_position": "mid"
+  }
+ },
+ {
+  "name": "AIA Voluntary Health Insurance Standard Scheme",
+  "category": "自願醫保 (VHIS)",
+  "features": [
+   "Govt VHIS standard plan — tax deductible",
+   "Basic hospital cover",
+   "Guaranteed renewal for life",
+   "No medical underwriting on standard"
+  ],
+  "audience": "Taxpayers without medical coverage",
+  "personas": [
+   "P10",
+   "P01",
+   "P02"
+  ],
+  "signals": [
+   "wants_tax_deduction",
+   "has_no_medical",
+   "budget_low"
+  ],
+  "brochure_slug": "aia-voluntary-health-insurance-standard-scheme",
+  "price_tier": "budget",
+  "product_fit": {
+   "gap": "Tax-deductible private hospital cover under the government VHIS scheme",
+   "best_for": "Taxpayers without medical coverage",
+   "key_features": [
+    "Govt VHIS standard plan — tax deductible",
+    "Basic hospital cover",
+    "Guaranteed renewal for life",
+    "No medical underwriting on standard"
+   ],
+   "price_position": "budget"
+  }
+ },
+ {
+  "name": "AIA Voluntary Health Insurance Flexi Scheme",
+  "category": "自願醫保 (VHIS)",
+  "features": [
+   "VHIS flexible plan — deductibles/ward choices",
+   "Tax deductible",
+   "Room upgrades, outpatient options"
+  ],
+  "audience": "Taxpayers wanting choice + private access",
+  "personas": [
+   "P10",
+   "P05"
+  ],
+  "signals": [
+   "wants_tax_deduction",
+   "wants_private_medical",
+   "comparison_shopper"
+  ],
+  "brochure_slug": "aia-voluntary-health-insurance-flexi-scheme",
+  "price_tier": "premium",
+  "product_fit": {
+   "gap": "Tax-deductible private hospital cover under the government VHIS scheme",
+   "best_for": "Taxpayers wanting choice + private access",
+   "key_features": [
+    "VHIS flexible plan — deductibles/ward choices",
+    "Tax deductible",
+    "Room upgrades, outpatient options"
+   ],
+   "price_position": "premium"
+  }
+ },
+ {
+  "name": "AIA Voluntary Health Insurance SelectWise Scheme",
+  "category": "自願醫保 (VHIS)",
+  "features": [
+   "VHIS SelectWise — higher benefit limits",
+   "Semiprivate/private ward options",
+   "Tax deductible"
+  ],
+  "audience": "Mid-upgraders wanting better ward + tax relief",
+  "personas": [
+   "P05",
+   "P10",
+   "P04"
+  ],
+  "signals": [
+   "wants_tax_deduction",
+   "wants_private_ward",
+   "income_mid_high"
+  ],
+  "brochure_slug": "aia-voluntary-health-insurance-selectwise-scheme",
+  "price_tier": "budget",
+  "product_fit": {
+   "gap": "Tax-deductible private hospital cover under the government VHIS scheme",
+   "best_for": "Mid-upgraders wanting better ward + tax relief",
+   "key_features": [
+    "VHIS SelectWise — higher benefit limits",
+    "Semiprivate/private ward options",
+    "Tax deductible"
+   ],
+   "price_position": "budget"
+  }
+ },
+ {
+  "name": "AIA Voluntary Health Insurance Privilege Ultra Scheme",
+  "category": "自願醫保 (VHIS)",
+  "features": [
+   "Top VHIS — private room, worldwide options",
+   "High annual limits",
+   "Tax deductible"
+  ],
+  "audience": "Affluent wanting premium private medical with tax relief",
+  "personas": [
+   "P05",
+   "P06",
+   "P14"
+  ],
+  "signals": [
+   "wants_tax_deduction",
+   "wants_private_room",
+   "income_high"
+  ],
+  "brochure_slug": "aia-voluntary-health-insurance-privilege-ultra-scheme",
+  "price_tier": "premium",
+  "product_fit": {
+   "gap": "Tax-deductible private hospital cover under the government VHIS scheme",
+   "best_for": "Affluent wanting premium private medical with tax relief",
+   "key_features": [
+    "Top VHIS — private room, worldwide options",
+    "High annual limits",
+    "Tax deductible"
+   ],
+   "price_position": "premium"
+  }
+ },
+ {
+  "name": "CEO Medical Plan 5 / CEO Medical Plan (Worldwide) 5",
+  "category": "醫療保障 (Medical)",
+  "features": [
+   "Premium medical — private room",
+   "Worldwide option (excl/incl US)",
+   "High limits, cashless network"
+  ],
+  "audience": "Executives/affluent wanting premium medical",
+  "personas": [
+   "P05",
+   "P06"
+  ],
+  "signals": [
+   "income_high",
+   "wants_private_room",
+   "travels_frequently"
+  ],
+  "brochure_slug": "ceo-medical-plan-5-ceo-medical-plan-worldwide-5",
+  "price_tier": "premium",
+  "product_fit": {
+   "gap": "Covers hospital & treatment costs — the everyday healthcare bill",
+   "best_for": "Executives/affluent wanting premium medical",
+   "key_features": [
+    "Premium medical — private room",
+    "Worldwide option (excl/incl US)",
+    "High limits, cashless network"
+   ],
+   "price_position": "premium"
+  }
+ },
+ {
+  "name": "CEO Pearl Medical Plan 5 / CEO Pearl Medical Plan (Worldwide) 5",
+  "category": "醫療保障 (Medical)",
+  "features": [
+   "Pearl tier of CEO — higher limits + extras",
+   "Health check benefits",
+   "Worldwide cover"
+  ],
+  "audience": "Top-tier medical buyers",
+  "personas": [
+   "P06",
+   "P05"
+  ],
+  "signals": [
+   "income_very_high",
+   "wants_premium_medical"
+  ],
+  "brochure_slug": "ceo-pearl-medical-plan-5-ceo-pearl-medical-plan-worldwide-5",
+  "price_tier": "premium",
+  "product_fit": {
+   "gap": "Covers hospital & treatment costs — the everyday healthcare bill",
+   "best_for": "Top-tier medical buyers",
+   "key_features": [
+    "Pearl tier of CEO — higher limits + extras",
+    "Health check benefits",
+    "Worldwide cover"
+   ],
+   "price_position": "premium"
+  }
+ },
+ {
+  "name": "OptimaCEO Medical Plan / First Gift",
+  "category": "醫療保障 (Medical)",
+  "features": [
+   "Premium hospital + outpatient + wellness (HNW positioning)",
+   "Family bundle incl. child from birth (First Gift)",
+   "Cashless network, health rewards"
+  ],
+  "audience": "Affluent families wanting premium medical + wellness",
+  "personas": [
+   "P05",
+   "P06",
+   "P03"
+  ],
+  "signals": [
+   "income_high",
+   "wants_family_medical",
+   "wants_wellness",
+   "has_children"
+  ],
+  "brochure_slug": "optimaceo-medical-plan-optimaceo-medical-plan-first-gift",
+  "price_tier": "premium",
+  "product_fit": {
+   "gap": "Covers hospital & treatment costs — the everyday healthcare bill",
+   "best_for": "Affluent families wanting premium medical + wellness",
+   "key_features": [
+    "Premium hospital + outpatient + wellness (HNW positioning)",
+    "Family bundle incl. child from birth (First Gift)",
+    "Cashless network, health rewards"
+   ],
+   "price_position": "premium"
+  }
+ },
+ {
+  "name": "OptimaCEO Pearl Medical Plan / First Gift",
+  "category": "醫療保障 (Medical)",
+  "features": [
+   "Pearl tier — higher limits + wellness",
+   "Family bundle",
+   "Outpatient + dental options"
+  ],
+  "audience": "Affluent families wanting premium medical",
+  "personas": [
+   "P05",
+   "P06"
+  ],
+  "signals": [
+   "has_children",
+   "income_high",
+   "wants_family_medical"
+  ],
+  "brochure_slug": "optimaceo-pearl-medical-plan-optimaceo-pearl-medical-plan-fi",
+  "price_tier": "premium",
+  "product_fit": {
+   "gap": "Covers hospital & treatment costs — the everyday healthcare bill",
+   "best_for": "Affluent families wanting premium medical",
+   "key_features": [
+    "Pearl tier — higher limits + wellness",
+    "Family bundle",
+    "Outpatient + dental options"
+   ],
+   "price_position": "premium"
+  }
+ },
+ {
+  "name": "Cancer Guardian 3",
+  "category": "醫療保障 (Medical)",
+  "features": [
+   "Cancer medical expense reimbursement",
+   "Multiple cycles of treatment cover",
+   "Covers new + recurrent cancer"
+  ],
+  "audience": "Cancer treatment cost protection",
+  "personas": [
+   "P11",
+   "P04",
+   "P09"
+  ],
+  "signals": [
+   "family_history_cancer",
+   "wants_cancer_treatment_cover"
+  ],
+  "brochure_slug": "cancer-guardian-3",
+  "price_tier": "mid",
+  "product_fit": {
+   "gap": "Covers hospital & treatment costs — the everyday healthcare bill",
+   "best_for": "Cancer treatment cost protection",
+   "key_features": [
+    "Cancer medical expense reimbursement",
+    "Multiple cycles of treatment cover",
+    "Covers new + recurrent cancer"
+   ],
+   "price_position": "mid"
+  }
+ },
+ {
+  "name": "Cancer Guardian Pearl 3",
+  "category": "醫療保障 (Medical)",
+  "features": [
+   "Pearl tier — higher limits, more cycles",
+   "Targeted therapy, alternative treatment",
+   "Cash benefit option"
+  ],
+  "audience": "Higher-budget cancer treatment protection",
+  "personas": [
+   "P11",
+   "P05",
+   "P06"
+  ],
+  "signals": [
+   "family_history_cancer",
+   "budget_mid_high"
+  ],
+  "brochure_slug": "cancer-guardian-pearl-3",
+  "price_tier": "mid",
+  "product_fit": {
+   "gap": "Covers hospital & treatment costs — the everyday healthcare bill",
+   "best_for": "Higher-budget cancer treatment protection",
+   "key_features": [
+    "Pearl tier — higher limits, more cycles",
+    "Targeted therapy, alternative treatment",
+    "Cash benefit option"
+   ],
+   "price_position": "mid"
+  }
+ },
+ {
+  "name": "GBA Health Connect Outpatient Plan",
+  "category": "醫療保障 (Medical)",
+  "features": [
+   "Mainland + HK outpatient access",
+   "GBA hospital network",
+   "Simple claims"
+  ],
+  "audience": "Frequent HK-mainland travelers",
+  "personas": [
+   "P14",
+   "P07"
+  ],
+  "signals": [
+   "cross_border",
+   "frequent_mainland_travel",
+   "wants_outpatient"
+  ],
+  "brochure_slug": "gba-health-connect-outpatient-plan",
+  "price_tier": "mid",
+  "product_fit": {
+   "gap": "Covers hospital & treatment costs — the everyday healthcare bill",
+   "best_for": "Frequent HK-mainland travelers",
+   "key_features": [
+    "Mainland + HK outpatient access",
+    "GBA hospital network",
+    "Simple claims"
+   ],
+   "price_position": "mid"
+  }
+ },
+ {
+  "name": "Health Journey Guardian",
+  "category": "醫療保障 (Medical)",
+  "features": [
+   "Coverage from prevention to recovery (whole journey)",
+   "Up to 30 outpatient visits/yr + quality network",
+   "Cancer, rehabilitation, hospice care benefits",
+   "Lifestage wellness assessments"
+  ],
+  "audience": "Health-management seekers wanting journey-wide cover",
+  "personas": [
+   "P10",
+   "P04",
+   "P05"
+  ],
+  "signals": [
+   "wants_prevention_to_recovery",
+   "wants_outpatient",
+   "health_concerns"
+  ],
+  "brochure_slug": "health-journey-guardian",
+  "price_tier": "premium",
+  "product_fit": {
+   "gap": "Covers hospital & treatment costs — the everyday healthcare bill",
+   "best_for": "Health-management seekers wanting journey-wide cover",
+   "key_features": [
+    "Coverage from prevention to recovery (whole journey)",
+    "Up to 30 outpatient visits/yr + quality network",
+    "Cancer, rehabilitation, hospice care benefits",
+    "Lifestage wellness assessments"
+   ],
+   "price_position": "premium"
+  }
+ },
+ {
+  "name": "Flexi-MediGuard Hospital Income Plan",
+  "category": "醫療保障 (Medical)",
+  "features": [
+   "Hospital cash income per day",
+   "Refundable premium option",
+   "No medical underwriting (simplified)"
+  ],
+  "audience": "Income replacement during hospital stay",
+  "personas": [
+   "P01",
+   "P02",
+   "P15"
+  ],
+  "signals": [
+   "wants_hospital_cash",
+   "budget_low",
+   "wants_refundable"
+  ],
+  "brochure_slug": "flexi-mediguard-hospital-income-plan",
+  "price_tier": "premium",
+  "product_fit": {
+   "gap": "Covers hospital & treatment costs — the everyday healthcare bill",
+   "best_for": "Income replacement during hospital stay",
+   "key_features": [
+    "Hospital cash income per day",
+    "Refundable premium option",
+    "No medical underwriting (simplified)"
+   ],
+   "price_position": "premium"
+  }
+ },
+ {
+  "name": "Here For You Refundable Hospital Cash",
+  "category": "醫療保障 (Medical)",
+  "features": [
+   "Hospital cash + premium refund at maturity",
+   "Simple daily benefit"
+  ],
+  "audience": "Clients wanting money-back hospital cover",
+  "personas": [
+   "P01",
+   "P02",
+   "P15"
+  ],
+  "signals": [
+   "wants_hospital_cash",
+   "wants_refundable"
+  ],
+  "brochure_slug": "here-for-you-refundable-hospital-cash",
+  "price_tier": "premium",
+  "product_fit": {
+   "gap": "Covers hospital & treatment costs — the everyday healthcare bill",
+   "best_for": "Clients wanting money-back hospital cover",
+   "key_features": [
+    "Hospital cash + premium refund at maturity",
+    "Simple daily benefit"
+   ],
+   "price_position": "premium"
+  }
+ },
+ {
+  "name": "Here For You Refundable Surgical Cash",
+  "category": "醫療保障 (Medical)",
+  "features": [
+   "Surgical cash benefit + refund",
+   "Covers surgeries big and small"
+  ],
+  "audience": "Refund-seeking surgical protection",
+  "personas": [
+   "P02",
+   "P10"
+  ],
+  "signals": [
+   "wants_surgical_cash",
+   "wants_refundable"
+  ],
+  "brochure_slug": "here-for-you-refundable-surgical-cash",
+  "price_tier": "mid",
+  "product_fit": {
+   "gap": "Covers hospital & treatment costs — the everyday healthcare bill",
+   "best_for": "Refund-seeking surgical protection",
+   "key_features": [
+    "Surgical cash benefit + refund",
+    "Covers surgeries big and small"
+   ],
+   "price_position": "mid"
+  }
+ },
+ {
+  "name": "Metro-Trio Medical & Critical Illness Protection Plan",
+  "category": "醫療保障 (Medical)",
+  "features": [
+   "Designed for 'three high' (diabetes/hypertension/hyperlipidaemia) clients",
+   "Medical + CI combined for chronic-condition clients",
+   "Lifestyle-disease focused underwriting"
+  ],
+  "audience": "Clients with diabetes/hypertension/hyperlipidaemia (three high)",
+  "personas": [
+   "P04",
+   "P08",
+   "P09"
+  ],
+  "signals": [
+   "chronic_condition",
+   "three_high",
+   "health_concerns",
+   "wants_ci_and_medical"
+  ],
+  "brochure_slug": "metro-trio-medical-critical-illness-protection-plan",
+  "price_tier": "premium",
+  "product_fit": {
+   "gap": "Covers hospital & treatment costs — the everyday healthcare bill",
+   "best_for": "Clients with diabetes/hypertension/hyperlipidaemia (three high)",
+   "key_features": [
+    "Designed for 'three high' (diabetes/hypertension/hyperlipidaemia) clients",
+    "Medical + CI combined for chronic-condition clients",
+    "Lifestyle-disease focused underwriting"
+   ],
+   "price_position": "premium"
+  }
+ },
+ {
+  "name": "Metro-Trio Pearl Medical & Critical Illness Protection Plan",
+  "category": "醫療保障 (Medical)",
+  "features": [
+   "Pearl tier of Metro-Trio — higher limits",
+   "For 'three high' clients",
+   "Medical + CI combined"
+  ],
+  "audience": "Higher-budget 'three high' clients",
+  "personas": [
+   "P05",
+   "P04",
+   "P08"
+  ],
+  "signals": [
+   "chronic_condition",
+   "three_high",
+   "budget_mid_high",
+   "wants_ci_and_medical"
+  ],
+  "brochure_slug": "metro-trio-pearl-medical-critical-illness-protection-plan",
+  "price_tier": "premium",
+  "product_fit": {
+   "gap": "Covers hospital & treatment costs — the everyday healthcare bill",
+   "best_for": "Higher-budget 'three high' clients",
+   "key_features": [
+    "Pearl tier of Metro-Trio — higher limits",
+    "For 'three high' clients",
+    "Medical + CI combined"
+   ],
+   "price_position": "premium"
+  }
+ },
+ {
+  "name": "Super Good Health Medical Plan 2",
+  "category": "醫療保障 (Medical)",
+  "features": [
+   "Worldwide medical reimbursement (ward/semi-private/private options)",
+   "Inpatient + outpatient surgery + cancer treatment extensions",
+   "No-claim bonus up to 15%",
+   "Optional Supplemental Major Medical"
+  ],
+  "audience": "Mainstream-to-mid medical buyers wanting worldwide",
+  "personas": [
+   "P02",
+   "P03",
+   "P05"
+  ],
+  "signals": [
+   "wants_private_medical",
+   "travels_frequently",
+   "budget_mid"
+  ],
+  "brochure_slug": "super-good-health-medical-plan-2",
+  "price_tier": "premium",
+  "product_fit": {
+   "gap": "Covers hospital & treatment costs — the everyday healthcare bill",
+   "best_for": "Mainstream-to-mid medical buyers wanting worldwide",
+   "key_features": [
+    "Worldwide medical reimbursement (ward/semi-private/private options)",
+    "Inpatient + outpatient surgery + cancer treatment extensions",
+    "No-claim bonus up to 15%",
+    "Optional Supplemental Major Medical"
+   ],
+   "price_position": "premium"
+  }
+ },
+ {
+  "name": "Super Good Health Hospital & Surgical Rider 2",
+  "category": "醫療保障 (Medical)",
+  "features": [
+   "Medical rider on savings/life base",
+   "Hospital + surgical cover via rider"
+  ],
+  "audience": "Adding medical to existing plans",
+  "personas": [
+   "P02",
+   "P04",
+   "P07"
+  ],
+  "signals": [
+   "has_base_plan",
+   "wants_medical_rider"
+  ],
+  "brochure_slug": "super-good-health-hospital-surgical-rider-2",
+  "price_tier": "premium",
+  "product_fit": {
+   "gap": "Covers hospital & treatment costs — the everyday healthcare bill",
+   "best_for": "Adding medical to existing plans",
+   "key_features": [
+    "Medical rider on savings/life base",
+    "Hospital + surgical cover via rider"
+   ],
+   "price_position": "premium"
+  }
+ },
+ {
+  "name": "Privilege Ultra Pearl Medical Plan",
+  "category": "醫療保障 (Medical)",
+  "features": [
+   "Premium medical, private room, high limits",
+   "Worldwide option"
+  ],
+  "audience": "Affluent premium medical buyers",
+  "personas": [
+   "P05",
+   "P06"
+  ],
+  "signals": [
+   "income_high",
+   "wants_private_room"
+  ],
+  "brochure_slug": "privilege-ultra-pearl-medical-plan",
+  "price_tier": "premium",
+  "product_fit": {
+   "gap": "Covers hospital & treatment costs — the everyday healthcare bill",
+   "best_for": "Affluent premium medical buyers",
+   "key_features": [
+    "Premium medical, private room, high limits",
+    "Worldwide option"
+   ],
+   "price_position": "premium"
+  }
+ },
+ {
+  "name": "SelectWise Pearl Medical Plan",
+  "category": "醫療保障 (Medical)",
+  "features": [
+   "Mid-premium medical with high limits",
+   "Semiprivate + upgrade options"
+  ],
+  "audience": "Mid-upgraders",
+  "personas": [
+   "P04",
+   "P05"
+  ],
+  "signals": [
+   "wants_private_ward",
+   "income_mid_high"
+  ],
+  "brochure_slug": "selectwise-pearl-medical-plan",
+  "price_tier": "budget",
+  "product_fit": {
+   "gap": "Covers hospital & treatment costs — the everyday healthcare bill",
+   "best_for": "Mid-upgraders",
+   "key_features": [
+    "Mid-premium medical with high limits",
+    "Semiprivate + upgrade options"
+   ],
+   "price_position": "budget"
+  }
+ },
+ {
+  "name": "Severe Illness Medical Protection Rider",
+  "category": "醫療保障 (Medical)",
+  "features": [
+   "Medical rider triggered by severe illness",
+   "Cash on CI diagnosis for treatment"
+  ],
+  "audience": "CI + treatment cost double cover",
+  "personas": [
+   "P04",
+   "P11"
+  ],
+  "signals": [
+   "wants_ci_and_treatment_cover",
+   "has_base_plan"
+  ],
+  "brochure_slug": "severe-illness-medical-protection-rider",
+  "price_tier": "premium",
+  "product_fit": {
+   "gap": "Covers hospital & treatment costs — the everyday healthcare bill",
+   "best_for": "CI + treatment cost double cover",
+   "key_features": [
+    "Medical rider triggered by severe illness",
+    "Cash on CI diagnosis for treatment"
+   ],
+   "price_position": "premium"
+  }
+ },
+ {
+  "name": "Severe Illness Pearl Medical Protection Rider",
+  "category": "醫療保障 (Medical)",
+  "features": [
+   "Pearl tier — higher treatment cash",
+   "Multiple events"
+  ],
+  "audience": "Higher-budget CI+medical combo",
+  "personas": [
+   "P05",
+   "P11"
+  ],
+  "signals": [
+   "budget_mid_high",
+   "wants_ci_and_treatment_cover"
+  ],
+  "brochure_slug": "severe-illness-pearl-medical-protection-rider",
+  "price_tier": "premium",
+  "product_fit": {
+   "gap": "Covers hospital & treatment costs — the everyday healthcare bill",
+   "best_for": "Higher-budget CI+medical combo",
+   "key_features": [
+    "Pearl tier — higher treatment cash",
+    "Multiple events"
+   ],
+   "price_position": "premium"
+  }
+ },
+ {
+  "name": "Hospitalization Benefit Rider",
+  "category": "醫療保障 (Medical)",
+  "features": [
+   "Daily hospital cash rider",
+   "Affordable add-on"
+  ],
+  "audience": "Hospital income top-up",
+  "personas": [
+   "P01",
+   "P02",
+   "P15"
+  ],
+  "signals": [
+   "wants_hospital_cash",
+   "has_base_plan"
+  ],
+  "brochure_slug": "hospitalization-benefit-rider",
+  "price_tier": "mid",
+  "product_fit": {
+   "gap": "Covers hospital & treatment costs — the everyday healthcare bill",
+   "best_for": "Hospital income top-up",
+   "key_features": [
+    "Daily hospital cash rider",
+    "Affordable add-on"
+   ],
+   "price_position": "mid"
+  }
+ },
+ {
+  "name": "AIA One Absolute – Cancer & Serious Infectious Disease Protection",
+  "category": "嚴重程度健康保障 (Severity-based Health)",
+  "features": [
+   "Severity-based payout tiers",
+   "Cancer + serious infectious disease",
+   "Lump sum scales with severity"
+  ],
+  "audience": "Clients wanting severity-scaled payouts",
+  "personas": [
+   "P04",
+   "P11",
+   "P05"
+  ],
+  "signals": [
+   "wants_severity_based",
+   "family_history_cancer"
+  ],
+  "brochure_slug": "aia-one-absolute-cancer-serious-infectious-disease-protectio",
+  "price_tier": "mid",
+  "product_fit": {
+   "gap": "Pays out by severity of illness — fair payouts for every stage",
+   "best_for": "Clients wanting severity-scaled payouts",
+   "key_features": [
+    "Severity-based payout tiers",
+    "Cancer + serious infectious disease",
+    "Lump sum scales with severity"
+   ],
+   "price_position": "mid"
+  }
+ },
+ {
+  "name": "AIA One Absolute Pearl – Cancer & Serious Infectious Disease Protection",
+  "category": "嚴重程度健康保障 (Severity-based Health)",
+  "features": [
+   "Pearl tier — higher severity payouts",
+   "More conditions"
+  ],
+  "audience": "Higher-budget severity-based buyers",
+  "personas": [
+   "P05",
+   "P06"
+  ],
+  "signals": [
+   "budget_mid_high",
+   "wants_severity_based"
+  ],
+  "brochure_slug": "aia-one-absolute-pearl-cancer-serious-infectious-disease-pro",
+  "price_tier": "mid",
+  "product_fit": {
+   "gap": "Pays out by severity of illness — fair payouts for every stage",
+   "best_for": "Higher-budget severity-based buyers",
+   "key_features": [
+    "Pearl tier — higher severity payouts",
+    "More conditions"
+   ],
+   "price_position": "mid"
+  }
+ },
+ {
+  "name": "AIA One Absolute – Full Protection",
+  "category": "嚴重程度健康保障 (Severity-based Health)",
+  "features": [
+   "Severity-scored payouts up to 160% of sum assured",
+   "TRANSPARENT scoring table — covers unlimited diseases incl. undiscovered ones",
+   "20% premium discount above SA threshold; 10% first-year via AIA Vitality"
+  ],
+  "audience": "Clients wanting future-proof severity-based CI",
+  "personas": [
+   "P04",
+   "P05",
+   "P11"
+  ],
+  "signals": [
+   "wants_severity_based",
+   "wants_future_proof",
+   "wants_ci_comprehensive"
+  ],
+  "brochure_slug": "aia-one-absolute-full-protection",
+  "price_tier": "mid",
+  "product_fit": {
+   "gap": "Pays out by severity of illness — fair payouts for every stage",
+   "best_for": "Clients wanting future-proof severity-based CI",
+   "key_features": [
+    "Severity-scored payouts up to 160% of sum assured",
+    "TRANSPARENT scoring table — covers unlimited diseases incl. undiscovered ones",
+    "20% premium discount above SA threshold; 10% first-year via AIA Vitality"
+   ],
+   "price_position": "mid"
+  }
+ },
+ {
+  "name": "AIA One Absolute Pearl – Full Protection",
+  "category": "嚴重程度健康保障 (Severity-based Health)",
+  "features": [
+   "Pearl tier — higher severity payouts up to 160%",
+   "Transparent scoring, unlimited diseases",
+   "Premium discounts"
+  ],
+  "audience": "Premium severity-based CI buyers",
+  "personas": [
+   "P05",
+   "P06"
+  ],
+  "signals": [
+   "income_high",
+   "wants_severity_based",
+   "wants_future_proof"
+  ],
+  "brochure_slug": "aia-one-absolute-pearl-full-protection",
+  "price_tier": "mid",
+  "product_fit": {
+   "gap": "Pays out by severity of illness — fair payouts for every stage",
+   "best_for": "Premium severity-based CI buyers",
+   "key_features": [
+    "Pearl tier — higher severity payouts up to 160%",
+    "Transparent scoring, unlimited diseases",
+    "Premium discounts"
+   ],
+   "price_position": "mid"
+  }
+ },
+ {
+  "name": "Secure First",
+  "category": "意外及其他保障 (Accident & Other)",
+  "features": [
+   "12-year premium payment plan with lifetime accident protection",
+   "Accidental death + dismemberment",
+   "Long-term accident security"
+  ],
+  "audience": "Long-horizon accident protection",
+  "personas": [
+   "P02",
+   "P03",
+   "P15"
+  ],
+  "signals": [
+   "wants_accident",
+   "wants_lifetime_cover"
+  ],
+  "brochure_slug": "secure-first",
+  "price_tier": "premium",
+  "product_fit": {
+   "gap": "Covers accidents — the most unpredictable, least expensive risk",
+   "best_for": "Long-horizon accident protection",
+   "key_features": [
+    "12-year premium payment plan with lifetime accident protection",
+    "Accidental death + dismemberment",
+    "Long-term accident security"
+   ],
+   "price_position": "premium"
+  }
+ },
+ {
+  "name": "Secure First Plus",
+  "category": "意外及其他保障 (Accident & Other)",
+  "features": [
+   "Up to 100% premium refund",
+   "Broad accident cover for life",
+   "Double benefit under certain circumstances"
+  ],
+  "audience": "Refund-seeking accident buyers",
+  "personas": [
+   "P01",
+   "P02"
+  ],
+  "signals": [
+   "wants_accident",
+   "wants_refundable"
+  ],
+  "brochure_slug": "secure-first-plus",
+  "price_tier": "premium",
+  "product_fit": {
+   "gap": "Covers accidents — the most unpredictable, least expensive risk",
+   "best_for": "Refund-seeking accident buyers",
+   "key_features": [
+    "Up to 100% premium refund",
+    "Broad accident cover for life",
+    "Double benefit under certain circumstances"
+   ],
+   "price_position": "premium"
+  }
+ },
+ {
+  "name": "PAC Select 3",
+  "category": "意外及其他保障 (Accident & Other)",
+  "features": [
+   "Tailored accident add-on plan",
+   "Covers treatment costs + financial burden of injury/disability",
+   "Income support during recovery"
+  ],
+  "audience": "Comprehensive accident top-up buyers",
+  "personas": [
+   "P05",
+   "P07",
+   "P15"
+  ],
+  "signals": [
+   "wants_accident_comprehensive",
+   "has_base_plan"
+  ],
+  "brochure_slug": "pac-select-3",
+  "price_tier": "mid",
+  "product_fit": {
+   "gap": "Covers accidents — the most unpredictable, least expensive risk",
+   "best_for": "Comprehensive accident top-up buyers",
+   "key_features": [
+    "Tailored accident add-on plan",
+    "Covers treatment costs + financial burden of injury/disability",
+    "Income support during recovery"
+   ],
+   "price_position": "mid"
+  }
+ },
+ {
+  "name": "Here For You Refundable Accident Plus",
+  "category": "意外及其他保障 (Accident & Other)",
+  "features": [
+   "16-year refundable accident plan — 100% premium refund at term end",
+   "Broad accident cover incl. TPD",
+   "4 plan levels"
+  ],
+  "audience": "Money-back accident buyers",
+  "personas": [
+   "P01",
+   "P02"
+  ],
+  "signals": [
+   "wants_accident",
+   "wants_refundable"
+  ],
+  "brochure_slug": "here-for-you-refundable-accident-plus",
+  "price_tier": "premium",
+  "product_fit": {
+   "gap": "Covers accidents — the most unpredictable, least expensive risk",
+   "best_for": "Money-back accident buyers",
+   "key_features": [
+    "16-year refundable accident plan — 100% premium refund at term end",
+    "Broad accident cover incl. TPD",
+    "4 plan levels"
+   ],
+   "price_position": "premium"
+  }
+ },
+ {
+  "name": "Xtra Protect",
+  "category": "意外及其他保障 (Accident & Other)",
+  "features": [
+   "Affordable balanced accident protection to age 76",
+   "Accidental death/dismemberment + PTD",
+   "Accident medical expense reimbursement",
+   "Fills protection gap on top of existing plans"
+  ],
+  "audience": "Entry accident buyers / gap-fillers",
+  "personas": [
+   "P01",
+   "P02",
+   "P13"
+  ],
+  "signals": [
+   "wants_accident",
+   "budget_low",
+   "existing_coverage_minimal"
+  ],
+  "brochure_slug": "xtra-protect",
+  "price_tier": "premium",
+  "product_fit": {
+   "gap": "Covers accidents — the most unpredictable, least expensive risk",
+   "best_for": "Entry accident buyers / gap-fillers",
+   "key_features": [
+    "Affordable balanced accident protection to age 76",
+    "Accidental death/dismemberment + PTD",
+    "Accident medical expense reimbursement",
+    "Fills protection gap on top of existing plans"
+   ],
+   "price_position": "premium"
+  }
+ },
+ {
+  "name": "Silvery Protect",
+  "category": "意外及其他保障 (Accident & Other)",
+  "features": [
+   "Tailor-made SENIOR accident protection to age 80",
+   "Broken bones + accident medical costs",
+   "ICU, medical appliances, disability support"
+  ],
+  "audience": "Seniors (fracture/accident risk)",
+  "personas": [
+   "P09",
+   "P08"
+  ],
+  "signals": [
+   "age_over_60",
+   "wants_accident",
+   "fracture_risk"
+  ],
+  "brochure_slug": "silvery-protect",
+  "price_tier": "premium",
+  "product_fit": {
+   "gap": "Covers accidents — the most unpredictable, least expensive risk",
+   "best_for": "Seniors (fracture/accident risk)",
+   "key_features": [
+    "Tailor-made SENIOR accident protection to age 80",
+    "Broken bones + accident medical costs",
+    "ICU, medical appliances, disability support"
+   ],
+   "price_position": "premium"
+  }
+ },
+ {
+  "name": "Super Kids Shield / Super Adults Shield / Super Seniors Shield",
+  "category": "意外及其他保障 (Accident & Other)",
+  "features": [
+   "Family accident shields for kids/adults/seniors",
+   "Accident death + dismemberment + PTD",
+   "AIA Vitality membership"
+  ],
+  "audience": "Whole-family accident protection",
+  "personas": [
+   "P03",
+   "P13",
+   "P09"
+  ],
+  "signals": [
+   "has_children",
+   "wants_family_accident"
+  ],
+  "brochure_slug": "super-kids-shield-super-adults-shield-super-seniors-shield",
+  "price_tier": "mid",
+  "product_fit": {
+   "gap": "Covers accidents — the most unpredictable, least expensive risk",
+   "best_for": "Whole-family accident protection",
+   "key_features": [
+    "Family accident shields for kids/adults/seniors",
+    "Accident death + dismemberment + PTD",
+    "AIA Vitality membership"
+   ],
+   "price_position": "mid"
+  }
+ },
+ {
+  "name": "Accidental Death Benefit Rider / AD&D Rider / Simplified AD&D",
+  "category": "意外及其他保障 (Accident & Other)",
+  "features": [
+   "Accidental death rider on life plans",
+   "Low-cost top-up"
+  ],
+  "audience": "Life plan holders wanting AD top-up",
+  "personas": [
+   "P02",
+   "P03"
+  ],
+  "signals": [
+   "has_base_plan",
+   "wants_accident_rider"
+  ],
+  "brochure_slug": "accidental-death-benefit-rider-accidental-death-and-dismembe",
+  "price_tier": "mid",
+  "product_fit": {
+   "gap": "Covers accidents — the most unpredictable, least expensive risk",
+   "best_for": "Life plan holders wanting AD top-up",
+   "key_features": [
+    "Accidental death rider on life plans",
+    "Low-cost top-up"
+   ],
+   "price_position": "mid"
+  }
+ },
+ {
+  "name": "Premium Refund - Accidental HI",
+  "category": "意外及其他保障 (Accident & Other)",
+  "features": [
+   "Accident hospital income + refund",
+   "Money-back"
+  ],
+  "audience": "Refund-seeking accident income",
+  "personas": [
+   "P01",
+   "P02"
+  ],
+  "signals": [
+   "wants_accident",
+   "wants_refundable"
+  ],
+  "brochure_slug": "premium-refund-accidental-hi",
+  "price_tier": "mid",
+  "product_fit": {
+   "gap": "Covers accidents — the most unpredictable, least expensive risk",
+   "best_for": "Refund-seeking accident income",
+   "key_features": [
+    "Accident hospital income + refund",
+    "Money-back"
+   ],
+   "price_position": "mid"
+  }
+ },
+ {
+  "name": "Waiver of Premium and Payor Benefit Riders",
+  "category": "意外及其他保障 (Accident & Other)",
+  "features": [
+   "Premium waiver on disability/death",
+   "Payor waiver for child plans"
+  ],
+  "audience": "Policy continuity protection",
+  "personas": [
+   "P03",
+   "P07"
+  ],
+  "signals": [
+   "has_children",
+   "wants_premium_waiver"
+  ],
+  "brochure_slug": "waiver-of-premium-and-payor-benefit-riders",
+  "price_tier": "mid",
+  "product_fit": {
+   "gap": "Covers accidents — the most unpredictable, least expensive risk",
+   "best_for": "Policy continuity protection",
+   "key_features": [
+    "Premium waiver on disability/death",
+    "Payor waiver for child plans"
+   ],
+   "price_position": "mid"
+  }
+ },
+ {
+  "name": "China Assist Protection Plan",
+  "category": "意外及其他保障 (Accident & Other)",
+  "features": [
+   "Travel protection for Mainland China + Macau — unlimited trips/yr",
+   "Accident + illness + baggage loss cover",
+   "China Assist Card for cashless hospital access",
+   "Yearly renewable to 71"
+  ],
+  "audience": "Frequent mainland travelers (business/leisure)",
+  "personas": [
+   "P14",
+   "P07"
+  ],
+  "signals": [
+   "cross_border",
+   "frequent_mainland_travel",
+   "wants_travel_cover"
+  ],
+  "brochure_slug": "china-assist-protection-plan",
+  "price_tier": "premium",
+  "product_fit": {
+   "gap": "Covers accidents — the most unpredictable, least expensive risk",
+   "best_for": "Frequent mainland travelers (business/leisure)",
+   "key_features": [
+    "Travel protection for Mainland China + Macau — unlimited trips/yr",
+    "Accident + illness + baggage loss cover",
+    "China Assist Card for cashless hospital access",
+    "Yearly renewable to 71"
+   ],
+   "price_position": "premium"
+  }
+ },
+ {
+  "name": "On Your Side Insurance Plan 2 (Accident listing)",
+  "category": "意外及其他保障 (Accident & Other)",
+  "features": [
+   "CI plan cross-listed (see CI category)",
+   "Accident/CI dual"
+  ],
+  "audience": "See CI listing",
+  "personas": [
+   "P03",
+   "P04",
+   "P11"
+  ],
+  "signals": [
+   "family_history_cancer",
+   "has_children"
+  ],
+  "brochure_slug": null,
+  "price_tier": "mid",
+  "product_fit": {
+   "gap": "Covers accidents — the most unpredictable, least expensive risk",
+   "best_for": "See CI listing",
+   "key_features": [
+    "CI plan cross-listed (see CI category)",
+    "Accident/CI dual"
+   ],
+   "price_position": "mid"
+  }
+ },
+ {
+  "name": "Admire Life Insurance Plan 2",
+  "category": "人壽保障 (Life)",
+  "features": [
+   "Participating whole life",
+   "Guaranteed + non-guaranteed dividends",
+   "Cash value growth",
+   "Protection + savings"
+  ],
+  "audience": "Classic whole-life savers",
+  "personas": [
+   "P04",
+   "P06",
+   "P13"
+  ],
+  "signals": [
+   "wants_whole_life",
+   "wants_savings_and_protection",
+   "has_children"
+  ],
+  "brochure_slug": "admire-life-insurance-plan-2",
+  "price_tier": "mid",
+  "product_fit": {
+   "gap": "Protects your family's income if you're gone — the foundation of financial planning",
+   "best_for": "Classic whole-life savers",
+   "key_features": [
+    "Participating whole life",
+    "Guaranteed + non-guaranteed dividends",
+    "Cash value growth",
+    "Protection + savings"
+   ],
+   "price_position": "mid"
+  }
+ },
+ {
+  "name": "ProsperLife Insurance Plan",
+  "category": "人壽保障 (Life)",
+  "features": [
+   "Participating whole life with long-term potential returns",
+   "Eligible for Policy Reverse Mortgage Programme",
+   "Life-milestone focused"
+  ],
+  "audience": "Milestone-focused savers (home, newborn, retirement)",
+  "personas": [
+   "P05",
+   "P06",
+   "P07"
+  ],
+  "signals": [
+   "wants_savings_and_protection",
+   "wants_reverse_mortgage_eligible",
+   "life_milestones"
+  ],
+  "brochure_slug": "prosperlife-insurance-plan",
+  "price_tier": "mid",
+  "product_fit": {
+   "gap": "Protects your family's income if you're gone — the foundation of financial planning",
+   "best_for": "Milestone-focused savers (home, newborn, retirement)",
+   "key_features": [
+    "Participating whole life with long-term potential returns",
+    "Eligible for Policy Reverse Mortgage Programme",
+    "Life-milestone focused"
+   ],
+   "price_position": "mid"
+  }
+ },
+ {
+  "name": "Bonus Power Life Insurance Plan 2 (Enhanced Protection)",
+  "category": "人壽保障 (Life)",
+  "features": [
+   "Enhanced whole life with bonus",
+   "Higher protection focus",
+   "Cash value"
+  ],
+  "audience": "Protection-first whole life",
+  "personas": [
+   "P04",
+   "P05"
+  ],
+  "signals": [
+   "wants_whole_life",
+   "wants_protection_first"
+  ],
+  "brochure_slug": "bonus-power-life-insurance-plan-2-enhanced-protection",
+  "price_tier": "mid",
+  "product_fit": {
+   "gap": "Protects your family's income if you're gone — the foundation of financial planning",
+   "best_for": "Protection-first whole life",
+   "key_features": [
+    "Enhanced whole life with bonus",
+    "Higher protection focus",
+    "Cash value"
+   ],
+   "price_position": "mid"
+  }
+ },
+ {
+  "name": "Serene Life / Serene Life (Annual Dividends)",
+  "category": "人壽保障 (Life)",
+  "features": [
+   "Two versions: Serene Life (higher long-term returns) vs Annual Dividends (higher liquidity)",
+   "Whole life protection, 3 premium terms"
+  ],
+  "audience": "Flexible whole-life buyers (return vs liquidity choice)",
+  "personas": [
+   "P05",
+   "P06",
+   "P08"
+  ],
+  "signals": [
+   "wants_whole_life",
+   "wants_liquidity_or_returns"
+  ],
+  "brochure_slug": "serene-life-serene-life-annual-dividends-macau",
+  "price_tier": "mid",
+  "product_fit": {
+   "gap": "Protects your family's income if you're gone — the foundation of financial planning",
+   "best_for": "Flexible whole-life buyers (return vs liquidity choice)",
+   "key_features": [
+    "Two versions: Serene Life (higher long-term returns) vs Annual Dividends (higher liquidity)",
+    "Whole life protection, 3 premium terms"
+   ],
+   "price_position": "mid"
+  }
+ },
+ {
+  "name": "Wealth Elite Life Insurance Plan 3",
+  "category": "人壽保障 (Life)",
+  "features": [
+   "High-end participating whole life",
+   "Premium wealth growth + legacy",
+   "Multi-generational"
+  ],
+  "audience": "HNW legacy planning",
+  "personas": [
+   "P06"
+  ],
+  "signals": [
+   "net_worth_high",
+   "wants_legacy",
+   "wants_multi_generational"
+  ],
+  "brochure_slug": "wealth-elite-life-insurance-plan-3",
+  "price_tier": "premium",
+  "product_fit": {
+   "gap": "Protects your family's income if you're gone — the foundation of financial planning",
+   "best_for": "HNW legacy planning",
+   "key_features": [
+    "High-end participating whole life",
+    "Premium wealth growth + legacy",
+    "Multi-generational"
+   ],
+   "price_position": "premium"
+  }
+ },
+ {
+  "name": "Wealth Ultima Life Insurance Plan 2",
+  "category": "人壽保障 (Life)",
+  "features": [
+   "Ultra-premium whole life",
+   "Highest tier wealth + legacy",
+   "Flexible premiums"
+  ],
+  "audience": "Ultra-HNW",
+  "personas": [
+   "P06"
+  ],
+  "signals": [
+   "net_worth_very_high",
+   "wants_legacy"
+  ],
+  "brochure_slug": "wealth-ultima-life-insurance-plan-2",
+  "price_tier": "premium",
+  "product_fit": {
+   "gap": "Protects your family's income if you're gone — the foundation of financial planning",
+   "best_for": "Ultra-HNW",
+   "key_features": [
+    "Ultra-premium whole life",
+    "Highest tier wealth + legacy",
+    "Flexible premiums"
+   ],
+   "price_position": "premium"
+  }
+ },
+ {
+  "name": "Wealth Preserver Life Insurance Plan 5",
+  "category": "人壽保障 (Life)",
+  "features": [
+   "Wealth preservation whole life",
+   "Capital protection focus",
+   "Moderate growth"
+  ],
+  "audience": "Capital-preserving savers",
+  "personas": [
+   "P06",
+   "P08"
+  ],
+  "signals": [
+   "wants_capital_preservation",
+   "wants_legacy"
+  ],
+  "brochure_slug": "wealth-preserver-life-insurance-plan-5",
+  "price_tier": "mid",
+  "product_fit": {
+   "gap": "Protects your family's income if you're gone — the foundation of financial planning",
+   "best_for": "Capital-preserving savers",
+   "key_features": [
+    "Wealth preservation whole life",
+    "Capital protection focus",
+    "Moderate growth"
+   ],
+   "price_position": "mid"
+  }
+ },
+ {
+  "name": "Guaranteed Issue Whole Life Plan",
+  "category": "人壽保障 (Life)",
+  "features": [
+   "Whole life with NO medical examination required",
+   "Guaranteed cash payments + annual dividends",
+   "Stable returns, fixed premiums"
+  ],
+  "audience": "Older/simplified-application buyers (no medical exam)",
+  "personas": [
+   "P08",
+   "P09",
+   "P04"
+  ],
+  "signals": [
+   "age_over_50",
+   "wants_no_medical_exam",
+   "wants_whole_life"
+  ],
+  "brochure_slug": "guaranteed-issue-whole-life-plan",
+  "price_tier": "mid",
+  "product_fit": {
+   "gap": "Protects your family's income if you're gone — the foundation of financial planning",
+   "best_for": "Older/simplified-application buyers (no medical exam)",
+   "key_features": [
+    "Whole life with NO medical examination required",
+    "Guaranteed cash payments + annual dividends",
+    "Stable returns, fixed premiums"
+   ],
+   "price_position": "mid"
+  }
+ },
+ {
+  "name": "Easyguard Term Life Plan",
+  "category": "人壽保障 (Life)",
+  "features": [
+   "Term life — pure protection, low cost",
+   "Level term",
+   "Convertible to whole life"
+  ],
+  "audience": "Budget life protection (mortgage years)",
+  "personas": [
+   "P02",
+   "P03",
+   "P01"
+  ],
+  "signals": [
+   "has_mortgage",
+   "budget_low",
+   "wants_term"
+  ],
+  "brochure_slug": "easyguard-term-life-plan",
+  "price_tier": "budget",
+  "product_fit": {
+   "gap": "Protects your family's income if you're gone — the foundation of financial planning",
+   "best_for": "Budget life protection (mortgage years)",
+   "key_features": [
+    "Term life — pure protection, low cost",
+    "Level term",
+    "Convertible to whole life"
+   ],
+   "price_position": "budget"
+  }
+ },
+ {
+  "name": "Expert Term Life Plan",
+  "category": "人壽保障 (Life)",
+  "features": [
+   "Premium term life — sum assured from US$500,000 / HK$3.75M",
+   "Premiums guaranteed within renewal period",
+   "Renewable to 85, additional cover at life milestones"
+  ],
+  "audience": "High-sum term protection (HNW/mortgage)",
+  "personas": [
+   "P05",
+   "P06",
+   "P04"
+  ],
+  "signals": [
+   "wants_high_sum_assured",
+   "has_mortgage",
+   "wants_term"
+  ],
+  "brochure_slug": "expert-term-life-plan",
+  "price_tier": "mid",
+  "product_fit": {
+   "gap": "Protects your family's income if you're gone — the foundation of financial planning",
+   "best_for": "High-sum term protection (HNW/mortgage)",
+   "key_features": [
+    "Premium term life — sum assured from US$500,000 / HK$3.75M",
+    "Premiums guaranteed within renewal period",
+    "Renewable to 85, additional cover at life milestones"
+   ],
+   "price_position": "mid"
+  }
+ },
+ {
+  "name": "Wisdom Term Life Plan",
+  "category": "人壽保障 (Life)",
+  "features": [
+   "Premium term life with wealth component",
+   "Term + savings hybrid"
+  ],
+  "audience": "Term protection with savings return",
+  "personas": [
+   "P04",
+   "P05"
+  ],
+  "signals": [
+   "wants_term",
+   "wants_some_cash_value"
+  ],
+  "brochure_slug": "wisdom-term-life-plan",
+  "price_tier": "mid",
+  "product_fit": {
+   "gap": "Protects your family's income if you're gone — the foundation of financial planning",
+   "best_for": "Term protection with savings return",
+   "key_features": [
+    "Premium term life with wealth component",
+    "Term + savings hybrid"
+   ],
+   "price_position": "mid"
+  }
+ },
+ {
+  "name": "Wisdom Term Life Supplementary Contract",
+  "category": "人壽保障 (Life)",
+  "features": [
+   "Term rider on whole life base",
+   "Top-up protection"
+  ],
+  "audience": "Top-up on existing plans",
+  "personas": [
+   "P04",
+   "P07"
+  ],
+  "signals": [
+   "has_base_plan",
+   "wants_term_topup"
+  ],
+  "brochure_slug": "wisdom-term-life-supplementary-contract",
+  "price_tier": "mid",
+  "product_fit": {
+   "gap": "Protects your family's income if you're gone — the foundation of financial planning",
+   "best_for": "Top-up on existing plans",
+   "key_features": [
+    "Term rider on whole life base",
+    "Top-up protection"
+   ],
+   "price_position": "mid"
+  }
+ },
+ {
+  "name": "Additional Purchase Option Rider",
+  "category": "人壽保障 (Life)",
+  "features": [
+   "Right to buy more cover without underwriting",
+   "Life-event triggered"
+  ],
+  "audience": "Future-proofing protection",
+  "personas": [
+   "P02",
+   "P03"
+  ],
+  "signals": [
+   "planning_family",
+   "wants_future_flexibility"
+  ],
+  "brochure_slug": "additional-purchase-option-rider",
+  "price_tier": "mid",
+  "product_fit": {
+   "gap": "Protects your family's income if you're gone — the foundation of financial planning",
+   "best_for": "Future-proofing protection",
+   "key_features": [
+    "Right to buy more cover without underwriting",
+    "Life-event triggered"
+   ],
+   "price_position": "mid"
+  }
+ },
+ {
+  "name": "GlobalFlexi Savings Insurance Plan",
+  "category": "投資成分保險 (Investment Focus)",
+  "features": [
+   "Flexible savings — guaranteed cash value + non-guaranteed bonuses",
+   "Flexible fund access",
+   "Multi-purpose: education/retirement/legacy/safety net"
+  ],
+  "audience": "Flexible multi-purpose savers",
+  "personas": [
+   "P05",
+   "P07",
+   "P02"
+  ],
+  "signals": [
+   "wants_flexible_premium",
+   "wants_liquidity",
+   "multi_purpose"
+  ],
+  "brochure_slug": "globalflexi-savings-insurance-plan",
+  "price_tier": "mid",
+  "product_fit": {
+   "gap": "Grow wealth across currencies with insurance discipline",
+   "best_for": "Flexible multi-purpose savers",
+   "key_features": [
+    "Flexible savings — guaranteed cash value + non-guaranteed bonuses",
+    "Flexible fund access",
+    "Multi-purpose: education/retirement/legacy/safety net"
+   ],
+   "price_position": "mid"
+  }
+ },
+ {
+  "name": "Global Power Multi-Currency Savings Insurance Plan 3",
+  "category": "投資成分保險 (Investment Focus)",
+  "features": [
+   "Multi-currency (9 currencies) with Currency Exchange Option from end of 2nd policy year",
+   "Long-term wealth accumulation + legacy transfer",
+   "Overseas education/emigration funding"
+  ],
+  "audience": "Multi-currency wealth builders (overseas plans)",
+  "personas": [
+   "P05",
+   "P06",
+   "P14"
+  ],
+  "signals": [
+   "wants_multi_currency",
+   "wants_wealth_growth",
+   "cross_border",
+   "children_education_overseas"
+  ],
+  "brochure_slug": "global-power-multi-currency-savings-insurance-plan-3",
+  "price_tier": "mid",
+  "product_fit": {
+   "gap": "Grow wealth across currencies with insurance discipline",
+   "best_for": "Multi-currency wealth builders (overseas plans)",
+   "key_features": [
+    "Multi-currency (9 currencies) with Currency Exchange Option from end of 2nd policy year",
+    "Long-term wealth accumulation + legacy transfer",
+    "Overseas education/emigration funding"
+   ],
+   "price_position": "mid"
+  }
+ },
+ {
+  "name": "Wealth Flexi Savings Insurance Plan",
+  "category": "投資成分保險 (Investment Focus)",
+  "features": [
+   "Participating whole-life — guaranteed + non-guaranteed returns",
+   "AGILE CASH LIQUIDITY",
+   "Legacy/wealth transfer focus"
+  ],
+  "audience": "Liquidity + legacy wealth planners",
+  "personas": [
+   "P06",
+   "P07",
+   "P05"
+  ],
+  "signals": [
+   "wants_liquidity",
+   "wants_legacy",
+   "net_worth_high"
+  ],
+  "brochure_slug": "wealth-flexi-savings-insurance-plan",
+  "price_tier": "mid",
+  "product_fit": {
+   "gap": "Grow wealth across currencies with insurance discipline",
+   "best_for": "Liquidity + legacy wealth planners",
+   "key_features": [
+    "Participating whole-life — guaranteed + non-guaranteed returns",
+    "AGILE CASH LIQUIDITY",
+    "Legacy/wealth transfer focus"
+   ],
+   "price_position": "mid"
+  }
+ },
+ {
+  "name": "Wealth Generation Savings Insurance Plan",
+  "category": "投資成分保險 (Investment Focus)",
+  "features": [
+   "Long-term wealth generation",
+   "Compound growth",
+   "Steady discipline"
+  ],
+  "audience": "Long-horizon wealth builders",
+  "personas": [
+   "P02",
+   "P05"
+  ],
+  "signals": [
+   "wants_long_term_growth",
+   "wants_savings_discipline"
+  ],
+  "brochure_slug": "wealth-generation-savings-insurance-plan",
+  "price_tier": "budget",
+  "product_fit": {
+   "gap": "Grow wealth across currencies with insurance discipline",
+   "best_for": "Long-horizon wealth builders",
+   "key_features": [
+    "Long-term wealth generation",
+    "Compound growth",
+    "Steady discipline"
+   ],
+   "price_position": "budget"
+  }
+ },
+ {
+  "name": "Wealth Enrich Savings Insurance Plan",
+  "category": "投資成分保險 (Investment Focus)",
+  "features": [
+   "Enrichment-focused savings",
+   "Higher growth orientation",
+   "Long term"
+  ],
+  "audience": "Growth-oriented savers",
+  "personas": [
+   "P05",
+   "P07"
+  ],
+  "signals": [
+   "risk_appetite_high",
+   "wants_growth"
+  ],
+  "brochure_slug": "wealth-enrich-savings-insurance-plan",
+  "price_tier": "mid",
+  "product_fit": {
+   "gap": "Grow wealth across currencies with insurance discipline",
+   "best_for": "Growth-oriented savers",
+   "key_features": [
+    "Enrichment-focused savings",
+    "Higher growth orientation",
+    "Long term"
+   ],
+   "price_position": "mid"
+  }
+ },
+ {
+  "name": "Bonus Power Life Insurance Plan 2 (Investment listing)",
+  "category": "投資成分保險 (Investment Focus)",
+  "features": [
+   "Cross-listed (see Life)",
+   "Bonus-accumulating whole life"
+  ],
+  "audience": "See Life",
+  "personas": [
+   "P04",
+   "P05"
+  ],
+  "signals": [
+   "wants_whole_life",
+   "wants_bonus"
+  ],
+  "brochure_slug": null,
+  "price_tier": "mid",
+  "product_fit": {
+   "gap": "Grow wealth across currencies with insurance discipline",
+   "best_for": "See Life",
+   "key_features": [
+    "Cross-listed (see Life)",
+    "Bonus-accumulating whole life"
+   ],
+   "price_position": "mid"
+  }
+ },
+ {
+  "name": "AIA Deferred Annuity Plan 2",
+  "category": "退休收入 (Retirement Income)",
+  "features": [
+   "QDAP — qualifying deferred annuity, TAX DEDUCTIBLE premiums",
+   "Guaranteed annuity income stream",
+   "Issue age up to 70; flexible accumulation + payout"
+  ],
+  "audience": "Retirement income builders (18-70) wanting tax relief",
+  "personas": [
+   "P08",
+   "P07",
+   "P05"
+  ],
+  "signals": [
+   "retirement_horizon_0_10",
+   "wants_guaranteed_income",
+   "wants_tax_deduction"
+  ],
+  "brochure_slug": "aia-deferred-annuity-plan-2",
+  "price_tier": "mid",
+  "product_fit": {
+   "gap": "Converts savings into guaranteed retirement income",
+   "best_for": "Retirement income builders (18-70) wanting tax relief",
+   "key_features": [
+    "QDAP — qualifying deferred annuity, TAX DEDUCTIBLE premiums",
+    "Guaranteed annuity income stream",
+    "Issue age up to 70; flexible accumulation + payout"
+   ],
+   "price_position": "mid"
+  }
+ },
+ {
+  "name": "Golden Years Income Plan",
+  "category": "退休收入 (Retirement Income)",
+  "features": [
+   "Monthly income for 10/15 years or to age 110",
+   "Guaranteed cash value + cash payments + annual dividends",
+   "Income like a regular salary"
+  ],
+  "audience": "Pre/early retirees converting savings to income",
+  "personas": [
+   "P08",
+   "P09"
+  ],
+  "signals": [
+   "retiring_soon",
+   "wants_guaranteed_income",
+   "wants_monthly_income"
+  ],
+  "brochure_slug": "golden-years-income-plan",
+  "price_tier": "mid",
+  "product_fit": {
+   "gap": "Converts savings into guaranteed retirement income",
+   "best_for": "Pre/early retirees converting savings to income",
+   "key_features": [
+    "Monthly income for 10/15 years or to age 110",
+    "Guaranteed cash value + cash payments + annual dividends",
+    "Income like a regular salary"
+   ],
+   "price_position": "mid"
+  }
+ },
+ {
+  "name": "Spring Income Insurance Plan",
+  "category": "退休收入 (Retirement Income)",
+  "features": [
+   "Short premium terms (1/3/5 yr) for PROMPT income",
+   "Guaranteed annual income from end of paid-up year",
+   "USD/HKD, flexible withdrawals"
+  ],
+  "audience": "Income-seekers wanting fast income start",
+  "personas": [
+   "P08",
+   "P09"
+  ],
+  "signals": [
+   "wants_income_soon",
+   "wants_guaranteed_income",
+   "lump_sum_available"
+  ],
+  "brochure_slug": "spring-income-insurance-plan",
+  "price_tier": "mid",
+  "product_fit": {
+   "gap": "Converts savings into guaranteed retirement income",
+   "best_for": "Income-seekers wanting fast income start",
+   "key_features": [
+    "Short premium terms (1/3/5 yr) for PROMPT income",
+    "Guaranteed annual income from end of paid-up year",
+    "USD/HKD, flexible withdrawals"
+   ],
+   "price_position": "mid"
+  }
+ },
+ {
+  "name": "Fortune Promise Savings Insurance Plan 2",
+  "category": "退休收入 (Retirement Income)",
+  "features": [
+   "Retirement savings — stable long-term capital growth",
+   "NO medical examination",
+   "Terminal Dividend Lock-in + Death Benefit Settlement Option"
+  ],
+  "audience": "Simple-application retirement savers",
+  "personas": [
+   "P08",
+   "P05"
+  ],
+  "signals": [
+   "wants_guaranteed_returns",
+   "retirement_saving",
+   "wants_no_medical_exam"
+  ],
+  "brochure_slug": "fortune-promise-savings-insurance-plan-2",
+  "price_tier": "mid",
+  "product_fit": {
+   "gap": "Converts savings into guaranteed retirement income",
+   "best_for": "Simple-application retirement savers",
+   "key_features": [
+    "Retirement savings — stable long-term capital growth",
+    "NO medical examination",
+    "Terminal Dividend Lock-in + Death Benefit Settlement Option"
+   ],
+   "price_position": "mid"
+  }
+ },
+ {
+  "name": "Forever Love Coupon Insurance Plan 5",
+  "category": "退休收入 (Retirement Income)",
+  "features": [
+   "Guaranteed cash payments (coupon-style) + annual dividends from end of 10th policy year",
+   "Family Protection Benefit — premium waiver if parent/spouse dies",
+   "Wealth accumulation + family safety net"
+  ],
+  "audience": "Periodic income + family protection seekers",
+  "personas": [
+   "P06",
+   "P08",
+   "P03"
+  ],
+  "signals": [
+   "wants_periodic_income",
+   "wants_legacy",
+   "has_children"
+  ],
+  "brochure_slug": "forever-love-coupon-insurance-plan-5",
+  "price_tier": "mid",
+  "product_fit": {
+   "gap": "Converts savings into guaranteed retirement income",
+   "best_for": "Periodic income + family protection seekers",
+   "key_features": [
+    "Guaranteed cash payments (coupon-style) + annual dividends from end of 10th policy year",
+    "Family Protection Benefit — premium waiver if parent/spouse dies",
+    "Wealth accumulation + family safety net"
+   ],
+   "price_position": "mid"
+  }
+ },
+ {
+  "name": "Simply Love Encore Savings Insurance Plan 5",
+  "category": "退休收入 (Retirement Income)",
+  "features": [
+   "Stable guaranteed cash value + non-guaranteed dividends",
+   "Change of Insured Option — pass legacy across generations UNLIMITEDLY",
+   "Unemployment benefit (5/10-yr premium), no medical exam",
+   "Terminal Dividend Lock-in"
+  ],
+  "audience": "Multi-generational legacy planners",
+  "personas": [
+   "P06",
+   "P08"
+  ],
+  "signals": [
+   "wants_legacy",
+   "wants_multi_generational",
+   "wants_no_medical_exam"
+  ],
+  "brochure_slug": "simply-love-encore-savings-insurance-plan-5",
+  "price_tier": "mid",
+  "product_fit": {
+   "gap": "Converts savings into guaranteed retirement income",
+   "best_for": "Multi-generational legacy planners",
+   "key_features": [
+    "Stable guaranteed cash value + non-guaranteed dividends",
+    "Change of Insured Option — pass legacy across generations UNLIMITEDLY",
+    "Unemployment benefit (5/10-yr premium), no medical exam",
+    "Terminal Dividend Lock-in"
+   ],
+   "price_position": "mid"
+  }
+ },
+ {
+  "name": "AIA Deferred Annuity Plan 2 (Savings listing)",
+  "category": "退休收入 (Retirement Income)",
+  "features": [
+   "Cross-listed (see Retirement)",
+   "QDAP tax benefit"
+  ],
+  "audience": "See Retirement",
+  "personas": [
+   "P08",
+   "P07"
+  ],
+  "signals": [
+   "wants_tax_deduction",
+   "wants_guaranteed_income"
+  ],
+  "brochure_slug": "aia-deferred-annuity-plan-2",
+  "price_tier": "mid",
+  "product_fit": {
+   "gap": "Converts savings into guaranteed retirement income",
+   "best_for": "See Retirement",
+   "key_features": [
+    "Cross-listed (see Retirement)",
+    "QDAP tax benefit"
+   ],
+   "price_position": "mid"
+  }
+ },
+ {
+  "name": "Treasure Master Plus 2",
+  "category": "投資相連壽險 (ILAS)",
+  "features": [
+   "ILAS — investment-linked assurance, LOW protection level",
+   "Single premium, whole life",
+   "Fund investment with principal at risk",
+   "Surrender charge first 5 policy years"
+  ],
+  "audience": "Lump-sum investors wanting fund exposure + life wrapper",
+  "personas": [
+   "P05",
+   "P06",
+   "P07"
+  ],
+  "signals": [
+   "wants_investment_wrapper",
+   "lump_sum_available",
+   "risk_appetite_mid_high"
+  ],
+  "brochure_slug": "treasure-master-plus-2",
+  "price_tier": "mid",
+  "product_fit": {
+   "gap": "Investment exposure with life cover — for the market-savvy",
+   "best_for": "Lump-sum investors wanting fund exposure + life wrapper",
+   "key_features": [
+    "ILAS — investment-linked assurance, LOW protection level",
+    "Single premium, whole life",
+    "Fund investment with principal at risk",
+    "Surrender charge first 5 policy years"
+   ],
+   "price_position": "mid"
+  }
+ },
+ {
+  "name": "AIA 2-in-1 Protection Linked Plan (Regular Premium)",
+  "category": "投資相連壽險 (ILAS)",
+  "features": [
+   "ILAS with HIGH protection level",
+   "10-year premium payment term",
+   "Regular premium (optional lump sum)",
+   "Surrender charge first 9 policy years"
+  ],
+  "audience": "Protection-first ILAS buyers (regular savings)",
+  "personas": [
+   "P04",
+   "P05"
+  ],
+  "signals": [
+   "wants_protection_and_investment",
+   "wants_regular_premium"
+  ],
+  "brochure_slug": "aia-2-in-1-protection-linked-plan-regular-premium",
+  "price_tier": "mid",
+  "product_fit": {
+   "gap": "Investment exposure with life cover — for the market-savvy",
+   "best_for": "Protection-first ILAS buyers (regular savings)",
+   "key_features": [
+    "ILAS with HIGH protection level",
+    "10-year premium payment term",
+    "Regular premium (optional lump sum)",
+    "Surrender charge first 9 policy years"
+   ],
+   "price_position": "mid"
+  }
+ },
+ {
+  "name": "AIA 2-in-1 Protection Linked Plan (Single Premium)",
+  "category": "投資相連壽險 (ILAS)",
+  "features": [
+   "ILAS with HIGH protection level",
+   "Single premium",
+   "Whole life, surrender charge first 5 years"
+  ],
+  "audience": "Protection + investment via lump sum",
+  "personas": [
+   "P06",
+   "P07"
+  ],
+  "signals": [
+   "lump_sum_available",
+   "wants_protection_and_investment"
+  ],
+  "brochure_slug": "aia-2-in-1-protection-linked-plan-single-premium",
+  "price_tier": "mid",
+  "product_fit": {
+   "gap": "Investment exposure with life cover — for the market-savvy",
+   "best_for": "Protection + investment via lump sum",
+   "key_features": [
+    "ILAS with HIGH protection level",
+    "Single premium",
+    "Whole life, surrender charge first 5 years"
+   ],
+   "price_position": "mid"
+  }
+ },
+ {
+  "name": "Runner Guard",
+  "category": "消閒保險 (Leisure)",
+  "features": [
+   "Injury protection designed FOR RUNNERS",
+   "Running injury benefit: tendon rupture, ligament tear, bone fracture, dislocation",
+   "Race-event cover (competition/charity run, warm-up to awards)",
+   "Wild Nature Benefit"
+  ],
+  "audience": "Runners / race participants",
+  "personas": [
+   "P15",
+   "P01"
+  ],
+  "signals": [
+   "plays_sports",
+   "runs_marathons",
+   "wants_accident"
+  ],
+  "brochure_slug": "runner-guard",
+  "price_tier": "mid",
+  "product_fit": {
+   "gap": "Protection for your hobbies — do what you love with a safety net",
+   "best_for": "Runners / race participants",
+   "key_features": [
+    "Injury protection designed FOR RUNNERS",
+    "Running injury benefit: tendon rupture, ligament tear, bone fracture, dislocation",
+    "Race-event cover (competition/charity run, warm-up to awards)",
+    "Wild Nature Benefit"
+   ],
+   "price_position": "mid"
+  }
+ }
+]

@@ -1,0 +1,372 @@
+{
+ "meta": {
+  "purpose": "Persona framework for AIA HK product recommendation",
+  "built": "2026-08-31",
+  "note": "Educated guess based on product features + HK market segments. Signals are the client attributes a recommendation engine matches on.",
+  "confidence": "v1 — validate with Prisken's field experience"
+ },
+ "personas": [
+  {
+   "id": "P01",
+   "name": "Fresh Graduate / Young Professional",
+   "zh_name": "職場新鮮人",
+   "age": "22-28",
+   "segment": "First income, building financial foundation",
+   "needs": [
+    "Low-premium basic protection",
+    "Savings discipline",
+    "Accident coverage",
+    "Future-proof riders"
+   ],
+   "budget": "Low (HK$2,000-6,000/yr)",
+   "signals": {
+    "age_range": [
+     22,
+     28
+    ],
+    "has_children": false,
+    "income_band": "low-to-mid",
+    "existing_coverage": "none-or-minimal",
+    "risk_appetite": "low-to-mid",
+    "life_stage": "starting-career",
+    "wants_no_medical_exam": false,
+    "wants_term": true
+   }
+  },
+  {
+   "id": "P02",
+   "name": "Young Couple / Newlywed",
+   "zh_name": "新婚夫婦",
+   "age": "26-35",
+   "segment": "Dual income, building a shared future, mortgage starting",
+   "needs": [
+    "Term life protection",
+    "Mortgage protection",
+    "CI foundation",
+    "Joint savings"
+   ],
+   "budget": "Low-mid (HK$6,000-15,000/yr each)",
+   "signals": {
+    "age_range": [
+     26,
+     35
+    ],
+    "marital_status": "married-or-engaged",
+    "has_children": false,
+    "has_mortgage": "possible",
+    "income_band": "mid",
+    "risk_appetite": "mid"
+   }
+  },
+  {
+   "id": "P03",
+   "name": "New Parent",
+   "zh_name": "新手父母",
+   "age": "28-40",
+   "segment": "Children under 12; family protection priority shifts to dependents",
+   "needs": [
+    "Child CI",
+    "Education savings",
+    "Parent life protection",
+    "Family medical"
+   ],
+   "budget": "Mid (HK$15,000-40,000/yr family)",
+   "signals": {
+    "age_range": [
+     28,
+     45
+    ],
+    "has_children": true,
+    "children_age": [
+     0,
+     12
+    ],
+    "has_mortgage": true,
+    "income_band": "mid-to-high",
+    "priority": "family-protection"
+   }
+  },
+  {
+   "id": "P04",
+   "name": "Sandwich Generation",
+   "zh_name": "三明治世代",
+   "age": "35-50",
+   "segment": "Caring for aging parents AND children; highest protection demand",
+   "needs": [
+    "Comprehensive CI",
+    "Senior medical for parents",
+    "Own life/CI max coverage",
+    "Estate basics"
+   ],
+   "budget": "Mid-high (HK$40,000-100,000/yr)",
+   "signals": {
+    "age_range": [
+     35,
+     55
+    ],
+    "has_children": true,
+    "children_age": [
+     5,
+     20
+    ],
+    "caring_for_parents": true,
+    "income_band": "mid-to-high",
+    "priority": "comprehensive-protection",
+    "chronic_condition": "possible",
+    "wants_ci_and_medical": true
+   }
+  },
+  {
+   "id": "P05",
+   "name": "High Earner / Established Professional",
+   "zh_name": "高收入專業人士",
+   "age": "35-55",
+   "segment": "Strong income, wants premium medical + wealth accumulation + tax efficiency",
+   "needs": [
+    "Worldwide medical",
+    "Multi-currency savings",
+    "Tax-deductible VHIS",
+    "Long-term wealth"
+   ],
+   "budget": "High (HK$100,000+/yr)",
+   "signals": {
+    "age_range": [
+     30,
+     55
+    ],
+    "income_band": "high",
+    "risk_appetite": "mid-to-high",
+    "wants_tax_deduction": true,
+    "wants_private_worldwide_medical": true
+   }
+  },
+  {
+   "id": "P06",
+   "name": "High Net Worth / Wealth Transfer",
+   "zh_name": "高資產淨值客戶",
+   "age": "45-70",
+   "segment": "Estate planning, multi-generational wealth, legacy",
+   "needs": [
+    "Whole life large sum assured",
+    "Multi-currency flexibility",
+    "Trust/estate mechanics",
+    "Legacy planning"
+   ],
+   "budget": "Very high (HK$500,000+/yr or single premium)",
+   "signals": {
+    "age_range": [
+     40,
+     75
+    ],
+    "net_worth": "high",
+    "has_dependents_or_heirs": true,
+    "wants_legacy": true,
+    "risk_appetite": "mid"
+   }
+  },
+  {
+   "id": "P07",
+   "name": "Business Owner / Entrepreneur",
+   "zh_name": "企業東主",
+   "age": "30-60",
+   "segment": "Irregular income, key-person risk, wants savings discipline + protection",
+   "needs": [
+    "Key man life",
+    "Wealth accumulation",
+    "Retirement without MPF reliance",
+    "Business succession"
+   ],
+   "budget": "High but variable",
+   "signals": {
+    "age_range": [
+     28,
+     60
+    ],
+    "occupation": "business-owner",
+    "income_band": "variable",
+    "wants_lump_sum_savings": true,
+    "retirement_plan_absent": true
+   }
+  },
+  {
+   "id": "P08",
+   "name": "Pre-Retiree (50-60)",
+   "zh_name": "準退休人士",
+   "age": "50-60",
+   "segment": "Income preservation, retirement income conversion, medical for aging",
+   "needs": [
+    "Deferred annuity / income plans",
+    "Medical for seniors",
+    "Capital preservation",
+    "Lump-sum to income"
+   ],
+   "budget": "High (converting savings)",
+   "signals": {
+    "age_range": [
+     48,
+     62
+    ],
+    "retirement_horizon": "0-10yrs",
+    "wants_guaranteed_income": true,
+    "risk_appetite": "low-to-mid",
+    "existing_savings": "significant",
+    "wants_no_medical_exam": true,
+    "wants_monthly_income": true
+   }
+  },
+  {
+   "id": "P09",
+   "name": "Retiree (60+)",
+   "zh_name": "退休人士",
+   "age": "60+",
+   "segment": "Living off savings, healthcare costs, legacy to children/grandchildren",
+   "needs": [
+    "Income drawdown",
+    "Senior medical / cancer",
+    "Guaranteed products",
+    "Simple solutions"
+   ],
+   "budget": "Fixed income; capital available",
+   "signals": {
+    "age_range": [
+     60,
+     85
+    ],
+    "retired": true,
+    "wants_guaranteed_income": true,
+    "wants_legacy": "possible",
+    "health_concerns": "likely",
+    "wants_no_medical_exam": true,
+    "wants_hospital_cash": true
+   }
+  },
+  {
+   "id": "P10",
+   "name": "Health-Conscious / VHIS Seeker",
+   "zh_name": "注重健康／自願醫保客",
+   "age": "25-55",
+   "segment": "Driven by tax deduction + private hospital access",
+   "needs": [
+    "VHIS plans (tax-deductible)",
+    "Hospital income",
+    "Outpatient",
+    "Critical illness add-on"
+   ],
+   "budget": "Mid",
+   "signals": {
+    "wants_tax_deduction": true,
+    "wants_private_medical": true,
+    "has_no_medical_coverage": true,
+    "income_band": "mid-to-high"
+   }
+  },
+  {
+   "id": "P11",
+   "name": "Cancer Concern / Family History",
+   "zh_name": "癌症關注客戶",
+   "age": "25-60",
+   "segment": "Family history of cancer or high cancer awareness; wants cancer-specific depth",
+   "needs": [
+    "Cancer-specific CI",
+    "Cancer medical riders",
+    "Multiple claims",
+    "Early-stage coverage"
+   ],
+   "budget": "Mid-high",
+   "signals": {
+    "family_history_cancer": true,
+    "cancer_awareness": "high",
+    "existing_ci": "insufficient",
+    "has_existing_ci": "possible",
+    "wants_cancer_topup": true
+   }
+  },
+  {
+   "id": "P12",
+   "name": "Female / Women's Protection",
+   "zh_name": "女性保障客戶",
+   "age": "22-50",
+   "segment": "Women-specific conditions + family financial safety",
+   "needs": [
+    "Female CI",
+    "Pregnancy/maternity riders",
+    "Cancer coverage",
+    "Savings independence"
+   ],
+   "budget": "Mid",
+   "signals": {
+    "gender": "female",
+    "wants_female_specific": true,
+    "planning_family": "possible"
+   }
+  },
+  {
+   "id": "P13",
+   "name": "Student / Young Dependent (0-22)",
+   "zh_name": "學生／未成年子女",
+   "age": "0-22",
+   "segment": "Purchased BY parents — children's protection + education fund",
+   "needs": [
+    "Child CI",
+    "Education savings",
+    "Child accident",
+    "Parent payor waiver"
+   ],
+   "budget": "Mid (paid by parents)",
+   "signals": {
+    "age_range": [
+     0,
+     22
+    ],
+    "is_child": true,
+    "purchaser": "parent",
+    "children_age": [
+     0,
+     22
+    ],
+    "wants_child_ci": true
+   }
+  },
+  {
+   "id": "P14",
+   "name": "Cross-Border / GBA Traveler",
+   "zh_name": "跨境／大灣區客戶",
+   "age": "25-60",
+   "segment": "Frequent HK-mainland travel, mainland medical needs, RMB exposure",
+   "needs": [
+    "GBA outpatient",
+    "Multi-currency savings (RMB)",
+    "Worldwide medical",
+    "China assistance"
+   ],
+   "budget": "Mid-high",
+   "signals": {
+    "cross_border": true,
+    "frequent_mainland_travel": true,
+    "wants_rmb": true,
+    "occupation": "trade-or-gba"
+   }
+  },
+  {
+   "id": "P15",
+   "name": "Active Lifestyle / Sports",
+   "zh_name": "運動愛好者",
+   "age": "18-45",
+   "segment": "Sports participation, accident risk, wants accident + refund products",
+   "needs": [
+    "Sports/accident coverage",
+    "Refundable accident",
+    "Hospital income"
+   ],
+   "budget": "Low-mid",
+   "signals": {
+    "plays_sports": true,
+    "wants_accident": true,
+    "age_range": [
+     18,
+     50
+    ]
+   }
+  }
+ ]
+}

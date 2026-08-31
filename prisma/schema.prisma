@@ -218,6 +218,8 @@ model Client {
   roleInCompany        String?      @map("role_in_company")
   employeeCount        Int?         @map("employee_count")
   expectations         String?      @db.Text
+  /// Profile traits picked by the rep for product recommendation (JSON array of trait keys).
+  profileTraits        Json?        @default("[]") @map("profile_traits") @db.JsonB
   /// @deprecated Prefer ClientImportantDate rows. Kept for rollback / dual-read during transition.
   importantDates       Json?        @default("[]") @map("important_dates") @db.JsonB
   status               ClientStatus @default(NEW_LEAD)

@@ -135,8 +135,6 @@ type ViewPresetId = 'attention' | 'new' | 'unassigned' | 'duplicates' | 'followU
 const VIEW_PRESETS: { id: ViewPresetId; label: string }[] = [
   { id: 'attention', label: 'Attention' },
   { id: 'new', label: 'New' },
-  { id: 'unassigned', label: 'Unassigned' },
-  { id: 'duplicates', label: 'Duplicates' },
   { id: 'followUp', label: 'Follow-up' },
 ];
 

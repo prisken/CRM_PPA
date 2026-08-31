@@ -1,0 +1,579 @@
+{
+ "groups": {
+  "Demographics": [
+   {
+    "trait": "age_under_35",
+    "label": "Age under 35"
+   },
+   {
+    "trait": "age_35_50",
+    "label": "Age 35-50"
+   },
+   {
+    "trait": "age_over_50",
+    "label": "Age over 50"
+   },
+   {
+    "trait": "age_over_60",
+    "label": "Age 60+"
+   },
+   {
+    "trait": "gender_female",
+    "label": "Female client"
+   },
+   {
+    "trait": "is_child",
+    "label": "Child (0-22)"
+   },
+   {
+    "trait": "retired",
+    "label": "Retired"
+   }
+  ],
+  "Family": [
+   {
+    "trait": "marital_status_married",
+    "label": "Married / engaged"
+   },
+   {
+    "trait": "has_children",
+    "label": "Has children"
+   },
+   {
+    "trait": "children_age_0_12",
+    "label": "Children under 12"
+   },
+   {
+    "trait": "children_age_5_20",
+    "label": "Children 5-20"
+   },
+   {
+    "trait": "caring_for_parents",
+    "label": "Caring for aging parents"
+   },
+   {
+    "trait": "has_dependents_or_heirs",
+    "label": "Has dependents/heirs"
+   },
+   {
+    "trait": "planning_family",
+    "label": "Planning a family"
+   },
+   {
+    "trait": "children_education_overseas",
+    "label": "Children's overseas education"
+   }
+  ],
+  "Finances": [
+   {
+    "trait": "income_low",
+    "label": "Low income"
+   },
+   {
+    "trait": "income_band_low_to_mid",
+    "label": "Low-mid income"
+   },
+   {
+    "trait": "income_mid",
+    "label": "Mid income"
+   },
+   {
+    "trait": "income_mid_high",
+    "label": "Mid-high income"
+   },
+   {
+    "trait": "income_high",
+    "label": "High income"
+   },
+   {
+    "trait": "income_very_high",
+    "label": "Very high income"
+   },
+   {
+    "trait": "net_worth_high",
+    "label": "High net worth"
+   },
+   {
+    "trait": "budget_low",
+    "label": "Low budget (HK$2-6k/yr)"
+   },
+   {
+    "trait": "budget_mid",
+    "label": "Mid budget"
+   },
+   {
+    "trait": "budget_mid_high",
+    "label": "Mid-high budget"
+   },
+   {
+    "trait": "lump_sum_available",
+    "label": "Has lump sum available"
+   },
+   {
+    "trait": "existing_savings_significant",
+    "label": "Significant savings"
+   },
+   {
+    "trait": "income_variable",
+    "label": "Variable income"
+   },
+   {
+    "trait": "has_mortgage",
+    "label": "Has mortgage"
+   }
+  ],
+  "Coverage": [
+   {
+    "trait": "existing_ci_none",
+    "label": "No CI coverage"
+   },
+   {
+    "trait": "existing_ci_basic",
+    "label": "Basic CI coverage"
+   },
+   {
+    "trait": "existing_ci_insufficient",
+    "label": "CI coverage insufficient"
+   },
+   {
+    "trait": "has_existing_ci",
+    "label": "Already has CI"
+   },
+   {
+    "trait": "has_no_medical",
+    "label": "No medical coverage"
+   },
+   {
+    "trait": "existing_coverage_minimal",
+    "label": "Minimal coverage"
+   },
+   {
+    "trait": "has_base_plan",
+    "label": "Has a base plan"
+   },
+   {
+    "trait": "has_ilas",
+    "label": "Has an ILAS plan"
+   },
+   {
+    "trait": "protection_gap",
+    "label": "Has protection gap"
+   },
+   {
+    "trait": "declined_before",
+    "label": "Declined by underwriting before"
+   }
+  ],
+  "Health": [
+   {
+    "trait": "family_history_cancer",
+    "label": "Family history of cancer"
+   },
+   {
+    "trait": "cancer_awareness_high",
+    "label": "High cancer awareness"
+   },
+   {
+    "trait": "health_concerns",
+    "label": "Health concerns"
+   },
+   {
+    "trait": "chronic_condition",
+    "label": "Chronic condition"
+   },
+   {
+    "trait": "three_high",
+    "label": "Three high (diabetes/hypertension/lipids)"
+   },
+   {
+    "trait": "fracture_risk",
+    "label": "Fracture risk (senior)"
+   },
+   {
+    "trait": "age_over_60",
+    "label": "Age 60+"
+   }
+  ],
+  "Goals": [
+   {
+    "trait": "wants_legacy",
+    "label": "Wants legacy/wealth transfer"
+   },
+   {
+    "trait": "wants_multi_generational",
+    "label": "Multi-generational transfer"
+   },
+   {
+    "trait": "wants_multi_currency",
+    "label": "Wants multi-currency"
+   },
+   {
+    "trait": "wants_guaranteed_income",
+    "label": "Wants guaranteed income"
+   },
+   {
+    "trait": "wants_monthly_income",
+    "label": "Wants monthly income"
+   },
+   {
+    "trait": "wants_periodic_income",
+    "label": "Wants periodic income"
+   },
+   {
+    "trait": "wants_tax_deduction",
+    "label": "Wants tax deduction"
+   },
+   {
+    "trait": "wants_private_medical",
+    "label": "Wants private medical"
+   },
+   {
+    "trait": "wants_private_room",
+    "label": "Wants private room"
+   },
+   {
+    "trait": "wants_private_ward",
+    "label": "Wants private ward"
+   },
+   {
+    "trait": "wants_whole_life",
+    "label": "Wants whole life"
+   },
+   {
+    "trait": "wants_term",
+    "label": "Wants term protection"
+   },
+   {
+    "trait": "wants_savings_and_protection",
+    "label": "Wants savings + protection"
+   },
+   {
+    "trait": "wants_protection_and_investment",
+    "label": "Wants protection + investment"
+   },
+   {
+    "trait": "wants_investment_wrapper",
+    "label": "Wants investment wrapper"
+   },
+   {
+    "trait": "wants_fund_access",
+    "label": "Wants fund access"
+   },
+   {
+    "trait": "wants_ci_comprehensive",
+    "label": "Wants comprehensive CI"
+   },
+   {
+    "trait": "wants_premium_ci",
+    "label": "Wants premium/top CI"
+   },
+   {
+    "trait": "wants_multiple_claims",
+    "label": "Wants multiple claims"
+   },
+   {
+    "trait": "wants_cancer_topup",
+    "label": "Wants cancer top-up"
+   },
+   {
+    "trait": "wants_child_ci",
+    "label": "Wants child CI"
+   },
+   {
+    "trait": "wants_family_bundle",
+    "label": "Wants family bundle"
+   },
+   {
+    "trait": "wants_family_medical",
+    "label": "Wants family medical"
+   },
+   {
+    "trait": "wants_family_accident",
+    "label": "Wants family accident cover"
+   },
+   {
+    "trait": "wants_accident",
+    "label": "Wants accident cover"
+   },
+   {
+    "trait": "wants_accident_comprehensive",
+    "label": "Wants comprehensive accident"
+   },
+   {
+    "trait": "wants_hospital_cash",
+    "label": "Wants hospital cash"
+   },
+   {
+    "trait": "wants_surgical_cash",
+    "label": "Wants surgical cash"
+   },
+   {
+    "trait": "wants_medical_rider",
+    "label": "Wants medical rider"
+   },
+   {
+    "trait": "wants_ci_rider",
+    "label": "Wants CI rider"
+   },
+   {
+    "trait": "wants_ci_and_medical",
+    "label": "Wants CI + medical"
+   },
+   {
+    "trait": "wants_cancer_treatment_cover",
+    "label": "Wants cancer treatment cover"
+   },
+   {
+    "trait": "wants_severity_based",
+    "label": "Wants severity-based payout"
+   },
+   {
+    "trait": "wants_future_proof",
+    "label": "Wants future-proof cover"
+   },
+   {
+    "trait": "wants_customizable",
+    "label": "Wants customizable plan"
+   },
+   {
+    "trait": "wants_simple",
+    "label": "Wants simple plan"
+   },
+   {
+    "trait": "wants_no_medical_exam",
+    "label": "Wants no medical exam"
+   },
+   {
+    "trait": "wants_refundable",
+    "label": "Wants premium refund"
+   },
+   {
+    "trait": "wants_flexible_premium",
+    "label": "Wants flexible premiums"
+   },
+   {
+    "trait": "wants_liquidity",
+    "label": "Wants liquidity"
+   },
+   {
+    "trait": "wants_long_term_growth",
+    "label": "Wants long-term growth"
+   },
+   {
+    "trait": "wants_growth",
+    "label": "Wants growth"
+   },
+   {
+    "trait": "wants_capital_preservation",
+    "label": "Wants capital preservation"
+   },
+   {
+    "trait": "wants_reverse_mortgage_eligible",
+    "label": "Wants reverse-mortgage-eligible plan"
+   },
+   {
+    "trait": "wants_wellness",
+    "label": "Wants wellness benefits"
+   },
+   {
+    "trait": "wants_prevention_to_recovery",
+    "label": "Wants prevention-to-recovery cover"
+   },
+   {
+    "trait": "wants_outpatient",
+    "label": "Wants outpatient"
+   },
+   {
+    "trait": "wants_income_soon",
+    "label": "Wants income soon"
+   },
+   {
+    "trait": "retirement_horizon_0_10",
+    "label": "Retiring within 10 years"
+   },
+   {
+    "trait": "retirement_saving",
+    "label": "Saving for retirement"
+   },
+   {
+    "trait": "retiring_soon",
+    "label": "Retiring soon"
+   },
+   {
+    "trait": "wants_annual_dividends",
+    "label": "Wants annual dividends"
+   },
+   {
+    "trait": "wants_future_flexibility",
+    "label": "Wants future flexibility"
+   },
+   {
+    "trait": "wants_premium_waiver",
+    "label": "Wants premium waiver"
+   },
+   {
+    "trait": "wants_term_topup",
+    "label": "Wants term top-up"
+   },
+   {
+    "trait": "wants_high_sum_assured",
+    "label": "Wants high sum assured"
+   }
+  ],
+  "Lifestyle": [
+   {
+    "trait": "cross_border",
+    "label": "Cross-border (GBA/mainland)"
+   },
+   {
+    "trait": "frequent_mainland_travel",
+    "label": "Frequent mainland travel"
+   },
+   {
+    "trait": "wants_rmb",
+    "label": "Wants RMB exposure"
+   },
+   {
+    "trait": "travels_frequently",
+    "label": "Travels frequently"
+   },
+   {
+    "trait": "plays_sports",
+    "label": "Plays sports"
+   },
+   {
+    "trait": "runs_marathons",
+    "label": "Runs marathons"
+   },
+   {
+    "trait": "wants_travel_cover",
+    "label": "Wants travel cover"
+   },
+   {
+    "trait": "life_milestones",
+    "label": "At life milestones"
+   },
+   {
+    "trait": "comparison_shopper",
+    "label": "Comparison shopper"
+   },
+   {
+    "trait": "occupation_business_owner",
+    "label": "Business owner"
+   }
+  ]
+ },
+ "labels": {
+  "age_under_35": "Age under 35",
+  "age_35_50": "Age 35-50",
+  "age_over_50": "Age over 50",
+  "age_over_60": "Age 60+",
+  "gender_female": "Female client",
+  "is_child": "Child (0-22)",
+  "retired": "Retired",
+  "marital_status_married": "Married / engaged",
+  "has_children": "Has children",
+  "children_age_0_12": "Children under 12",
+  "children_age_5_20": "Children 5-20",
+  "caring_for_parents": "Caring for aging parents",
+  "has_dependents_or_heirs": "Has dependents/heirs",
+  "planning_family": "Planning a family",
+  "children_education_overseas": "Children's overseas education",
+  "income_low": "Low income",
+  "income_mid": "Mid income",
+  "income_mid_high": "Mid-high income",
+  "income_high": "High income",
+  "income_very_high": "Very high income",
+  "net_worth_high": "High net worth",
+  "budget_low": "Low budget (HK$2-6k/yr)",
+  "budget_mid": "Mid budget",
+  "budget_mid_high": "Mid-high budget",
+  "lump_sum_available": "Has lump sum available",
+  "existing_savings_significant": "Significant savings",
+  "income_variable": "Variable income",
+  "has_mortgage": "Has mortgage",
+  "existing_ci_none": "No CI coverage",
+  "existing_ci_basic": "Basic CI coverage",
+  "existing_ci_insufficient": "CI coverage insufficient",
+  "has_existing_ci": "Already has CI",
+  "has_no_medical": "No medical coverage",
+  "existing_coverage_minimal": "Minimal coverage",
+  "has_base_plan": "Has a base plan",
+  "has_ilas": "Has an ILAS plan",
+  "protection_gap": "Has protection gap",
+  "declined_before": "Declined by underwriting before",
+  "family_history_cancer": "Family history of cancer",
+  "cancer_awareness_high": "High cancer awareness",
+  "health_concerns": "Health concerns",
+  "chronic_condition": "Chronic condition",
+  "three_high": "Three high (diabetes/hypertension/lipids)",
+  "fracture_risk": "Fracture risk (senior)",
+  "wants_legacy": "Wants legacy/wealth transfer",
+  "wants_multi_generational": "Multi-generational transfer",
+  "wants_multi_currency": "Wants multi-currency",
+  "wants_guaranteed_income": "Wants guaranteed income",
+  "wants_monthly_income": "Wants monthly income",
+  "wants_periodic_income": "Wants periodic income",
+  "wants_tax_deduction": "Wants tax deduction",
+  "wants_private_medical": "Wants private medical",
+  "wants_private_room": "Wants private room",
+  "wants_private_ward": "Wants private ward",
+  "wants_whole_life": "Wants whole life",
+  "wants_term": "Wants term protection",
+  "wants_savings_and_protection": "Wants savings + protection",
+  "wants_protection_and_investment": "Wants protection + investment",
+  "wants_investment_wrapper": "Wants investment wrapper",
+  "wants_fund_access": "Wants fund access",
+  "wants_ci_comprehensive": "Wants comprehensive CI",
+  "wants_premium_ci": "Wants premium/top CI",
+  "wants_multiple_claims": "Wants multiple claims",
+  "wants_cancer_topup": "Wants cancer top-up",
+  "wants_child_ci": "Wants child CI",
+  "wants_family_bundle": "Wants family bundle",
+  "wants_family_medical": "Wants family medical",
+  "wants_family_accident": "Wants family accident cover",
+  "wants_accident": "Wants accident cover",
+  "wants_accident_comprehensive": "Wants comprehensive accident",
+  "wants_hospital_cash": "Wants hospital cash",
+  "wants_surgical_cash": "Wants surgical cash",
+  "wants_medical_rider": "Wants medical rider",
+  "wants_ci_rider": "Wants CI rider",
+  "wants_ci_and_medical": "Wants CI + medical",
+  "wants_cancer_treatment_cover": "Wants cancer treatment cover",
+  "wants_severity_based": "Wants severity-based payout",
+  "wants_future_proof": "Wants future-proof cover",
+  "wants_customizable": "Wants customizable plan",
+  "wants_simple": "Wants simple plan",
+  "wants_no_medical_exam": "Wants no medical exam",
+  "wants_refundable": "Wants premium refund",
+  "wants_flexible_premium": "Wants flexible premiums",
+  "wants_liquidity": "Wants liquidity",
+  "wants_long_term_growth": "Wants long-term growth",
+  "wants_growth": "Wants growth",
+  "wants_capital_preservation": "Wants capital preservation",
+  "wants_reverse_mortgage_eligible": "Wants reverse-mortgage-eligible plan",
+  "wants_wellness": "Wants wellness benefits",
+  "wants_prevention_to_recovery": "Wants prevention-to-recovery cover",
+  "wants_outpatient": "Wants outpatient",
+  "wants_income_soon": "Wants income soon",
+  "retirement_horizon_0_10": "Retiring within 10 years",
+  "retirement_saving": "Saving for retirement",
+  "retiring_soon": "Retiring soon",
+  "wants_annual_dividends": "Wants annual dividends",
+  "wants_future_flexibility": "Wants future flexibility",
+  "wants_premium_waiver": "Wants premium waiver",
+  "wants_term_topup": "Wants term top-up",
+  "wants_high_sum_assured": "Wants high sum assured",
+  "cross_border": "Cross-border (GBA/mainland)",
+  "frequent_mainland_travel": "Frequent mainland travel",
+  "wants_rmb": "Wants RMB exposure",
+  "travels_frequently": "Travels frequently",
+  "plays_sports": "Plays sports",
+  "runs_marathons": "Runs marathons",
+  "wants_travel_cover": "Wants travel cover",
+  "life_milestones": "At life milestones",
+  "comparison_shopper": "Comparison shopper",
+  "occupation_business_owner": "Business owner",
+  "income_band_low_to_mid": "Low-mid income"
+ }
+}
