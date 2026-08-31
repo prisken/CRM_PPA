@@ -6,10 +6,17 @@ import { useDisplayDensity } from '@/components/ui/DisplayDensityProvider';
 import { getTightStackSpacingClass } from '@/components/ui/displayDensity';
 import { authenticatedFetch } from '@/lib/authenticatedFetch';
 import traitVocabulary from '@/lib/data/trait-vocabulary.json';
+import questionnaireData from '@/lib/data/trait-questionnaire.json';
 import { VOCABULARY } from '@/lib/recommendationEngine';
 
 type TraitGroup = { trait: string; label: string }[];
 type Vocabulary = { groups: Record<string, TraitGroup>; labels: Record<string, string> };
+
+type Question = {
+  id: string;
+  question: string;
+  options: { label: string; add?: string[]; remove?: string[] }[];
+};
 
 type Recommendation = {
   product: string;
@@ -36,6 +43,7 @@ type RecommendationsWidgetProps = {
 };
 
 const VOCAB = traitVocabulary as Vocabulary;
+const QUESTIONS = questionnaireData.questions as Question[];
 const GROUP_ORDER = [
   'Demographics',
   'Family',
@@ -45,15 +53,6 @@ const GROUP_ORDER = [
   'Goals',
   'Lifestyle',
 ];
-const GROUP_LABELS: Record<string, string> = {
-  Demographics: 'Demographics',
-  Family: 'Family',
-  Finances: 'Finances',
-  Coverage: 'Coverage',
-  Health: 'Health',
-  Goals: 'Goals & goals',
-  Lifestyle: 'Lifestyle',
-};
 
 export default function RecommendationsWidget({
   clientId,
@@ -62,18 +61,20 @@ export default function RecommendationsWidget({
   const { density } = useDisplayDensity();
   const spacing = getTightStackSpacingClass(density);
 
+  const [mode, setMode] = useState<'questions' | 'picker'>('questions');
+  const [answers, setAnswers] = useState<Record<string, string>>({});
   const [traits, setTraits] = useState<string[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [saving, setSaving] = useState(false);
   const [recs, setRecs] = useState<Recommendation[]>([]);
   const [loadingRecs, setLoadingRecs] = useState(false);
   const [expanded, setExpanded] = useState<number | null>(null);
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(
+    new Set(GROUP_ORDER.filter((_, i) => i !== 0))
+  );
   const [error, setError] = useState<string | null>(null);
 
-  const knownTraits = useMemo(
-    () => new Set<string>(VOCABULARY.keys()),
-    []
-  );
+  const knownTraits = useMemo(() => new Set<string>(VOCABULARY.keys()), []);
 
   const load = useCallback(async () => {
     try {
@@ -83,6 +84,9 @@ export default function RecommendationsWidget({
       const data = await res.json();
       if (res.ok && Array.isArray(data.traits)) {
         setTraits(data.traits);
+        if (data.traits.length > 0) {
+          setMode('picker');
+        }
       }
       setLoaded(true);
     } catch {
@@ -93,6 +97,31 @@ export default function RecommendationsWidget({
   useEffect(() => {
     load();
   }, [load]);
+
+  const saveTraits = useCallback(
+    async (next: string[]) => {
+      setSaving(true);
+      try {
+        const res = await authenticatedFetch(
+          `/api/clients/${encodeURIComponent(clientId)}/profile-traits`,
+          {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ traits: next }),
+          }
+        );
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          setError(data.error || 'Failed to save traits');
+        }
+      } catch {
+        setError('Failed to save traits');
+      } finally {
+        setSaving(false);
+      }
+    },
+    [clientId]
+  );
 
   const runRecommendations = useCallback(async () => {
     setLoadingRecs(true);
@@ -114,45 +143,53 @@ export default function RecommendationsWidget({
     }
   }, [clientId]);
 
+  /** Questionnaire → traits: union of selected options' add, minus their remove. */
+  const applyAnswers = useCallback(async () => {
+    const next = new Set<string>();
+    const removed = new Set<string>();
+    for (const q of QUESTIONS) {
+      const opt = q.options.find((o) => o.label === answers[q.id]);
+      if (!opt) continue;
+      for (const t of opt.add || []) next.add(t);
+      for (const t of opt.remove || []) removed.add(t);
+    }
+    const final = [...next].filter((t) => !removed.has(t));
+    setTraits(final);
+    setMode('picker');
+    await saveTraits(final);
+  }, [answers, saveTraits]);
+
   const toggleTrait = useCallback(
     async (trait: string) => {
       const next = traits.includes(trait)
         ? traits.filter((t) => t !== trait)
         : [...traits, trait];
       setTraits(next);
-      setSaving(true);
-      try {
-        const res = await authenticatedFetch(
-          `/api/clients/${encodeURIComponent(clientId)}/profile-traits`,
-          {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ traits: next }),
-          }
-        );
-        if (!res.ok) {
-          const data = await res.json().catch(() => ({}));
-          setError(data.error || 'Failed to save traits');
-        }
-      } catch {
-        setError('Failed to save traits');
-      } finally {
-        setSaving(false);
-      }
+      await saveTraits(next);
     },
-    [traits, clientId]
+    [traits, saveTraits]
   );
+
+  const toggleGroup = useCallback((group: string) => {
+    setCollapsedGroups((prev) => {
+      const nextSet = new Set(prev);
+      if (nextSet.has(group)) nextSet.delete(group);
+      else nextSet.add(group);
+      return nextSet;
+    });
+  }, []);
 
   const traitLabel = useCallback((trait: string) => {
     return VOCAB.labels?.[trait] || trait;
   }, []);
 
+  const answeredCount = Object.keys(answers).length;
   const hasTraits = traits.length > 0;
 
   return (
     <SectionCard
       title="Product recommendations"
-      description="Pick client traits — the engine scores products and gives the top 5 with a sales plan."
+      description="Answer a few questions — or pick traits directly — then get the top 5 with a sales plan."
     >
       <div className={spacing}>
         {error && (
@@ -162,7 +199,61 @@ export default function RecommendationsWidget({
         )}
 
         {!loaded ? (
-          <div className="py-3 text-sm text-gray-500">Loading traits…</div>
+          <div className="py-3 text-sm text-gray-500">Loading…</div>
+        ) : mode === 'questions' ? (
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <p className="text-sm text-gray-600">
+                Quick questionnaire{' '}
+                <span className="font-medium text-gray-800">
+                  {answeredCount}/{QUESTIONS.length}
+                </span>
+              </p>
+              <button
+                type="button"
+                onClick={() => setMode('picker')}
+                className="text-xs font-medium text-blue-600 hover:underline"
+              >
+                Skip — pick traits directly →
+              </button>
+            </div>
+            <div className="max-h-80 space-y-3 overflow-y-auto rounded-md border border-gray-200 p-3">
+              {QUESTIONS.map((q) => (
+                <div key={q.id} className="rounded-md bg-gray-50 p-2.5">
+                  <p className="text-sm font-medium text-gray-800">{q.question}</p>
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {q.options.map((opt) => {
+                      const active = answers[q.id] === opt.label;
+                      return (
+                        <button
+                          key={opt.label}
+                          type="button"
+                          onClick={() =>
+                            setAnswers((prev) => ({ ...prev, [q.id]: opt.label }))
+                          }
+                          className={`rounded-full border px-2.5 py-1 text-xs transition-colors ${
+                            active
+                              ? 'border-blue-600 bg-blue-600 text-white'
+                              : 'border-gray-300 bg-white text-gray-700 hover:border-blue-400 hover:text-blue-600'
+                          }`}
+                        >
+                          {opt.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+            <button
+              type="button"
+              onClick={applyAnswers}
+              disabled={answeredCount === 0 || saving}
+              className="rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {saving ? 'Applying…' : `Apply answers → pick traits (${answeredCount} answered)`}
+            </button>
+          </div>
         ) : (
           <>
             <div className="flex flex-wrap items-center gap-2">
@@ -177,40 +268,81 @@ export default function RecommendationsWidget({
                 </button>
               ))}
               {traits.length === 0 && (
-                <span className="text-xs text-gray-400">
-                  No traits picked yet — select below.
-                </span>
+                <span className="text-xs text-gray-400">No traits picked yet.</span>
               )}
               {saving && <span className="text-xs text-gray-400">saving…</span>}
             </div>
 
-            <div className="max-h-56 space-y-2 overflow-y-auto rounded-md border border-gray-200 p-3">
-              {GROUP_ORDER.filter((g) => VOCAB.groups[g]).map((group) => (
-                <div key={group}>
-                  <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-gray-400">
-                    {GROUP_LABELS[group]}
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setMode('questions')}
+                className="rounded-md border border-gray-300 bg-white px-2.5 py-1 text-xs font-medium text-gray-600 hover:border-blue-400 hover:text-blue-600"
+              >
+                ← Back to questions
+              </button>
+              {traits.length > 0 && (
+                <button
+                  type="button"
+                  onClick={async () => {
+                    setTraits([]);
+                    await saveTraits([]);
+                  }}
+                  className="rounded-md border border-gray-300 bg-white px-2.5 py-1 text-xs font-medium text-gray-500 hover:border-red-300 hover:text-red-600"
+                >
+                  Clear all
+                </button>
+              )}
+            </div>
+
+            <div className="max-h-72 space-y-1 overflow-y-auto rounded-md border border-gray-200 p-2">
+              {GROUP_ORDER.filter((g) => VOCAB.groups[g]).map((group) => {
+                const items = VOCAB.groups[group];
+                const pickedInGroup = items.filter((i) => traits.includes(i.trait)).length;
+                const isCollapsed = collapsedGroups.has(group);
+                return (
+                  <div key={group} className="rounded-md">
+                    <button
+                      type="button"
+                      onClick={() => toggleGroup(group)}
+                      className="flex w-full items-center justify-between rounded px-2 py-1.5 text-left hover:bg-gray-50"
+                    >
+                      <span className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">
+                        {group}
+                        {pickedInGroup > 0 && (
+                          <span className="ml-2 inline-flex min-w-[1.1rem] items-center justify-center rounded-full bg-blue-600 px-1 py-0.5 text-[9px] font-bold text-white">
+                            {pickedInGroup}
+                          </span>
+                        )}
+                      </span>
+                      <span className="text-[10px] text-gray-400">
+                        {isCollapsed ? '▸' : '▾'}
+                      </span>
+                    </button>
+                    {!isCollapsed && (
+                      <div className="flex flex-wrap gap-1.5 px-2 pb-2">
+                        {items.map(({ trait, label }) => (
+                          <button
+                            key={trait}
+                            type="button"
+                            disabled={!knownTraits.has(trait)}
+                            onClick={() => toggleTrait(trait)}
+                            className={`rounded-full border px-2 py-0.5 text-xs transition-colors ${
+                              traits.includes(trait)
+                                ? 'border-blue-600 bg-blue-50 text-blue-700'
+                                : knownTraits.has(trait)
+                                  ? 'border-gray-300 bg-white text-gray-600 hover:border-blue-400 hover:text-blue-600'
+                                  : 'cursor-not-allowed border-gray-200 bg-gray-50 text-gray-300'
+                            }`}
+                          >
+                            {label}
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
-                  <div className="flex flex-wrap gap-1.5">
-                    {VOCAB.groups[group].map(({ trait, label }) => (
-                      <button
-                        key={trait}
-                        type="button"
-                        disabled={!knownTraits.has(trait)}
-                        onClick={() => toggleTrait(trait)}
-                        className={`rounded-full border px-2 py-0.5 text-xs transition-colors ${
-                          traits.includes(trait)
-                            ? 'border-blue-600 bg-blue-50 text-blue-700'
-                            : knownTraits.has(trait)
-                              ? 'border-gray-300 bg-white text-gray-600 hover:border-blue-400 hover:text-blue-600'
-                              : 'cursor-not-allowed border-gray-200 bg-gray-50 text-gray-300'
-                        }`}
-                      >
-                        {label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
 
             <button
