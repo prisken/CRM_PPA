@@ -14,6 +14,7 @@ export const WORKSPACE_NAV_ITEM_IDS = {
   STANDARD_DEALS: 'standard-deals',
   STANDARD_COMMISSION: 'standard-commission',
   STANDARD_RETURNABLES: 'standard-returnables',
+  STANDARD_PRODUCTS: 'standard-products',
   STANDARD_SETTINGS: 'standard-settings',
   STANDARD_ADMIN_LINK: 'standard-admin-link',
   ADMIN_HOME: 'admin-home',
@@ -171,6 +172,12 @@ export function buildStandardDashboardNav(
       id: WORKSPACE_NAV_ITEM_IDS.STANDARD_COMMISSION,
       label: 'Commission',
       href: standardDashboardHref('commission'),
+      exact: true,
+    },
+    {
+      id: WORKSPACE_NAV_ITEM_IDS.STANDARD_PRODUCTS,
+      label: 'Product Recommendations',
+      href: '/products',
       exact: true,
     },
   ];
