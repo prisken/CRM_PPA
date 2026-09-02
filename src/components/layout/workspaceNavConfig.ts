@@ -1,6 +1,7 @@
 import type {
   WorkspaceNavConfig,
   WorkspaceNavItem,
+  WorkspaceNavSection,
   WorkspaceUserRole,
 } from './workspaceNavTypes';
 
@@ -15,6 +16,8 @@ export const WORKSPACE_NAV_ITEM_IDS = {
   STANDARD_COMMISSION: 'standard-commission',
   STANDARD_RETURNABLES: 'standard-returnables',
   STANDARD_PRODUCTS: 'standard-products',
+  STANDARD_TODAY: 'standard-today',
+  STANDARD_REPORTS: 'standard-reports',
   STANDARD_SETTINGS: 'standard-settings',
   STANDARD_ADMIN_LINK: 'standard-admin-link',
   ADMIN_HOME: 'admin-home',
@@ -300,6 +303,37 @@ function withSuperAdminStandardExtras(
 /**
  * Resolve the nav config for a shell + role. Pure — no React icons or fetches.
  */
+/**
+ * SIMPLE_MODE navigation (revamp brief): one primary job per screen,
+ * <= 5 top items. Today · Clients · Calendar · Reports, plus account.
+ * Admin extras (Team) hang off the same shell instead of a second dashboard.
+ */
+export function buildSimpleModeNav(
+  role: WorkspaceUserRole
+): WorkspaceNavConfig {
+  const sections: WorkspaceNavSection[] = [
+    section('simple-workspace', undefined, [
+      { id: WORKSPACE_NAV_ITEM_IDS.STANDARD_TODAY, label: 'Today', href: '/today', exact: true },
+      { id: WORKSPACE_NAV_ITEM_IDS.STANDARD_CLIENTS, label: 'Clients', href: '/clients', exact: true },
+      { id: WORKSPACE_NAV_ITEM_IDS.STANDARD_CALENDAR, label: 'Calendar', href: '/calendar', exact: true },
+      { id: WORKSPACE_NAV_ITEM_IDS.STANDARD_REPORTS, label: 'Reports', href: '/reports', exact: true },
+    ]),
+  ];
+  if (role === 'SUPER_ADMIN') {
+    sections.push(
+      section('simple-team', 'Team', [
+        { id: WORKSPACE_NAV_ITEM_IDS.STANDARD_ADMIN_LINK, label: 'Team & Admin', href: '/admin/leads' },
+      ])
+    );
+  }
+  sections.push(
+    section('simple-account', undefined, [
+      { id: WORKSPACE_NAV_ITEM_IDS.STANDARD_SETTINGS, label: 'Settings', href: '/dashboard/settings' },
+    ])
+  );
+  return { sections };
+}
+
 export function buildWorkspaceNavConfig(
   options: WorkspaceNavBuildOptions
 ): WorkspaceNavConfig {
@@ -309,8 +343,14 @@ export function buildWorkspaceNavConfig(
     if (options.role !== 'SUPER_ADMIN') {
       return { sections: [] };
     }
-
     return buildAdminDashboardNav();
+  }
+
+  // SIMPLE_MODE=true (default): revamped IA for a growing team.
+  // NEXT_PUBLIC_ prefix because nav is assembled in client components.
+  const simpleMode = process.env.NEXT_PUBLIC_SIMPLE_MODE !== 'false';
+  if (simpleMode) {
+    return buildSimpleModeNav(options.role);
   }
 
   const standardNav = buildStandardDashboardNav(flags);

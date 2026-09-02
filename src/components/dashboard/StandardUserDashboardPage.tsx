@@ -121,13 +121,20 @@ const VIEW_TITLES: Record<StandardDashboardView, string> = {
   returnables: 'Returnables',
 };
 
-export default function StandardUserDashboardPage() {
+type StandardUserDashboardPageProps = {
+  /** SIMPLE_MODE routes pin a view (e.g. /clients → 'clients') regardless of URL. */
+  forcedView?: StandardDashboardView;
+};
+
+export default function StandardUserDashboardPage({
+  forcedView,
+}: StandardUserDashboardPageProps = {}) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { profile, loading: profileLoading } = useUserProfile();
 
   const rawView = searchParams?.get('view') ?? null;
-  const view = parseStandardDashboardView(rawView);
+  const view = forcedView ?? parseStandardDashboardView(rawView);
 
   // Invalid `?view=` → home (refresh-safe canonical URL).
   useEffect(() => {
