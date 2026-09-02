@@ -140,43 +140,50 @@ export default function FundChaseBuilder({ clientId, onSaved }: { clientId: stri
   const bucketed = menu.chase.filter((c) => c.bucket);
   const unbucketed = menu.chase.filter((c) => !c.bucket);
 
-  const DividendRow = ({ c }: { c: MenuFund }) => {
-    const used = dividendUsed.has(c.code);
-    const inCur = tabs[activeTab - 1]?.members.some((m) => m.code === c.code);
-    return (
-      <li className={`flex flex-wrap items-center gap-2 rounded-lg border px-2.5 py-2 ${used ? 'border-green-200 bg-green-50/50' : 'border-gray-200'}`}>
-        <span className="min-w-0 flex-1 text-sm text-gray-800">
-          <span className="font-medium">{c.code}</span>
-          <span className="text-xs text-gray-500">
-            {c.promised_pct != null ? ` · promised ${c.promised_pct.toFixed(1)}%` : ''}
-            {c.bucket ? ` · [${c.bucket}]` : ''}
-            {c.ret_1m_pct != null ? ` · 1M ${fmtP(c.ret_1m_pct)}` : ''}
-            {c.ret_3m_pct != null ? ` · 3M ${fmtP(c.ret_3m_pct)}` : ''}
-            {c.expected_1y != null ? ` · 1Y ${fmtP(c.expected_1y)}` : ''}
-          </span>
-          {used ? <span className="ml-1 text-[10px] font-semibold text-green-700">{inCur ? 'in this tab' : 'added elsewhere'}</span> : null}
-        </span>
-        {!used ? <RowAdd freq={freq} defTab={activeTab} onAdd={(t, w) => addToTab(c.code, w, t - 1, 'dividend')} /> : null}
-      </li>
-    );
+  const assignmentsOf = (code: string) => {
+    const out: Array<{ tab: number; weight: number; role: 'dividend' | 'stabiliser' }> = [];
+    tabs.forEach((t, i) => {
+      const m = t.members.find((x) => x.code === code);
+      if (m) out.push({ tab: i + 1, weight: m.weight, role: m.role });
+    });
+    return out;
   };
-  const SliceRow = ({ c }: { c: MenuFund }) => {
-    const inCur = tabs[activeTab - 1]?.members.some((m) => m.code === c.code);
-    return (
-      <li className={`flex flex-wrap items-center gap-2 rounded-lg border px-2.5 py-2 ${inCur ? 'border-green-200 bg-green-50/50' : 'border-gray-200'}`}>
-        <span className="min-w-0 flex-1 text-sm text-gray-800">
-          <span className="font-medium">{c.code}</span>
-          <span className="text-xs text-gray-500">
-            {' · stabilising (can repeat on every tab)'}
-            {c.ret_1m_pct != null ? ` · 1M ${fmtP(c.ret_1m_pct)}` : ''}
-            {c.ret_3m_pct != null ? ` · 3M ${fmtP(c.ret_3m_pct)}` : ''}
-            {c.expected_1y != null ? ` · 1Y ${fmtP(c.expected_1y)}` : ''}
+
+  const fundMeta = (code: string) => meta.get(code);
+
+  const rowMetaLine = (c: MenuFund) => (
+    <span className="text-xs text-gray-500">
+      {c.promised_pct != null ? ` · promised ${c.promised_pct.toFixed(1)}%` : ''}
+      {c.bucket ? ` · [${c.bucket}]` : ''}
+      {c.ret_1m_pct != null ? ` · 1M ${fmtP(c.ret_1m_pct)}` : ''}
+      {c.ret_3m_pct != null ? ` · 3M ${fmtP(c.ret_3m_pct)}` : ''}
+      {c.expected_1y != null ? ` · 1Y ${fmtP(c.expected_1y)}` : ''}
+      {c.note ? ` · ${c.note}` : ''}
+    </span>
+  );
+
+  const assignmentChips = (code: string, role: 'dividend' | 'stabiliser') => {
+    const as = assignmentsOf(code);
+    return as.length ? (
+      <span className="flex flex-wrap items-center gap-1.5">
+        {as.map((a) => (
+          <span key={`${code}-${a.tab}`} className="inline-flex items-center gap-1 rounded-md border border-blue-200 bg-blue-50 px-1.5 py-0.5 text-xs text-blue-800">
+            Tab {a.tab}
+            <input type="number" min={0.5} max={100} value={a.weight || ''}
+              onChange={(e) => setWeight(a.tab - 1, code, Number(e.target.value))}
+              className="w-14 rounded border border-blue-200 bg-white px-1 py-0.5 text-right text-xs outline-none focus:border-blue-500" />
+            %
+            <button type="button" onClick={() => remove(a.tab - 1, code)} className="text-blue-500 hover:text-red-600" aria-label={`remove ${code} from tab ${a.tab}`}>×</button>
           </span>
-          {inCur ? <span className="ml-1 text-[10px] font-semibold text-green-700">in this tab</span> : null}
-        </span>
-        <RowAdd freq={freq} defTab={activeTab} onAdd={(t, w) => addToTab(c.code, w, t - 1, 'stabiliser')} />
-      </li>
-    );
+        ))}
+      </span>
+    ) : null;
+  };
+
+  const showAdd = (c: MenuFund, role: 'dividend' | 'stabiliser') => {
+    const as = assignmentsOf(c.code);
+    if (role === 'dividend') return as.length === 0;
+    return as.length < freq; // stabilisers may repeat on every tab
   };
 
   return (
@@ -192,8 +199,8 @@ export default function FundChaseBuilder({ clientId, onSaved }: { clientId: stri
           const d = t.members.find((m) => m.role === 'dividend');
           const bucket = d ? meta.get(d.code)?.bucket ?? '' : '';
           return (
-            <button key={i} type="button" onClick={() => setActiveTab(i + 1)}
-              className={`rounded-lg border px-3 py-1.5 text-xs font-semibold ${activeTab === i + 1 ? 'border-blue-600 bg-blue-50 text-blue-700' : 'border-gray-200 text-gray-600 hover:bg-gray-50'}`}>
+            <button key={i} type="button"
+              className={`rounded-lg border px-3 py-1.5 text-xs font-semibold ${ok ? 'border-green-300 bg-green-50 text-green-700' : 'border-gray-200 text-gray-600 hover:bg-gray-50'}`}>
               Tab {i + 1}{bucket ? ` [${bucket}]` : ''} · {t.members.length ? `${sums[i].toFixed(0)}%` : 'empty'}{t.members.length && ok ? ' ✓' : ''}
             </button>
           );
@@ -201,43 +208,64 @@ export default function FundChaseBuilder({ clientId, onSaved }: { clientId: stri
       </div>
 
       <div>
-        <p className="mb-1 text-xs font-semibold text-gray-700">Dividend funds (record dates known)</p>
-        <ul className="max-h-48 space-y-1.5 overflow-y-auto pr-1">{bucketed.map((c) => <DividendRow key={c.code} c={c} />)}</ul>
+        <p className="mb-1 text-xs font-semibold text-gray-700">Dividend funds <span className="font-normal text-gray-400">— add to one tab, edit or remove anytime</span></p>
+        <ul className="max-h-60 space-y-1.5 overflow-y-auto pr-1">
+          {bucketed.map((c) => (
+            <li key={c.code} className={`flex flex-wrap items-center gap-2 rounded-lg border px-2.5 py-2 ${assignmentsOf(c.code).length ? 'border-green-200 bg-green-50/50' : 'border-gray-200'}`}>
+              <span className="min-w-0 flex-1 text-sm text-gray-800">
+                <span className="font-medium">{c.code}</span>{rowMetaLine(c)}
+              </span>
+              {assignmentChips(c.code, 'dividend')}
+              {showAdd(c, 'dividend') ? <RowAdd freq={freq} defTab={activeTab} onAdd={(t, w) => addToTab(c.code, w, t - 1, 'dividend')} /> : null}
+            </li>
+          ))}
+        </ul>
         {unbucketed.length ? (
           <details className="mt-1.5">
             <summary className="cursor-pointer text-[11px] text-gray-400 hover:text-gray-600">
               {unbucketed.length} more dividend funds — record dates not available (recommendable with note)
             </summary>
-            <ul className="mt-1 max-h-40 space-y-1.5 overflow-y-auto pr-1">{unbucketed.map((c) => <DividendRow key={c.code} c={c} />)}</ul>
+            <ul className="mt-1 max-h-40 space-y-1.5 overflow-y-auto pr-1">
+              {unbucketed.map((c) => (
+                <li key={c.code} className={`flex flex-wrap items-center gap-2 rounded-lg border px-2.5 py-2 ${assignmentsOf(c.code).length ? 'border-green-200 bg-green-50/50' : 'border-gray-200'}`}>
+                  <span className="min-w-0 flex-1 text-sm text-gray-800">
+                    <span className="font-medium">{c.code}</span>{rowMetaLine(c)}
+                  </span>
+                  {assignmentChips(c.code, 'dividend')}
+                  {showAdd(c, 'dividend') ? <RowAdd freq={freq} defTab={activeTab} onAdd={(t, w) => addToTab(c.code, w, t - 1, 'dividend')} /> : null}
+                </li>
+              ))}
+            </ul>
           </details>
         ) : null}
       </div>
 
       <div>
-        <p className="mb-1 text-xs font-semibold text-gray-700">Capital-stabilising funds <span className="font-normal text-gray-400">— the same fund can be added to every tab (each tab holds it ~1/{freq} of the month)</span></p>
-        <ul className="max-h-40 space-y-1.5 overflow-y-auto pr-1">{menu.slice_pool.map((c) => <SliceRow key={c.code} c={c} />)}</ul>
+        <p className="mb-1 text-xs font-semibold text-gray-700">Capital-stabilising funds <span className="font-normal text-gray-400">— the same fund can sit on every tab (each tab holds it ~1/{freq} of the month)</span></p>
+        <ul className="max-h-52 space-y-1.5 overflow-y-auto pr-1">
+          {menu.slice_pool.map((c) => (
+            <li key={c.code} className={`flex flex-wrap items-center gap-2 rounded-lg border px-2.5 py-2 ${assignmentsOf(c.code).length ? 'border-green-200 bg-green-50/50' : 'border-gray-200'}`}>
+              <span className="min-w-0 flex-1 text-sm text-gray-800">
+                <span className="font-medium">{c.code}</span>
+                <span className="text-xs text-gray-500"> · stabilising</span>{rowMetaLine(c)}
+              </span>
+              {assignmentChips(c.code, 'stabiliser')}
+              {showAdd(c, 'stabiliser') ? <RowAdd freq={freq} defTab={activeTab} onAdd={(t, w) => addToTab(c.code, w, t - 1, 'stabiliser')} /> : null}
+            </li>
+          ))}
+        </ul>
       </div>
 
-      <div className="rounded-lg border border-gray-200 p-2.5">
-        <p className="mb-1.5 text-xs font-bold text-gray-800">Tab {activeTab}</p>
-        {tabs[activeTab - 1]?.members.length ? (
-          <ul className="space-y-1">
-            {tabs[activeTab - 1].members.map((m) => (
-              <li key={m.code} className="flex items-center gap-2 text-sm">
-                <span className="flex-1 text-gray-800">{m.code}<span className="text-xs text-gray-400">{m.role === 'stabiliser' ? ' · stabiliser' : ''}</span></span>
-                <input type="number" min={0.5} max={100} value={m.weight || ''}
-                  onChange={(e) => setWeight(activeTab - 1, m.code, Number(e.target.value))}
-                  className="w-20 rounded-lg border border-gray-300 px-2 py-1 text-right text-sm outline-none focus:border-blue-500" />
-                <span className="text-xs text-gray-400">%</span>
-                <button type="button" onClick={() => remove(activeTab - 1, m.code)} className="text-xs text-red-600 hover:underline">remove</button>
-              </li>
-            ))}
-          </ul>
-        ) : <p className="text-xs text-gray-400">Empty — add funds above.</p>}
-        <div className={`mt-1.5 text-xs font-semibold ${Math.abs(sums[activeTab - 1] - 100) < 0.6 ? 'text-green-600' : 'text-amber-600'}`}>
-          {tabs[activeTab - 1]?.members.length ? `Tab total: ${sums[activeTab - 1].toFixed(1)}% / 100%` : ''}
+      {tabs.some((t) => t.members.length) ? (
+        <div className="rounded-lg border px-3 py-2 text-sm text-gray-700">
+          {tabs.map((t, i) => {
+            const s = sums[i];
+            const ok = Math.abs(s - 100) < 0.6;
+            const txt = t.members.length === 0 ? `Tab ${i + 1}: empty` : ok ? `Tab ${i + 1}: ${s.toFixed(1)}% ✓` : s < 100 ? `Tab ${i + 1}: ${s.toFixed(1)}% — add ${(100 - s).toFixed(1)}% more` : `Tab ${i + 1}: ${s.toFixed(1)}% — over by ${(s - 100).toFixed(1)}%`;
+            return <div key={i} className={ok ? 'text-green-700' : 'text-amber-700'}>{txt}</div>;
+          })}
         </div>
-      </div>
+      ) : null}
 
       {err ? <p className="text-xs text-red-600">{err}</p> : null}
 
