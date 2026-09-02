@@ -26,6 +26,11 @@ type Candidate = {
 const fmtP = (x: number | null | undefined, sign = true) =>
   x == null ? '—' : `${sign && x > 0 ? '+' : ''}${x.toFixed(1)}%`;
 
+function Colored({ x }: { x: number | null | undefined }) {
+  const cls = x == null ? 'text-gray-400' : x < 0 ? 'text-red-600' : x > 0 ? 'text-green-700' : 'text-gray-900';
+  return <span className={cls}>{fmtP(x)}</span>;
+}
+
 export default function FundAllocationBuilder({
   clientId,
   onSaved,
@@ -229,11 +234,11 @@ export default function FundAllocationBuilder({
         <div className="rounded-xl border-2 border-blue-300 bg-blue-50 p-4">
           <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Combined return of your allocation</p>
           <p className="mt-1 text-lg font-bold text-gray-900">
-            1M <span className="text-blue-700">{fmtP(combined.m1)}</span>
+            1M <Colored x={combined.m1} />
             <span className="mx-2 text-gray-300">·</span>
-            3M <span className="text-blue-700">{fmtP(combined.m3)}</span>
+            3M <Colored x={combined.m3} />
             <span className="mx-2 text-gray-300">·</span>
-            1Y <span className="text-blue-700">{fmtP(combined.y1)}</span>
+            1Y <Colored x={combined.y1} />
           </p>
           {combined.dd != null ? (
             <p className="mt-0.5 text-sm text-gray-700">

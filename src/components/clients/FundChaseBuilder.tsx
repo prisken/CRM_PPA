@@ -250,9 +250,9 @@ export default function FundChaseBuilder({ clientId, onSaved }: { clientId: stri
           {res.anyCap ? (
             <p className="mt-1 text-sm text-gray-800">
               Capital change ≈{' '}
-              1M <b className="text-gray-900">{fmtP(res.cap1)}</b>
-              {' · '}3M <b className="text-gray-900">{fmtP(res.cap3)}</b>
-              {' · '}1Y <b className="text-gray-900">{fmtP(res.capY)}</b>
+              1M <Colored x={res.cap1} />
+              {' · '}3M <Colored x={res.cap3} />
+              {' · '}1Y <Colored x={res.capY} />
               {res.capY < 0 ? <span className="text-xs text-gray-500"> — dividends likely outweigh the capital drift, but the capital side can drop</span> : null}
             </p>
           ) : null}
@@ -271,6 +271,11 @@ export default function FundChaseBuilder({ clientId, onSaved }: { clientId: stri
       ) : null}
     </div>
   );
+}
+
+function Colored({ x }: { x: number | null }) {
+  const cls = x == null ? 'text-gray-400' : x < 0 ? 'text-red-600' : x > 0 ? 'text-green-700' : 'text-gray-900';
+  return <b className={cls}>{fmtP(x)}</b>;
 }
 
 function RowAdd({ freq, defTab, onAdd }: { freq: number; defTab: number; onAdd: (tab: number, w: number) => void }) {
