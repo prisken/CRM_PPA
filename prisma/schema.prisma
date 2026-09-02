@@ -233,20 +233,21 @@ model Client {
   lastModified         DateTime     @updatedAt
 
   // Relations
-  clientAssignments ClientAssignment[]
-  clientReports     ClientReport[]
-  interactions      Interaction[]
-  deals             Deal[]
-  notifications     Notification[]
-  strategies        Strategy[]
-  documents         ClientDocument[]
-  tasks             Task[]
-  activityLogs      ClientActivityLog[]
-  sourceRecords     ClientSourceRecord[]
-  tags              ClientTag[]
-  strategyPlans     ClientStrategyPlan[] @relation("ClientStrategyPlans")
+  clientAssignments    ClientAssignment[]
+  clientReports        ClientReport[]
+  fundProfiles         ClientFundProfile[]
+  interactions         Interaction[]
+  deals                Deal[]
+  notifications        Notification[]
+  strategies           Strategy[]
+  documents            ClientDocument[]
+  tasks                Task[]
+  activityLogs         ClientActivityLog[]
+  sourceRecords        ClientSourceRecord[]
+  tags                 ClientTag[]
+  strategyPlans        ClientStrategyPlan[]  @relation("ClientStrategyPlans")
   importantDateRecords ClientImportantDate[] @relation("ClientImportantDates")
-  contacts          ClientContact[]      @relation("ClientContacts")
+  contacts             ClientContact[]       @relation("ClientContacts")
 
   @@index([nextFollowUpAt])
   @@index([status])
@@ -363,7 +364,7 @@ model Deal {
 
   commissionReturnables CommissionReturnable[]
   participants          DealParticipant[]
-  strategySteps         ClientStrategyStep[] @relation("StrategyStepLinkedDeal")
+  strategySteps         ClientStrategyStep[]   @relation("StrategyStepLinkedDeal")
 
   @@index([clientId, status])
   @@index([status, updatedAt])
@@ -603,10 +604,10 @@ model ClientStrategyPlan {
   owner     User?  @relation("StrategyPlanOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
   createdBy User   @relation("StrategyPlanCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
 
-  steps                ClientStrategyStep[]                 @relation("StrategyPlanSteps")
-  connections          ClientStrategyConnection[]           @relation("StrategyPlanConnections")
-  expenses             ClientStrategyExpense[]              @relation("StrategyPlanExpenses")
-  projectionMilestones ClientStrategyProjectionMilestone[]  @relation("StrategyPlanProjectionMilestones")
+  steps                ClientStrategyStep[]                @relation("StrategyPlanSteps")
+  connections          ClientStrategyConnection[]          @relation("StrategyPlanConnections")
+  expenses             ClientStrategyExpense[]             @relation("StrategyPlanExpenses")
+  projectionMilestones ClientStrategyProjectionMilestone[] @relation("StrategyPlanProjectionMilestones")
 
   @@index([clientId])
   @@index([clientId, status])
@@ -644,10 +645,10 @@ model ClientStrategyStep {
   strategyPlan ClientStrategyPlan @relation("StrategyPlanSteps", fields: [strategyPlanId], references: [id], onDelete: Cascade)
   linkedDeal   Deal?              @relation("StrategyStepLinkedDeal", fields: [linkedDealId], references: [id], onDelete: SetNull)
 
-  outgoingConnections  ClientStrategyConnection[]          @relation("StrategyConnectionFromStep")
-  incomingConnections  ClientStrategyConnection[]          @relation("StrategyConnectionToStep")
-  coveringExpenses     ClientStrategyExpense[]             @relation("StrategyExpenseCoveredByStep")
-  projectionMilestones ClientStrategyProjectionMilestone[] @relation("StrategyProjectionMilestoneStep")
+  outgoingConnections        ClientStrategyConnection[]              @relation("StrategyConnectionFromStep")
+  incomingConnections        ClientStrategyConnection[]              @relation("StrategyConnectionToStep")
+  coveringExpenses           ClientStrategyExpense[]                 @relation("StrategyExpenseCoveredByStep")
+  projectionMilestones       ClientStrategyProjectionMilestone[]     @relation("StrategyProjectionMilestoneStep")
   milestoneStepContributions ClientStrategyProjectionMilestoneStep[] @relation("StrategyProjectionMilestoneStepContributions")
 
   @@index([strategyPlanId])
@@ -695,8 +696,8 @@ model ClientStrategyExpense {
   createdAt          DateTime                 @default(now())
   updatedAt          DateTime                 @updatedAt
 
-  strategyPlan  ClientStrategyPlan  @relation("StrategyPlanExpenses", fields: [strategyPlanId], references: [id], onDelete: Cascade)
-  coveredByStep ClientStrategyStep? @relation("StrategyExpenseCoveredByStep", fields: [coveredByStepId], references: [id], onDelete: SetNull)
+  strategyPlan                  ClientStrategyPlan                         @relation("StrategyPlanExpenses", fields: [strategyPlanId], references: [id], onDelete: Cascade)
+  coveredByStep                 ClientStrategyStep?                        @relation("StrategyExpenseCoveredByStep", fields: [coveredByStepId], references: [id], onDelete: SetNull)
   milestoneExpenseContributions ClientStrategyProjectionMilestoneExpense[] @relation("StrategyProjectionMilestoneExpenseContributions")
 
   @@index([strategyPlanId])
@@ -705,32 +706,32 @@ model ClientStrategyExpense {
 }
 
 model ClientStrategyProjectionMilestone {
-  id                     String                          @id @default(cuid())
-  strategyPlanId         String
-  stepId                 String?
-  year                   Int
-  title                  String
-  type                   StrategyProjectionMilestoneType @default(CUSTOM)
-  monthlyIncome          Decimal?                        @db.Decimal(12, 2)
-  monthsOfIncome         Int?
-  annualIncome           Decimal?                        @db.Decimal(12, 2)
-  capitalInvested        Decimal?                        @db.Decimal(12, 2)
-  capitalRemaining       Decimal?                        @db.Decimal(12, 2)
-  incomeThisPeriod       Decimal?                        @db.Decimal(12, 2)
-  cumulativeIncome       Decimal?                        @db.Decimal(12, 2)
-  totalAssetPosition     Decimal?                        @db.Decimal(12, 2)
-  expensesThisYear       Decimal?                        @db.Decimal(12, 2)
-  cumulativeExpenses     Decimal?                        @db.Decimal(12, 2)
-  netCashflowThisYear    Decimal?                        @db.Decimal(12, 2)
-  capitalReturnedThisYear Decimal?                       @db.Decimal(12, 2)
-  capitalReturnedToDate  Decimal?                        @db.Decimal(12, 2)
-  notes                  String?                         @db.Text
-  sortOrder              Int                             @default(0)
-  createdAt              DateTime                        @default(now())
-  updatedAt              DateTime                        @updatedAt
+  id                      String                          @id @default(cuid())
+  strategyPlanId          String
+  stepId                  String?
+  year                    Int
+  title                   String
+  type                    StrategyProjectionMilestoneType @default(CUSTOM)
+  monthlyIncome           Decimal?                        @db.Decimal(12, 2)
+  monthsOfIncome          Int?
+  annualIncome            Decimal?                        @db.Decimal(12, 2)
+  capitalInvested         Decimal?                        @db.Decimal(12, 2)
+  capitalRemaining        Decimal?                        @db.Decimal(12, 2)
+  incomeThisPeriod        Decimal?                        @db.Decimal(12, 2)
+  cumulativeIncome        Decimal?                        @db.Decimal(12, 2)
+  totalAssetPosition      Decimal?                        @db.Decimal(12, 2)
+  expensesThisYear        Decimal?                        @db.Decimal(12, 2)
+  cumulativeExpenses      Decimal?                        @db.Decimal(12, 2)
+  netCashflowThisYear     Decimal?                        @db.Decimal(12, 2)
+  capitalReturnedThisYear Decimal?                        @db.Decimal(12, 2)
+  capitalReturnedToDate   Decimal?                        @db.Decimal(12, 2)
+  notes                   String?                         @db.Text
+  sortOrder               Int                             @default(0)
+  createdAt               DateTime                        @default(now())
+  updatedAt               DateTime                        @updatedAt
 
-  strategyPlan ClientStrategyPlan @relation("StrategyPlanProjectionMilestones", fields: [strategyPlanId], references: [id], onDelete: Cascade)
-  step         ClientStrategyStep? @relation("StrategyProjectionMilestoneStep", fields: [stepId], references: [id], onDelete: SetNull)
+  strategyPlan         ClientStrategyPlan                         @relation("StrategyPlanProjectionMilestones", fields: [strategyPlanId], references: [id], onDelete: Cascade)
+  step                 ClientStrategyStep?                        @relation("StrategyProjectionMilestoneStep", fields: [stepId], references: [id], onDelete: SetNull)
   stepContributions    ClientStrategyProjectionMilestoneStep[]    @relation("StrategyProjectionMilestoneStepContributions")
   expenseContributions ClientStrategyProjectionMilestoneExpense[] @relation("StrategyProjectionMilestoneExpenseContributions")
 
@@ -782,15 +783,15 @@ model ClientStrategyProjectionMilestoneExpense {
 /// Client-facing report generations (Monthly Pulse / Quarterly Review).
 /// Stores a snapshot of what was shown at send time so history survives edits.
 model ClientReport {
-  id         String    @id @default(cuid())
-  clientId   String    @map("client_id")
-  kind       String    // 'PULSE' | 'REVIEW'
-  lang       String    @default("en") // 'en' | 'zh' | 'both'
-  status     String    @default("DRAFT") // DRAFT | SENT
-  snapshot   Json?     @db.JsonB
-  sentAt     DateTime? @map("sent_at")
-  createdAt  DateTime  @default(now()) @map("created_at")
-  client     Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  id        String    @id @default(cuid())
+  clientId  String    @map("client_id")
+  kind      String // 'PULSE' | 'REVIEW'
+  lang      String    @default("en") // 'en' | 'zh' | 'both'
+  status    String    @default("DRAFT") // DRAFT | SENT
+  snapshot  Json?     @db.JsonB
+  sentAt    DateTime? @map("sent_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+  client    Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
 
   @@index([clientId, kind])
   @@index([clientId, status])
@@ -812,4 +813,43 @@ model BackgroundJob {
   @@index([status, runAfter])
   @@index([type, status])
   @@map("background_jobs")
+}
+
+model ClientFundProfile {
+  id              String               @id @default(cuid())
+  clientId        String               @map("client_id")
+  dealId          String?              @map("deal_id")
+  strategy        String // 'A' growth | 'B' dividend+stabilising
+  riskMaxDD       Float                @map("risk_max_dd") // negative %
+  expected1Y      Float                @map("expected_1y") // target 1Y %
+  minYield        Float?               @map("min_yield") // strategy B
+  active          Boolean              @default(true)
+  createdAt       DateTime             @default(now()) @map("created_at")
+  client          Client               @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  recommendations FundRecommendation[]
+
+  @@index([clientId, active])
+  @@map("client_fund_profiles")
+}
+
+model FundRecommendation {
+  id         String            @id @default(cuid())
+  profileId  String            @map("profile_id")
+  fundCode   String            @map("fund_code")
+  rank       Int
+  score      Float
+  verdict    String?
+  tag        String? // growth | core | slice
+  expected1Y Float?            @map("expected_1y")
+  maxDDPct   Float?            @map("max_dd_pct")
+  yieldPct   Float?            @map("yield_pct")
+  riskFit    String?           @map("risk_fit") // FIT | STRETCH
+  snapshot   Json              @db.JsonB // immutable recommendation record
+  accepted   Boolean?
+  note       String?
+  createdAt  DateTime          @default(now()) @map("created_at")
+  profile    ClientFundProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@index([profileId])
+  @@map("fund_recommendations")
 }
