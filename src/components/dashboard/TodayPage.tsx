@@ -82,8 +82,9 @@ export default function TodayPage() {
           </div>
         ) : (
           <>
-            {/* A. Needs you */}
-            <section className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+            <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-3">
+            {/* A. Needs you — 2/3 on desktop; queue stays first on phone. */}
+            <section className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm lg:col-span-2">
               <div className="mb-3 flex items-center justify-between">
                 <h2 className="text-base font-semibold text-gray-900">
                   Needs you
@@ -111,11 +112,11 @@ export default function TodayPage() {
                     <li key={item.client_id}>
                       <AppLink
                         href={`/clients/${item.client_id}`}
-                        className={`-mx-1 flex items-center gap-3 rounded-lg px-1 py-2.5 ${pressableRow}`}
+                        className={`-mx-1 flex items-center gap-3 rounded-lg px-1 py-3 ${pressableRow}`}
                       >
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-2">
-                            <span className="truncate text-sm font-semibold text-gray-900">
+                            <span className="truncate text-[15px] font-semibold text-gray-900 sm:text-sm">
                               {item.client_name}
                             </span>
                             {item.due_label && (
@@ -124,7 +125,7 @@ export default function TodayPage() {
                               </span>
                             )}
                           </div>
-                          <p className="truncate text-xs text-gray-500">{item.why}</p>
+                          <p className="truncate text-[13px] text-gray-500 sm:text-xs">{item.why}</p>
                         </div>
                         <span
                           className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold ${
@@ -144,7 +145,7 @@ export default function TodayPage() {
               )}
             </section>
 
-            {/* B. My day */}
+            {/* B. My day — right rail on desktop. */}
             <section className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
               <h2 className="mb-2 text-base font-semibold text-gray-900">My day</h2>
               {data.my_day.length === 0 ? (
@@ -166,6 +167,7 @@ export default function TodayPage() {
                 </ul>
               )}
             </section>
+            </div>
           </>
         )}
       </div>

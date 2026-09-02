@@ -1,6 +1,8 @@
 'use client';
 
 import AppLink from '@/components/ui/app-link';
+import { pressableRow } from '@/components/ui/pressable';
+import { ChevronRight } from 'lucide-react';
 import { memo, useMemo, useState } from 'react';
 import CompactPill from '@/components/ui/CompactPill';
 import { useDisplayDensity } from '@/components/ui/DisplayDensityProvider';
@@ -47,6 +49,36 @@ const ClientTableRow = memo(function ClientTableRow({
   );
 });
 
+const ClientCardRow = memo(function ClientCardRow({
+  client,
+}: {
+  client: AssignedClientRow;
+}) {
+  return (
+    <li>
+      <AppLink
+        href={`/clients/${client.clientId}`}
+        className={`flex items-center gap-3 rounded-xl border border-gray-200 bg-white px-3 py-3 shadow-sm ${pressableRow}`}
+        title={client.clientName}
+      >
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-[15px] font-semibold text-gray-900">
+            {client.clientName}
+          </p>
+          <p className="mt-0.5 truncate text-[13px] text-gray-500">{client.myRole}</p>
+        </div>
+        <CompactPill tone="gray" size="xs" title={client.clientStatus} className="max-w-[7rem]">
+          {client.clientStatus}
+        </CompactPill>
+        <span className="shrink-0 text-sm font-semibold text-gray-900">
+          {formatMoney(client.dealValue)}
+        </span>
+        <ChevronRight className="h-4 w-4 shrink-0 text-gray-300" aria-hidden="true" />
+      </AppLink>
+    </li>
+  );
+});
+
 function ClientTable({
   clients,
   emptyMessage,
@@ -59,22 +91,32 @@ function ClientTable({
   }
 
   return (
-    <div className="mt-2.5 overflow-x-auto">
-      <table className="min-w-full text-left text-sm">
-        <thead>
-          <tr className="border-b border-gray-200 text-[11px] uppercase tracking-wide text-gray-500">
-            <th className="px-2 py-1.5 font-medium">Client</th>
-            <th className="px-2 py-1.5 font-medium">Client role</th>
-            <th className="px-2 py-1.5 font-medium">Status</th>
-            <th className="px-2 py-1.5 font-medium">Deal value</th>
-          </tr>
-        </thead>
-        <tbody>
-          {clients.map((client) => (
-            <ClientTableRow key={client.clientId} client={client} />
-          ))}
-        </tbody>
-      </table>
+    <div className="mt-2.5">
+      {/* Desktop / tablet landscape: dense table. */}
+      <div className="hidden overflow-x-auto lg:block">
+        <table className="min-w-full text-left text-sm">
+          <thead>
+            <tr className="border-b border-gray-200 text-[11px] uppercase tracking-wide text-gray-500">
+              <th className="px-2 py-1.5 font-medium">Client</th>
+              <th className="px-2 py-1.5 font-medium">Client role</th>
+              <th className="px-2 py-1.5 font-medium">Status</th>
+              <th className="px-2 py-1.5 font-medium">Deal value</th>
+            </tr>
+          </thead>
+          <tbody>
+            {clients.map((client) => (
+              <ClientTableRow key={client.clientId} client={client} />
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Phone / narrow iPad portrait: thumb-friendly card rows. */}
+      <ul className="space-y-2 lg:hidden">
+        {clients.map((client) => (
+          <ClientCardRow key={client.clientId} client={client} />
+        ))}
+      </ul>
     </div>
   );
 }
