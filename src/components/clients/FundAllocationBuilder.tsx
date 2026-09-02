@@ -21,6 +21,7 @@ type Candidate = {
   ret_1m_pct?: number | null;
   ret_3m_pct?: number | null;
   max_dd_pct?: number | null;
+  reason?: string | null;
 };
 
 const fmtP = (x: number | null | undefined, sign = true) =>
@@ -187,6 +188,7 @@ export default function FundAllocationBuilder({
                   {c.ret_3m_pct != null ? ` · 3M ${fmtP(c.ret_3m_pct)}` : ''}
                   {c.max_dd_pct != null ? ` · maxDD ${c.max_dd_pct.toFixed(0)}%` : ''}
                 </span>
+                {c.reason ? <span className="mt-0.5 block text-[11px] leading-snug text-gray-500">{c.reason}</span> : null}
               </span>
               <input
                 type="number"
