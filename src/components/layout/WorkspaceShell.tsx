@@ -4,6 +4,8 @@ import type { ReactNode } from 'react';
 import { useEffect } from 'react';
 import { usePathname, useSearchParams } from 'next/navigation';
 import WorkspaceSidebar from '@/components/layout/WorkspaceSidebar';
+import WorkspaceBottomNav from '@/components/layout/WorkspaceBottomNav';
+import { hasSimpleWorkspaceSection } from '@/components/layout/workspaceNavUtils';
 import { useIsLargeScreen } from '@/components/layout/workspaceHooks';
 import {
   WorkspaceShellProvider,
@@ -42,6 +44,7 @@ function WorkspaceShellLayout({
 }: WorkspaceShellProps) {
   const { desktopCollapsed, mobileOpen, closeMobileSidebar } = useWorkspaceShell();
   const isLargeScreen = useIsLargeScreen();
+  const isSimpleShell = hasSimpleWorkspaceSection(nav);
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const search = searchParams?.toString() ?? '';
@@ -65,6 +68,12 @@ function WorkspaceShellLayout({
       : contentLayout === 'wide'
         ? 'mx-auto w-full max-w-none px-3 py-3 sm:px-5 sm:py-5 lg:px-6'
         : 'mx-auto w-full max-w-[1600px] px-3 py-3 sm:px-5 sm:py-5 lg:px-6';
+
+  // SIMPLE shells: room above the fixed bottom nav (56px + safe area) on <lg.
+  const bottomNavPad =
+    isSimpleShell && !isLargeScreen
+      ? ' pb-[calc(5.5rem+env(safe-area-inset-bottom))]'
+      : '';
 
   return (
     // Single viewport shell: page body does not scroll; main is the scroll owner.
@@ -106,14 +115,21 @@ function WorkspaceShellLayout({
 
       {/* Always full remaining width; on mobile the drawer is overlay-only. */}
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-        <WorkspaceTopBar title={title} subtitle={subtitle} actions={topBarActions} />
+        <WorkspaceTopBar
+          title={title}
+          subtitle={subtitle}
+          actions={topBarActions}
+          hideMenuButton={isSimpleShell && !isLargeScreen}
+        />
 
         <main className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-y-contain">
-          <div className={contentFrameClass}>
+          <div className={`${contentFrameClass}${bottomNavPad}`}>
             <div className="min-w-0 space-y-4">{children}</div>
           </div>
         </main>
       </div>
+
+      <WorkspaceBottomNav nav={nav} userRole={userRole} />
     </div>
   );
 }

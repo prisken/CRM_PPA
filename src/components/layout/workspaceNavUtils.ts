@@ -121,3 +121,8 @@ export function getWorkspaceNavBadgeClassName(
       return 'bg-gray-100 text-gray-700';
   }
 }
+
+/** SIMPLE_MODE shells carry the `simple-workspace` section (Today/Clients/Calendar/Reports). */
+export function hasSimpleWorkspaceSection(config: WorkspaceNavConfig): boolean {
+  return config.sections.some((section) => section.id === 'simple-workspace');
+}

@@ -9,12 +9,15 @@ type WorkspaceTopBarProps = {
   title: string;
   subtitle?: string;
   actions?: ReactNode;
+  /** SIMPLE shells on <lg use the bottom nav for navigation; hide the drawer toggle. */
+  hideMenuButton?: boolean;
 };
 
 export default function WorkspaceTopBar({
   title,
   subtitle,
   actions,
+  hideMenuButton = false,
 }: WorkspaceTopBarProps) {
   const {
     desktopCollapsed,
@@ -24,24 +27,26 @@ export default function WorkspaceTopBar({
   } = useWorkspaceShell();
 
   return (
-    <header className="sticky top-0 z-30 shrink-0 border-b border-gray-200 bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/90">
+    <header className="sticky top-0 z-30 shrink-0 border-b border-gray-200 bg-white/95 pt-safe backdrop-blur supports-[backdrop-filter]:bg-white/90">
       <div className="flex flex-col gap-2 px-3 py-2.5 sm:px-5 sm:py-3">
         <div className="flex min-h-10 items-center gap-2 sm:gap-3">
           <div className="flex min-w-0 flex-1 items-center gap-2">
-            <button
-              type="button"
-              onClick={toggleMobileSidebar}
-              className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-gray-300 text-gray-700 transition-colors hover:bg-gray-50 active:bg-gray-200 data-[pressed=true]:bg-gray-200 lg:hidden"
-              aria-label={mobileOpen ? 'Close navigation menu' : 'Open navigation menu'}
-              aria-expanded={mobileOpen}
-              aria-controls="workspace-sidebar"
-            >
-              {mobileOpen ? (
-                <X className="h-5 w-5" aria-hidden="true" />
-              ) : (
-                <Menu className="h-5 w-5" aria-hidden="true" />
-              )}
-            </button>
+            {!hideMenuButton ? (
+              <button
+                type="button"
+                onClick={toggleMobileSidebar}
+                className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-gray-300 text-gray-700 transition-colors hover:bg-gray-50 active:bg-gray-200 data-[pressed=true]:bg-gray-200 lg:hidden"
+                aria-label={mobileOpen ? 'Close navigation menu' : 'Open navigation menu'}
+                aria-expanded={mobileOpen}
+                aria-controls="workspace-sidebar"
+              >
+                {mobileOpen ? (
+                  <X className="h-5 w-5" aria-hidden="true" />
+                ) : (
+                  <Menu className="h-5 w-5" aria-hidden="true" />
+                )}
+              </button>
+            ) : null}
 
             <button
               type="button"
