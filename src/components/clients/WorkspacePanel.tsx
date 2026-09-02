@@ -443,6 +443,8 @@ function ReviewTab({ clientId }: { clientId: string }) {
     Array<{ id: string; kind: string; lang: string; status: string; createdAt: string }>
   >([]);
   const [lang, setLang] = useState<'en' | 'zh' | 'both'>('en');
+  const line = (en: string, zh: string) =>
+    lang === 'zh' ? zh : lang === 'both' ? `${en} / ${zh}` : en;
 
   useEffect(() => {
     authenticatedFetch(`/api/clients/${clientId}/reports`)
@@ -460,7 +462,7 @@ function ReviewTab({ clientId }: { clientId: string }) {
       </div>
 
       <div className="flex flex-wrap items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 p-3">
-        <span className="text-sm font-semibold text-gray-800">Monthly Pulse</span>
+        <span className="text-sm font-semibold text-gray-800">{line('Client reports', '客戶報告')}</span>
         <select
           value={lang}
           onChange={(e) => setLang(e.target.value as 'en' | 'zh' | 'both')}
@@ -475,7 +477,14 @@ function ReviewTab({ clientId }: { clientId: string }) {
           target="_blank"
           className="rounded-md bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700"
         >
-          Generate & download PDF
+          {line('Monthly Pulse', '每月脈搏')}
+        </a>
+        <a
+          href={`/clients/${clientId}/reports/review?lang=${lang}`}
+          target="_blank"
+          className="rounded-md bg-gray-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-gray-700"
+        >
+          {line('Quarterly Review', '季度覆核')}
         </a>
       </div>
 
