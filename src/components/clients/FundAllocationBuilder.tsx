@@ -81,7 +81,7 @@ export default function FundAllocationBuilder({
   // combined weighted returns at exactly 100%
   const combined = (() => {
     if (!at100 || menu.length === 0) return null;
-    const acc = { m1: { n: 0, d: 0 }, m3: { n: 0, d: 0 }, y1: { n: 0, d: 0 } };
+    const acc = { m1: { n: 0, d: 0 }, m3: { n: 0, d: 0 }, y1: { n: 0, d: 0 }, dd: { n: 0, d: 0 } };
     for (const code of selected) {
       const w = weights[code] || 0;
       const m = meta(code);
@@ -90,9 +90,10 @@ export default function FundAllocationBuilder({
         const v = key === 'y1' ? m.expected_1y : key === 'm1' ? m.ret_1m_pct : m.ret_3m_pct;
         if (v != null) { acc[key].n += w * v; acc[key].d += w; }
       }
+      if (m.max_dd_pct != null) { acc.dd.n += w * m.max_dd_pct; acc.dd.d += w; }
     }
     const wAvg = (k: keyof typeof acc) => (acc[k].d ? acc[k].n / acc[k].d : null);
-    return { m1: wAvg('m1'), m3: wAvg('m3'), y1: wAvg('y1') };
+    return { m1: wAvg('m1'), m3: wAvg('m3'), y1: wAvg('y1'), dd: wAvg('dd') };
   })();
 
   const save = async () => {
@@ -234,6 +235,12 @@ export default function FundAllocationBuilder({
             <span className="mx-2 text-gray-300">·</span>
             1Y <span className="text-blue-700">{fmtP(combined.y1)}</span>
           </p>
+          {combined.dd != null ? (
+            <p className="mt-0.5 text-sm text-gray-700">
+              Average risk (weighted max drawdown): <b className="text-gray-900">{fmtP(combined.dd, false)}</b>{' '}
+              <span className="text-xs text-gray-500">— {Math.abs(combined.dd) <= 12 ? 'low risk' : Math.abs(combined.dd) <= 20 ? 'medium risk' : 'high risk'}</span>
+            </p>
+          ) : null}
           <p className="mt-0.5 text-[10px] text-gray-400">1M/3M realised from NAV · 1Y forecast median · funds without data excluded</p>
           <button type="button" onClick={save} disabled={saving}
             className="mt-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50">
