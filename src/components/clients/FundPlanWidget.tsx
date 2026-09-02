@@ -23,6 +23,7 @@ type Rec = {
   riskFit?: string | null;
   accepted?: boolean | null;
   note?: string | null;
+  reason?: string | null;
   snapshot?: Record<string, unknown> | null;
 };
 
@@ -249,74 +250,111 @@ export default function FundPlanWidget({ clientId }: { clientId: string }) {
               /{latest.recommendations.length} accepted
             </span>
           </div>
-          <ul className="divide-y divide-gray-100 rounded-lg border border-gray-200">
-            {latest.recommendations.map((r) => (
-              <li
-                key={r.id}
-                className="flex flex-wrap items-center gap-2 px-3 py-2"
-              >
-                <span className="w-6 text-xs font-semibold text-gray-400">
-                  #{r.rank}
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-sm font-medium text-gray-900">
-                    {r.fundCode} · {r.verdict ?? ''}
-                  </span>
-                  <span className="block text-xs text-gray-500">
-                    score {r.score.toFixed(2)}
-                    {r.expected1Y != null
-                      ? ` · exp 1Y +${r.expected1Y.toFixed(1)}%`
-                      : ''}
-                    {r.maxDDPct != null
-                      ? ` · max DD ${r.maxDDPct.toFixed(0)}%`
-                      : ''}
-                    {r.yieldPct != null ? ` · yield ${r.yieldPct.toFixed(1)}%` : ''}
-                    {r.tag ? ` · ${r.tag}` : ''}
-                  </span>
-                </span>
-                {r.riskFit ? (
-                  <span
-                    className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
-                      CHIP[r.riskFit as keyof typeof CHIP] ?? 'bg-gray-100 text-gray-600'
-                    }`}
-                  >
-                    {r.riskFit}
-                  </span>
-                ) : null}
-                <div className="flex gap-1.5">
-                  {r.accepted === true ? (
-                    <button
-                      type="button"
-                      onClick={() => setAccepted(latest.id, r, false)}
-                      disabled={acceptingId === r.id}
-                      className="rounded-md bg-green-100 px-2.5 py-1 text-xs font-medium text-green-800 hover:bg-green-200"
-                    >
-                      ✓ Accepted
-                    </button>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => setAccepted(latest.id, r, true)}
-                      disabled={acceptingId === r.id}
-                      className="rounded-md border border-gray-300 px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50"
-                    >
-                      Accept
-                    </button>
-                  )}
-                  {r.accepted === false ? (
-                    <button
-                      type="button"
-                      onClick={() => setAccepted(latest.id, r, true)}
-                      disabled={acceptingId === r.id}
-                      className="rounded-md bg-red-50 px-2.5 py-1 text-xs font-medium text-red-700 hover:bg-red-100"
-                    >
-                      Declined · undo
-                    </button>
-                  ) : null}
+          <div className="mt-3">
+            {(() => {
+              const groups: Record<string, Rec[]> = {};
+              for (const r of latest.recommendations) {
+                const k = r.tag || 'growth';
+                (groups[k] = groups[k] || []).push(r);
+              }
+              const headers: Record<string, string> = {
+                core: 'Dividend core — 70%',
+                slice: 'Capital-stabilising slice — 30%',
+                growth: 'Growth picks',
+              };
+              const subs: Record<string, string> = {
+                core: 'the stable income base, picked once and held',
+                slice: 'the flexible defensive band',
+                growth: 'dark-horse growers (strategy A)',
+              };
+              return Object.entries(groups).map(([tag, recs]) => (
+                <div key={tag} className="mt-3 first:mt-0">
+                  <div className="mb-1.5 flex items-baseline gap-2">
+                    <span className="text-xs font-semibold text-gray-800">
+                      {headers[tag] || tag}
+                    </span>
+                    <span className="text-[11px] text-gray-400">
+                      {recs.length} · {subs[tag] || ''}
+                    </span>
+                  </div>
+                  <ul className="divide-y divide-gray-100 rounded-lg border border-gray-200">
+                    {recs.map((r) => (
+                      <li
+                        key={r.id}
+                        className="px-3 py-2"
+                      >
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="w-6 text-xs font-semibold text-gray-400">
+                            #{r.rank}
+                          </span>
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate text-sm font-medium text-gray-900">
+                              {r.fundCode} · {r.verdict ?? ''}
+                            </span>
+                            <span className="block text-xs text-gray-500">
+                              score {r.score.toFixed(2)}
+                              {r.expected1Y != null
+                                ? ` · exp 1Y +${r.expected1Y.toFixed(1)}%`
+                                : ''}
+                              {r.maxDDPct != null
+                                ? ` · max DD ${r.maxDDPct.toFixed(0)}%`
+                                : ''}
+                              {r.yieldPct != null ? ` · yield ${r.yieldPct.toFixed(1)}%` : ''}
+                            </span>
+                            {r.reason ? (
+                              <span className="mt-1 block text-xs leading-snug text-gray-500">
+                                {r.reason}
+                              </span>
+                            ) : null}
+                          </span>
+                          {r.riskFit ? (
+                            <span
+                              className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                                CHIP[r.riskFit as keyof typeof CHIP] ?? 'bg-gray-100 text-gray-600'
+                              }`}
+                            >
+                              {r.riskFit}
+                            </span>
+                          ) : null}
+                          <div className="flex gap-1.5">
+                            {r.accepted === true ? (
+                              <button
+                                type="button"
+                                onClick={() => setAccepted(latest.id, r, false)}
+                                disabled={acceptingId === r.id}
+                                className="rounded-md bg-green-100 px-2.5 py-1 text-xs font-medium text-green-800 hover:bg-green-200"
+                              >
+                                ✓ Accepted
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => setAccepted(latest.id, r, true)}
+                                disabled={acceptingId === r.id}
+                                className="rounded-md border border-gray-300 px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50"
+                              >
+                                Accept
+                              </button>
+                            )}
+                            {r.accepted === false ? (
+                              <button
+                                type="button"
+                                onClick={() => setAccepted(latest.id, r, true)}
+                                disabled={acceptingId === r.id}
+                                className="rounded-md bg-red-50 px-2.5 py-1 text-xs font-medium text-red-700 hover:bg-red-100"
+                              >
+                                Declined · undo
+                              </button>
+                            ) : null}
+                          </div>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
                 </div>
-              </li>
-            ))}
-          </ul>
+              ));
+            })()}
+          </div>
         </div>
       ) : (
         !loading && (
