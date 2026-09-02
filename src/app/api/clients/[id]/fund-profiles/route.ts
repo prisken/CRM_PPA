@@ -140,5 +140,13 @@ export async function GET(
       recommendations: { orderBy: { rank: 'asc' } },
     },
   });
-  return NextResponse.json({ profiles });
+  // surface the plain-English reason stored in each immutable snapshot
+  const out = profiles.map((p) => ({
+    ...p,
+    recommendations: p.recommendations.map((r: any) => ({
+      ...r,
+      reason: ((r.snapshot as any)?.reason as string | undefined) ?? null,
+    })),
+  }));
+  return NextResponse.json({ profiles: out });
 }
