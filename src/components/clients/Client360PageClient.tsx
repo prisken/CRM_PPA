@@ -1,7 +1,7 @@
 'use client';
 
 import dynamic from 'next/dynamic';
-import Link from 'next/link';
+import AppLink from '@/components/ui/app-link';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import ClientDetailsWidget from '@/components/clients/ClientDetailsWidget';
@@ -422,16 +422,16 @@ function Client360PageClientInner({
       <header className="border-b border-gray-200 bg-white">
         <div className="mx-auto max-w-7xl px-4 py-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between gap-4">
-            <Link href={homeHref} aria-label="Go to homepage">
+            <AppLink href={homeHref} aria-label="Go to homepage" className="inline-flex items-center">
               <Logo className="h-8 w-auto" />
-            </Link>
+            </AppLink>
             <div className="flex flex-wrap items-center gap-2">
-              <Link
+              <AppLink
                 href={backToListHref}
-                className="text-sm text-blue-600 hover:underline"
+                className="-m-1 rounded-lg p-2 text-sm font-medium text-blue-600 hover:underline active:bg-blue-50 active:text-blue-700"
               >
                 ← Back to list
-              </Link>
+              </AppLink>
               {isSuperAdmin && (
                 <details className="relative">
                   <summary className="cursor-pointer list-none rounded-lg border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 [&::-webkit-details-marker]:hidden">
