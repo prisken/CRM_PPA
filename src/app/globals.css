@@ -99,3 +99,68 @@ select:-webkit-autofill:active {
     font-size: 16px !important;
   }
 }
+
+/* ============================================================
+ * UI pass §3.1 — press baseline (touch-first)
+ * ============================================================ */
+
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+/* Faint tap flash as a CSS fallback; data-[pressed=true] is the real path.
+ * Never set -webkit-tap-highlight-color: transparent (a reset would undo
+ * this — if one exists it must be removed). */
+a,
+button,
+[role='button'],
+[data-pressable] {
+  -webkit-tap-highlight-color: rgb(15 23 42 / 0.12);
+  touch-action: manipulation;
+}
+
+/* Kill the 300ms double-tap-zoom delay app-wide. */
+button,
+a,
+[role='button'],
+[data-pressable],
+input,
+select,
+textarea,
+label {
+  touch-action: manipulation;
+}
+
+/* Hit-target floor tokens: 44px coarse (WCAG 2.5.5 AAA), 32px fine. */
+@media (pointer: coarse) {
+  :root {
+    --hit: 44px;
+  }
+}
+@media (pointer: fine) {
+  :root {
+    --hit: 32px;
+  }
+}
+
+/* iOS input zoom guard: never below 16px on coarse pointers (beat utilities). */
+@media (pointer: coarse) {
+  input:not([type='checkbox']):not([type='radio']):not([type='range']):not(
+      [type='button']
+    ):not([type='submit']):not([type='reset']):not([type='image']):not(
+      [type='file']
+    ):not([type='hidden']):not([type='color']),
+  textarea,
+  select {
+    font-size: 16px !important;
+  }
+}
+
+/* Safe-area helpers for sheets/bottom bars (viewport-fit=cover required). */
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+.pt-safe {
+  padding-top: env(safe-area-inset-top);
+}

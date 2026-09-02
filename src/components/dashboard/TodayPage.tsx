@@ -1,7 +1,9 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import Link from 'next/link';
+import AppLink from '@/components/ui/app-link';
+import { pressableRow } from '@/components/ui/pressable';
+import { ChevronRight } from 'lucide-react';
 import WorkspaceShell from '@/components/layout/WorkspaceShell';
 import {
   buildWorkspaceNavConfig,
@@ -90,9 +92,12 @@ export default function TodayPage() {
                   </span>
                 </h2>
                 {data.counts.unassigned > 0 && (
-                  <Link href="/admin/leads" className="text-xs font-medium text-blue-600 hover:underline">
+                  <AppLink
+                    href="/admin/leads"
+                    className="rounded px-1 py-1 text-xs font-medium text-blue-600 hover:underline"
+                  >
                     {data.counts.unassigned} unassigned →
-                  </Link>
+                  </AppLink>
                 )}
               </div>
 
@@ -103,30 +108,36 @@ export default function TodayPage() {
               ) : (
                 <ul className="divide-y divide-gray-100">
                   {data.needs_you.map((item) => (
-                    <li key={item.client_id} className="flex items-center gap-3 py-2.5">
-                      <Link
+                    <li key={item.client_id}>
+                      <AppLink
                         href={`/clients/${item.client_id}`}
-                        className="min-w-0 flex-1"
+                        className={`-mx-1 flex items-center gap-3 rounded-lg px-1 py-2.5 ${pressableRow}`}
                       >
-                        <div className="flex items-center gap-2">
-                          <span className="truncate text-sm font-semibold text-gray-900">
-                            {item.client_name}
-                          </span>
-                          {item.due_label && (
-                            <span className="shrink-0 rounded-full bg-red-50 px-2 py-0.5 text-[10px] font-bold text-red-600">
-                              {item.due_label}
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2">
+                            <span className="truncate text-sm font-semibold text-gray-900">
+                              {item.client_name}
                             </span>
-                          )}
+                            {item.due_label && (
+                              <span className="shrink-0 rounded-full bg-red-50 px-2 py-0.5 text-[10px] font-bold text-red-600">
+                                {item.due_label}
+                              </span>
+                            )}
+                          </div>
+                          <p className="truncate text-xs text-gray-500">{item.why}</p>
                         </div>
-                        <p className="truncate text-xs text-gray-500">{item.why}</p>
-                      </Link>
-                      <span
-                        className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold ${
-                          VERB_TONE[item.verb] || 'bg-gray-100 text-gray-700'
-                        }`}
-                      >
-                        {item.verb}
-                      </span>
+                        <span
+                          className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold ${
+                            VERB_TONE[item.verb] || 'bg-gray-100 text-gray-700'
+                          }`}
+                        >
+                          {item.verb}
+                        </span>
+                        <ChevronRight
+                          className="h-4 w-4 shrink-0 text-gray-300 md:hidden"
+                          aria-hidden="true"
+                        />
+                      </AppLink>
                     </li>
                   ))}
                 </ul>
@@ -143,9 +154,12 @@ export default function TodayPage() {
                   {data.my_day.map((item, i) => (
                     <li key={i} className="flex items-center gap-2 text-sm text-gray-700">
                       <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-blue-500" />
-                      <Link href={`/clients/${item.client_id}`} className="font-medium text-blue-700 hover:underline">
+                      <AppLink
+                        href={`/clients/${item.client_id}`}
+                        className="font-medium text-blue-700 hover:underline active:text-blue-800"
+                      >
                         {item.client_name}
-                      </Link>
+                      </AppLink>
                       <span className="text-gray-500">· {item.label}</span>
                     </li>
                   ))}

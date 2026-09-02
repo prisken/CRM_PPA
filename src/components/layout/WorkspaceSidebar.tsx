@@ -4,6 +4,8 @@ import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { memo, useMemo } from 'react';
 import Logo from '@/components/Logo';
+import AppLink from '@/components/ui/app-link';
+import { pressableRow } from '@/components/ui/pressable';
 import { useDisplayDensity } from '@/components/ui/DisplayDensityProvider';
 import {
   filterNavConfigForRole,
@@ -122,11 +124,12 @@ const WorkspaceSidebarNav = memo(function WorkspaceSidebarNav({
               const active = isWorkspaceNavItemActive(pathname, item, search);
               const linkClassName = [
                 'group relative flex items-center rounded-lg text-sm font-medium transition-colors',
+                pressableRow,
                 itemPaddingClass,
                 collapsed ? 'justify-center' : 'gap-3',
                 active
-                  ? 'bg-blue-50 text-blue-700'
-                  : 'text-gray-700 hover:bg-gray-50 hover:text-gray-900',
+                  ? 'bg-blue-50 text-blue-700 data-[pressed=true]:bg-blue-100 active:bg-blue-100'
+                  : 'text-gray-700 hover:bg-gray-50 hover:text-gray-900 active:bg-gray-100 data-[pressed=true]:bg-gray-100',
               ].join(' ');
 
               const content = (
@@ -155,7 +158,7 @@ const WorkspaceSidebarNav = memo(function WorkspaceSidebarNav({
                       {content}
                     </a>
                   ) : (
-                    <Link
+                    <AppLink
                       href={item.href}
                       scroll={false}
                       prefetch
@@ -165,7 +168,7 @@ const WorkspaceSidebarNav = memo(function WorkspaceSidebarNav({
                       onClick={onNavigate}
                     >
                       {content}
-                    </Link>
+                    </AppLink>
                   )}
                 </li>
               );

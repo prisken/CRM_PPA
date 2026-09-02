@@ -31,7 +31,7 @@ export default function WorkspaceTopBar({
             <button
               type="button"
               onClick={toggleMobileSidebar}
-              className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 lg:hidden"
+              className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-gray-300 text-gray-700 transition-colors hover:bg-gray-50 active:bg-gray-200 data-[pressed=true]:bg-gray-200 lg:hidden"
               aria-label={mobileOpen ? 'Close navigation menu' : 'Open navigation menu'}
               aria-expanded={mobileOpen}
               aria-controls="workspace-sidebar"
@@ -46,7 +46,7 @@ export default function WorkspaceTopBar({
             <button
               type="button"
               onClick={toggleDesktopCollapsed}
-              className="hidden h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 lg:inline-flex"
+              className="hidden h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-gray-300 text-gray-700 transition-colors hover:bg-gray-50 active:bg-gray-200 lg:inline-flex"
               aria-label={desktopCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
               aria-expanded={!desktopCollapsed}
               aria-controls="workspace-sidebar"
