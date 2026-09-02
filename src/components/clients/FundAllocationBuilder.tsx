@@ -35,6 +35,7 @@ export default function FundAllocationBuilder({
 }) {
   const [stage, setStage] = useState<'idle' | 'loading' | 'ready'>('idle');
   const [menu, setMenu] = useState<Candidate[]>([]);
+  const [selectedCodes, setSelectedCodes] = useState<Set<string>>(new Set());
   const [weights, setWeights] = useState<Record<string, number>>({}); // code -> %
   const [err, setErr] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -57,16 +58,17 @@ export default function FundAllocationBuilder({
     }
   };
 
-  const selected = Object.entries(weights).filter(([, w]) => w > 0);
-  const total = selected.reduce((a, [, w]) => a + w, 0);
+  const selected = [...selectedCodes];
+  const total = selected.reduce((a, c) => a + (weights[c] || 0), 0);
+  const unfilled = selected.filter((c) => !(weights[c] > 0));
   const delta = 100 - total;
-  const at100 = Math.abs(delta) < 0.6 && selected.length > 0;
+  const at100 = unfilled.length === 0 && Math.abs(delta) < 0.6 && selected.length > 0;
 
   const toggle = (code: string) => {
-    setWeights((w) => {
-      const next = { ...w };
-      if (next[code] > 0) delete next[code];
-      else next[code] = 0;
+    setSelectedCodes((prev) => {
+      const next = new Set(prev);
+      if (next.has(code)) next.delete(code);
+      else next.add(code);
       return next;
     });
   };
@@ -80,7 +82,8 @@ export default function FundAllocationBuilder({
   const combined = (() => {
     if (!at100 || menu.length === 0) return null;
     const acc = { m1: { n: 0, d: 0 }, m3: { n: 0, d: 0 }, y1: { n: 0, d: 0 } };
-    for (const [code, w] of selected) {
+    for (const code of selected) {
+      const w = weights[code] || 0;
       const m = meta(code);
       if (!m) continue;
       for (const key of ['m1', 'm3', 'y1'] as const) {
@@ -104,7 +107,7 @@ export default function FundAllocationBuilder({
           strategy: 'a',
           risk_max_dd_pct: -25,
           expected_1y_pct: 8,
-          sets: [{ bucket: 'allocation', members: selected.map(([code, weight_pct]) => ({ code, weight_pct })) }],
+          sets: [{ bucket: 'allocation', members: selected.map((code) => ({ code, weight_pct: weights[code] || 0 })) }],
         }),
       });
       if (!res.ok) {
@@ -158,7 +161,7 @@ export default function FundAllocationBuilder({
       <ul className="max-h-80 space-y-1.5 overflow-y-auto pr-1">
         {menu.map((c) => {
           const w = weights[c.code] ?? 0;
-          const inSel = w > 0;
+          const inSel = selectedCodes.has(c.code);
           return (
             <li
               key={c.code}
@@ -185,7 +188,7 @@ export default function FundAllocationBuilder({
                 max={100}
                 placeholder="%"
                 disabled={!inSel}
-                value={inSel ? w || '' : ''}
+                value={inSel ? (w || '') : ''}
                 onChange={(e) => setWeight(c.code, Number(e.target.value))}
                 className={`w-20 rounded-lg border border-gray-300 px-2 py-1.5 text-right text-sm text-gray-900 outline-none focus:border-blue-500 disabled:bg-gray-50 disabled:text-gray-400`}
               />
@@ -198,11 +201,19 @@ export default function FundAllocationBuilder({
       {selected.length > 0 ? (
         <div
           className={`rounded-lg border px-3 py-2 text-sm ${
-            at100 ? 'border-green-300 bg-green-50' : delta > 0 ? 'border-amber-200 bg-amber-50' : 'border-red-200 bg-red-50'
+            at100
+              ? 'border-green-300 bg-green-50'
+              : unfilled.length > 0
+                ? 'border-amber-200 bg-amber-50'
+                : delta > 0
+                  ? 'border-amber-200 bg-amber-50'
+                  : 'border-red-200 bg-red-50'
           }`}
         >
           {at100 ? (
             <>Selected: <b>100%</b> — combined returns below.</>
+          ) : unfilled.length > 0 ? (
+            <>Enter the % for: <b>{unfilled.join(', ')}</b></>
           ) : delta > 0 ? (
             <>Selected: <b>{total.toFixed(1)}%</b> — pick again or add <b>{delta.toFixed(1)}%</b> more to reach 100%.</>
           ) : (
