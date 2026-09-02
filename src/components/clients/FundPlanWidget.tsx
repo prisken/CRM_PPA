@@ -59,6 +59,18 @@ export default function FundPlanWidget({ clientId }: { clientId: string }) {
   const [generating, setGenerating] = useState(false);
   const [genError, setGenError] = useState<string | null>(null);
   const [acceptingId, setAcceptingId] = useState<string | null>(null);
+  const [openReasons, setOpenReasons] = useState<Set<string>>(new Set());
+
+  const toggleReason = (id: string) =>
+    setOpenReasons((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -302,6 +314,15 @@ export default function FundPlanWidget({ clientId }: { clientId: string }) {
                               {r.yieldPct != null ? ` · yield ${r.yieldPct.toFixed(1)}%` : ''}
                             </span>
                             {r.reason ? (
+                              <button
+                                type="button"
+                                onClick={() => toggleReason(r.id)}
+                                className="mt-1 inline-flex items-center gap-1 text-xs font-medium text-blue-600 hover:text-blue-700 hover:underline"
+                              >
+                                {openReasons.has(r.id) ? '▾ Hide why' : '▸ Why this fund'}
+                              </button>
+                            ) : null}
+                            {r.reason && openReasons.has(r.id) ? (
                               <span className="mt-1 block text-xs leading-snug text-gray-500">
                                 {r.reason}
                               </span>
