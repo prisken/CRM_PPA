@@ -823,6 +823,7 @@ model ClientFundProfile {
   riskMaxDD       Float                @map("risk_max_dd") // negative %
   expected1Y      Float                @map("expected_1y") // target 1Y %
   minYield        Float?               @map("min_yield") // strategy B
+  planJson        Json?                @map("plan_json") // strategy B multi-set plan
   active          Boolean              @default(true)
   createdAt       DateTime             @default(now()) @map("created_at")
   client          Client               @relation(fields: [clientId], references: [id], onDelete: Cascade)
