@@ -84,7 +84,7 @@ function RevenueTrackerChart() {
               className={`rounded-lg px-3 py-1.5 text-sm font-medium transition ${
                 groupBy === option.value
                   ? 'bg-blue-600 text-white'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200 active:bg-gray-300'
               }`}
             >
               {option.label}

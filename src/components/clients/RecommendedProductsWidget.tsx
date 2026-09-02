@@ -134,7 +134,7 @@ export default function RecommendedProductsWidget({
           <button
             type="button"
             onClick={() => setPickerOpen((v) => !v)}
-            className="rounded-md border border-blue-300 bg-white px-2 py-1 text-xs font-medium text-blue-700 hover:bg-blue-50"
+            className="rounded-md border border-blue-300 bg-white px-2 py-1 text-xs font-medium text-blue-700 hover:bg-blue-50 active:bg-blue-100"
           >
             {pickerOpen ? 'Close' : '+ Add product'}
           </button>
@@ -167,7 +167,7 @@ export default function RecommendedProductsWidget({
                       add(pr.name);
                       setPickerQuery('');
                     }}
-                    className="block w-full truncate rounded px-2 py-1 text-left text-xs text-gray-700 hover:bg-blue-50 hover:text-blue-700"
+                    className="block w-full truncate rounded px-2 py-1 text-left text-xs text-gray-700 hover:bg-blue-50 active:bg-blue-100 hover:text-blue-700"
                   >
                     {pr.name}
                     <span className="ml-1.5 text-[10px] text-gray-400">{pr.category}</span>

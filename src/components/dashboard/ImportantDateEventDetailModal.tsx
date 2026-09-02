@@ -377,14 +377,14 @@ function ImportantDateEventDetailModalInner({
                         setFieldErrors({});
                       }}
                       disabled={isSaving}
-                      className="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
+                      className="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 active:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       Cancel
                     </button>
                     <button
                       type="submit"
                       disabled={isSaving}
-                      className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+                      className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 active:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       {isSaving ? 'Saving…' : 'Save'}
                     </button>
@@ -455,7 +455,7 @@ function ImportantDateEventDetailModalInner({
                 <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <Link
                     href={recordHref}
-                    className="inline-flex justify-center rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                    className="inline-flex justify-center rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 active:bg-gray-100"
                   >
                     Open {recordLabel} 360
                   </Link>
@@ -463,7 +463,7 @@ function ImportantDateEventDetailModalInner({
                     <button
                       type="button"
                       onClick={onClose}
-                      className="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                      className="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 active:bg-gray-100"
                     >
                       Close
                     </button>
@@ -475,7 +475,7 @@ function ImportantDateEventDetailModalInner({
                             setError(null);
                             setMode('edit');
                           }}
-                          className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                          className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 active:bg-gray-100"
                         >
                           Edit Important Date
                         </button>
@@ -485,7 +485,7 @@ function ImportantDateEventDetailModalInner({
                             setDeleteError(null);
                             setConfirmDeleteOpen(true);
                           }}
-                          className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700"
+                          className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 active:bg-red-800"
                         >
                           Delete
                         </button>

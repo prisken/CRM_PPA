@@ -227,14 +227,14 @@ export default function MyStatementsPage() {
           <div className="flex flex-wrap gap-3">
             <Link
               href={homeHref}
-              className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+              className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 active:bg-gray-100"
             >
               {profile.role === 'SUPER_ADMIN' ? 'Admin Home' : 'Back to Dashboard'}
             </Link>
             <button
               type="button"
               onClick={handleSignOut}
-              className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+              className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 active:bg-gray-100"
             >
               Sign Out
             </button>

@@ -34,7 +34,7 @@ export default function UserActionsMenu({
         type="button"
         disabled={disabled}
         onClick={() => setOpen((prev) => !prev)}
-        className="rounded-lg p-1.5 text-gray-500 transition hover:bg-gray-100 hover:text-gray-700 disabled:cursor-not-allowed disabled:opacity-40"
+        className="rounded-lg p-1.5 text-gray-500 transition hover:bg-gray-100 active:bg-gray-200 hover:text-gray-700 disabled:cursor-not-allowed disabled:opacity-40"
         aria-label="User actions"
       >
         <MoreVertical className="h-5 w-5" />
@@ -44,7 +44,7 @@ export default function UserActionsMenu({
         <div className="absolute right-0 z-10 mt-1 w-48 rounded-lg border border-gray-200 bg-white py-1 shadow-lg">
           <button
             type="button"
-            className="block w-full px-4 py-2 text-left text-sm text-amber-700 hover:bg-amber-50"
+            className="block w-full px-4 py-2 text-left text-sm text-amber-700 hover:bg-amber-50 active:bg-amber-100"
             onClick={() => {
               setOpen(false);
               onDeactivate();
@@ -54,7 +54,7 @@ export default function UserActionsMenu({
           </button>
           <button
             type="button"
-            className="block w-full px-4 py-2 text-left text-sm text-red-700 hover:bg-red-50"
+            className="block w-full px-4 py-2 text-left text-sm text-red-700 hover:bg-red-50 active:bg-red-100"
             onClick={() => {
               setOpen(false);
               onDelete();

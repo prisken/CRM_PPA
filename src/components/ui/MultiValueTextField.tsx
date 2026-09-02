@@ -81,7 +81,7 @@ export default function MultiValueTextField({
                 type="button"
                 onClick={() => removeAt(index)}
                 aria-label={`Remove ${label.toLowerCase()} ${index + 1}`}
-                className="shrink-0 rounded-lg border border-gray-200 px-2 py-2 text-xs text-gray-500 hover:bg-gray-50"
+                className="shrink-0 rounded-lg border border-gray-200 px-2 py-2 text-xs text-gray-500 hover:bg-gray-50 active:bg-gray-100"
               >
                 Remove
               </button>

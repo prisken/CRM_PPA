@@ -239,7 +239,7 @@ function BulkAssignRelationshipModal({
               <button
                 type="button"
                 onClick={handleDone}
-                className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+                className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 active:bg-blue-800"
               >
                 Done
               </button>
@@ -314,7 +314,7 @@ function BulkAssignRelationshipModal({
                 type="button"
                 onClick={onClose}
                 disabled={isSubmitting}
-                className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-60"
+                className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 active:bg-gray-100 disabled:opacity-60"
               >
                 Cancel
               </button>
@@ -326,7 +326,7 @@ function BulkAssignRelationshipModal({
                   !selectedUserId ||
                   activeUsers.length === 0
                 }
-                className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+                className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 active:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {isSubmitting ? 'Assigning...' : 'Confirm'}
               </button>

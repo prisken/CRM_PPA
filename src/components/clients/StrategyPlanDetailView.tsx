@@ -995,7 +995,7 @@ function StrategyPlanDetailView({
               <button
                 type="button"
                 onClick={onEdit}
-                className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
+                className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 active:bg-gray-100"
               >
                 Edit plan
               </button>
@@ -1006,7 +1006,7 @@ function StrategyPlanDetailView({
                 setDeleteConfirmError(null);
                 setIsPlanDeleteModalOpen(true);
               }}
-              className="rounded-lg border border-red-200 px-3 py-1.5 text-xs font-medium text-red-700 hover:bg-red-50"
+              className="rounded-lg border border-red-200 px-3 py-1.5 text-xs font-medium text-red-700 hover:bg-red-50 active:bg-red-100"
             >
               Remove plan
             </button>
@@ -1031,7 +1031,7 @@ function StrategyPlanDetailView({
               <button
                 type="button"
                 onClick={onEdit}
-                className="rounded-lg border border-gray-300 px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-1"
+                className="rounded-lg border border-gray-300 px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50 active:bg-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-1"
               >
                 Edit
               </button>
@@ -1064,7 +1064,7 @@ function StrategyPlanDetailView({
                     <button
                       type="button"
                       onClick={onEdit}
-                      className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-1"
+                      className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 active:bg-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-1"
                     >
                       Add goal & outcome
                     </button>
@@ -1149,7 +1149,7 @@ function StrategyPlanDetailView({
 
         <Link
           href={`/clients/${clientId}/strategy-plans/${plan.id}/overview`}
-          className="inline-flex w-full items-center justify-center rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-medium text-blue-800 hover:bg-blue-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-1 sm:w-auto"
+          className="inline-flex w-full items-center justify-center rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-medium text-blue-800 hover:bg-blue-100 active:bg-blue-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-1 sm:w-auto"
         >
           View client overview
         </Link>
@@ -1160,7 +1160,7 @@ function StrategyPlanDetailView({
               type="button"
               onClick={openCreateStep}
               aria-label="Add strategy step"
-              className="rounded-lg bg-blue-600 px-2.5 py-1.5 text-xs font-medium text-white hover:bg-blue-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-1"
+              className="rounded-lg bg-blue-600 px-2.5 py-1.5 text-xs font-medium text-white hover:bg-blue-700 active:bg-blue-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-1"
             >
               + Add step
             </button>
@@ -1179,7 +1179,7 @@ function StrategyPlanDetailView({
                   ? 'Add at least two strategy steps first'
                   : undefined
               }
-              className="rounded-lg border border-gray-300 bg-white px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-1 disabled:cursor-not-allowed disabled:opacity-60"
+              className="rounded-lg border border-gray-300 bg-white px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 active:bg-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-1 disabled:cursor-not-allowed disabled:opacity-60"
             >
               + Add connection
             </button>
@@ -1187,7 +1187,7 @@ function StrategyPlanDetailView({
               type="button"
               onClick={() => openCreateExpense()}
               aria-label="Add strategy expense"
-              className="rounded-lg border border-gray-300 bg-white px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-1"
+              className="rounded-lg border border-gray-300 bg-white px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 active:bg-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-1"
             >
               + Add expense
             </button>
@@ -1275,7 +1275,7 @@ function StrategyPlanDetailView({
                 <button
                   type="button"
                   onClick={openCreateStep}
-                  className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700"
+                  className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 active:bg-blue-800"
                 >
                   Add first step
                 </button>
@@ -1412,7 +1412,7 @@ function StrategyPlanDetailView({
                 <button
                   type="button"
                   onClick={() => openCreateConnection()}
-                  className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700"
+                  className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 active:bg-blue-800"
                 >
                   Add first connection
                 </button>
@@ -1420,7 +1420,7 @@ function StrategyPlanDetailView({
                 <button
                   type="button"
                   onClick={openCreateStep}
-                  className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
+                  className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 active:bg-gray-100"
                 >
                   Add another step first
                 </button>
@@ -1511,7 +1511,7 @@ function StrategyPlanDetailView({
                 <button
                   type="button"
                   onClick={() => openCreateExpense()}
-                  className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700"
+                  className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 active:bg-blue-800"
                 >
                   Add first expense
                 </button>

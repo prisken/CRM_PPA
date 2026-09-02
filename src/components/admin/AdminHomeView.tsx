@@ -67,26 +67,26 @@ export default function AdminHomeView({
         <div className="mt-4 flex flex-wrap gap-2">
           <Link
             href="/admin/leads"
-            className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-semibold text-blue-800 hover:bg-blue-100"
+            className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-semibold text-blue-800 hover:bg-blue-100 active:bg-blue-200"
           >
             Lead Command Center
           </Link>
           <button
             type="button"
             onClick={onAddClient}
-            className="rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700"
+            className="rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700 active:bg-blue-800"
           >
             Add Lead / Client
           </button>
           <Link
             href="/dashboard"
-            className="rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+            className="rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 active:bg-gray-100"
           >
             User Dashboard
           </Link>
           <Link
             href="/dashboard/settings"
-            className="rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+            className="rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 active:bg-gray-100"
           >
             Account Settings
           </Link>
@@ -101,8 +101,8 @@ export default function AdminHomeView({
               href={link.href}
               className={`min-w-0 rounded-xl border p-4 shadow-sm transition active:bg-blue-50 ${
                 link.featured
-                  ? 'border-blue-200 bg-blue-50/60 hover:border-blue-300 hover:bg-blue-50'
-                  : 'border-gray-200 bg-white hover:border-blue-200 hover:bg-blue-50/40'
+                  ? 'border-blue-200 bg-blue-50/60 hover:border-blue-300 hover:bg-blue-50 active:bg-blue-100'
+                  : 'border-gray-200 bg-white hover:border-blue-200 hover:bg-blue-50 active:bg-blue-100/40'
               }`}
             >
               <p

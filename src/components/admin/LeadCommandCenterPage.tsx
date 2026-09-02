@@ -384,7 +384,7 @@ function LeadRowActions({
       <button
         type="button"
         onClick={() => onPreview(lead)}
-        className="rounded-md border border-gray-300 px-2 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50"
+        className="rounded-md border border-gray-300 px-2 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50 active:bg-gray-100"
       >
         Preview
       </button>
@@ -513,7 +513,7 @@ function FilterChipButton({
           ? tone === 'purple'
             ? 'border-violet-600 bg-violet-600 text-white'
             : 'border-blue-600 bg-blue-600 text-white'
-          : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50'
+          : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50 active:bg-gray-100'
       }`}
     >
       {label}
@@ -553,7 +553,7 @@ const LeadTableRow = memo(function LeadTableRow({
 
   return (
     <tr
-      className={`cursor-pointer align-top hover:bg-gray-50 ${isSelected ? 'bg-blue-50/60' : ''}`}
+      className={`cursor-pointer align-top hover:bg-gray-50 active:bg-gray-100 ${isSelected ? 'bg-blue-50/60' : ''}`}
       onClick={() => onPreview(lead)}
     >
       <td className={`w-10 px-3 ${rowPaddingClass}`}>
@@ -654,7 +654,7 @@ const LeadMobileCard = memo(function LeadMobileCard({
 
   return (
     <article
-      className={`cursor-pointer rounded-lg border bg-white ${cardPaddingClass} transition-colors hover:bg-gray-50/80 ${
+      className={`cursor-pointer rounded-lg border bg-white ${cardPaddingClass} transition-colors hover:bg-gray-50 active:bg-gray-100/80 ${
         isSelected ? 'border-blue-300 bg-blue-50/40' : 'border-gray-200'
       }`}
       onClick={() => onPreview(lead)}
@@ -1402,20 +1402,20 @@ export default function LeadCommandCenterPage() {
     <>
       <Link
         href="/admin"
-        className="whitespace-nowrap rounded-lg border border-gray-300 px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 sm:px-3 sm:text-sm"
+        className="whitespace-nowrap rounded-lg border border-gray-300 px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 active:bg-gray-100 sm:px-3 sm:text-sm"
       >
         Admin Home
       </Link>
       <Link
         href="/dashboard/settings"
-        className="whitespace-nowrap rounded-lg border border-gray-300 px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 sm:px-3 sm:text-sm"
+        className="whitespace-nowrap rounded-lg border border-gray-300 px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 active:bg-gray-100 sm:px-3 sm:text-sm"
       >
         Settings
       </Link>
       <button
         type="button"
         onClick={handleSignOut}
-        className="whitespace-nowrap rounded-lg bg-gray-900 px-2.5 py-1.5 text-xs font-medium text-white hover:bg-gray-800 sm:px-3 sm:text-sm"
+        className="whitespace-nowrap rounded-lg bg-gray-900 px-2.5 py-1.5 text-xs font-medium text-white hover:bg-gray-800 active:bg-gray-900 sm:px-3 sm:text-sm"
       >
         Sign Out
       </button>
@@ -1502,7 +1502,7 @@ export default function LeadCommandCenterPage() {
                       className={`shrink-0 rounded-full border px-2.5 py-1 text-xs font-medium transition ${
                         isActive
                           ? 'border-blue-600 bg-blue-600 text-white'
-                          : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50'
+                          : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50 active:bg-gray-100'
                       }`}
                     >
                       {preset.label}
@@ -1515,7 +1515,7 @@ export default function LeadCommandCenterPage() {
                 type="button"
                 onClick={() => setFiltersPanelOpen((current) => !current)}
                 aria-expanded={filtersPanelOpen}
-                className="shrink-0 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 sm:text-sm"
+                className="shrink-0 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 active:bg-gray-100 sm:text-sm"
               >
                 Filters
                 {activeFilterCount > 0 && (
@@ -1567,7 +1567,7 @@ export default function LeadCommandCenterPage() {
                   type="button"
                   onClick={clearAllFilters}
                   disabled={activeFilterCount === 0}
-                  className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 active:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   Clear filters
                 </button>
@@ -1757,7 +1757,7 @@ export default function LeadCommandCenterPage() {
                     type="button"
                     onClick={loadMoreLeads}
                     disabled={leadsLoadingMore || leadsRefreshing}
-                    className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
+                    className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 active:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     {leadsLoadingMore ? 'Loading more…' : 'Load more'}
                   </button>
@@ -1868,21 +1868,21 @@ export default function LeadCommandCenterPage() {
               <button
                 type="button"
                 onClick={openBulkTags}
-                className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 active:bg-gray-100"
               >
                 Add tags
               </button>
               <button
                 type="button"
                 onClick={openBulkAssignRelationship}
-                className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 active:bg-gray-100"
               >
                 Assign relationship owner
               </button>
               <button
                 type="button"
                 onClick={openBulkStatus}
-                className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 active:bg-gray-100"
               >
                 Change status
               </button>
@@ -1898,21 +1898,21 @@ export default function LeadCommandCenterPage() {
               <button
                 type="button"
                 onClick={openBulkNote}
-                className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+                className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 active:bg-blue-800"
               >
                 Add bulk note
               </button>
               <button
                 type="button"
                 onClick={openBulkDelete}
-                className="rounded-lg border border-red-300 px-4 py-2 text-sm font-medium text-red-700 hover:bg-red-50"
+                className="rounded-lg border border-red-300 px-4 py-2 text-sm font-medium text-red-700 hover:bg-red-50 active:bg-red-100"
               >
                 Delete leads
               </button>
               <button
                 type="button"
                 onClick={clearSelection}
-                className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 active:bg-gray-100"
               >
                 Clear selection
               </button>

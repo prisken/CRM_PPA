@@ -39,7 +39,7 @@ export function AdminPipelineView({
         </p>
         <Link
           href="/admin/leads"
-          className="inline-flex items-center rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-sm font-semibold text-blue-800 hover:bg-blue-100"
+          className="inline-flex items-center rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-sm font-semibold text-blue-800 hover:bg-blue-100 active:bg-blue-200"
         >
           Open Lead Command Center
         </Link>

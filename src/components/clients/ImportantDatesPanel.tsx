@@ -496,7 +496,7 @@ export default function ImportantDatesPanel({
               type="button"
               onClick={openCreate}
               disabled={busy || isLoading}
-              className="rounded-md border border-gray-300 px-2 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-60"
+              className="rounded-md border border-gray-300 px-2 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50 active:bg-gray-100 disabled:opacity-60"
             >
               Add date
             </button>
@@ -515,7 +515,7 @@ export default function ImportantDatesPanel({
               type="button"
               onClick={() => void loadDates()}
               disabled={isLoading}
-              className="shrink-0 self-start rounded border border-red-200 bg-white px-2 py-1 text-xs font-medium text-red-700 hover:bg-red-50 disabled:opacity-60"
+              className="shrink-0 self-start rounded border border-red-200 bg-white px-2 py-1 text-xs font-medium text-red-700 hover:bg-red-50 active:bg-red-100 disabled:opacity-60"
             >
               Retry
             </button>
@@ -566,14 +566,14 @@ export default function ImportantDatesPanel({
                         type="button"
                         onClick={closeEditor}
                         disabled={isSaving}
-                        className="rounded-md border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
+                        className="rounded-md border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 active:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-60"
                       >
                         Cancel
                       </button>
                       <button
                         type="submit"
                         disabled={isSaving}
-                        className="rounded-md bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+                        className="rounded-md bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 active:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-60"
                       >
                         {isSaving ? 'Saving…' : 'Save'}
                       </button>
@@ -648,14 +648,14 @@ export default function ImportantDatesPanel({
               type="button"
               onClick={closeEditor}
               disabled={isSaving}
-              className="rounded-md border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-white disabled:cursor-not-allowed disabled:opacity-60"
+              className="rounded-md border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-white active:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-60"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={isSaving}
-              className="rounded-md bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+              className="rounded-md bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 active:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {isSaving ? 'Saving…' : 'Save'}
             </button>

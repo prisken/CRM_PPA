@@ -130,14 +130,14 @@ export default function UserProfileSettingsPage() {
           <div className="flex flex-wrap gap-3">
             <Link
               href={homeHref}
-              className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+              className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 active:bg-gray-100"
             >
               {profile.role === 'SUPER_ADMIN' ? 'Admin Home' : 'Back to Dashboard'}
             </Link>
             <button
               type="button"
               onClick={handleSignOut}
-              className="rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800"
+              className="rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 active:bg-gray-900"
             >
               Sign Out
             </button>
@@ -176,7 +176,7 @@ export default function UserProfileSettingsPage() {
                 <button
                   type="button"
                   onClick={() => setIsEditing(true)}
-                  className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                  className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 active:bg-gray-100"
                 >
                   Edit
                 </button>
@@ -186,7 +186,7 @@ export default function UserProfileSettingsPage() {
                     type="button"
                     onClick={handleSave}
                     disabled={isSaving || name.trim() === ''}
-                    className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+                    className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 active:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     {isSaving ? 'Saving...' : 'Save'}
                   </button>
@@ -194,7 +194,7 @@ export default function UserProfileSettingsPage() {
                     type="button"
                     onClick={handleCancel}
                     disabled={isSaving}
-                    className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-60"
+                    className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 active:bg-gray-100 disabled:opacity-60"
                   >
                     Cancel
                   </button>

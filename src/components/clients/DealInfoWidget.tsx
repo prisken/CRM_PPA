@@ -389,7 +389,7 @@ function DealCard({
                   type="button"
                   onClick={onEdit}
                   disabled={editDisabled}
-                  className="rounded px-1.5 py-0.5 text-left text-[11px] font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-60"
+                  className="rounded px-1.5 py-0.5 text-left text-[11px] font-medium text-gray-700 hover:bg-gray-50 active:bg-gray-100 disabled:opacity-60"
                 >
                   {editDisabled ? 'Loading…' : 'Edit'}
                 </button>
@@ -397,7 +397,7 @@ function DealCard({
                   type="button"
                   onClick={onDelete}
                   disabled={deletingDealId === deal.id}
-                  className="rounded px-1.5 py-0.5 text-left text-[11px] font-medium text-red-600 hover:bg-red-50 disabled:opacity-60"
+                  className="rounded px-1.5 py-0.5 text-left text-[11px] font-medium text-red-600 hover:bg-red-50 active:bg-red-100 disabled:opacity-60"
                 >
                   {deletingDealId === deal.id ? '…' : 'Delete'}
                 </button>
@@ -698,7 +698,7 @@ export default memo(function DealInfoWidget({
               type="button"
               onClick={openCreateModal}
               disabled={isRefreshing || isLoadingDealDetail}
-              className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+              className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 active:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-60"
             >
               + Add Deal
             </button>

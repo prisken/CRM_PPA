@@ -65,7 +65,7 @@ function SelectedClientChip({
           type="button"
           onClick={onRemove}
           disabled={disabled}
-          className="rounded-md px-2 py-1 text-xs font-medium text-gray-500 hover:bg-gray-200 hover:text-gray-800 disabled:opacity-50"
+          className="rounded-md px-2 py-1 text-xs font-medium text-gray-500 hover:bg-gray-200 active:bg-gray-300 hover:text-gray-800 disabled:opacity-50"
           aria-label={`Remove ${client.name}`}
         >
           Remove
@@ -348,7 +348,7 @@ function ClientMergePickerModal({
                           type="button"
                           onClick={() => handleAddClient(result)}
                           disabled={disabled}
-                          className="flex w-full items-start justify-between gap-3 px-4 py-3 text-left hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
+                          className="flex w-full items-start justify-between gap-3 px-4 py-3 text-left hover:bg-gray-50 active:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-60"
                         >
                           <div className="min-w-0">
                             <p className="font-medium text-gray-900">{result.name}</p>
@@ -387,7 +387,7 @@ function ClientMergePickerModal({
                 type="button"
                 onClick={onClose}
                 disabled={Boolean(addingClientId)}
-                className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-60"
+                className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 active:bg-gray-100 disabled:opacity-60"
               >
                 Cancel
               </button>
@@ -395,7 +395,7 @@ function ClientMergePickerModal({
                 type="button"
                 onClick={() => onContinue(selectedClients)}
                 disabled={!canContinue || Boolean(addingClientId)}
-                className="rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-60"
+                className="rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white hover:bg-violet-700 active:bg-violet-800 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 Continue to merge
               </button>

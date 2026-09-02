@@ -214,7 +214,7 @@ function BulkDeleteLeadsModal({
                 type="button"
                 onClick={onClose}
                 disabled={isSubmitting}
-                className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-60"
+                className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 active:bg-gray-100 disabled:opacity-60"
               >
                 Cancel
               </button>
@@ -223,8 +223,8 @@ function BulkDeleteLeadsModal({
                 disabled={mode === 'archive' ? !canArchive : !canPermanentlyDelete}
                 className={`rounded-lg px-4 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-60 ${
                   mode === 'archive'
-                    ? 'bg-amber-600 hover:bg-amber-700'
-                    : 'bg-red-600 hover:bg-red-700'
+                    ? 'bg-amber-600 hover:bg-amber-700 active:bg-amber-800'
+                    : 'bg-red-600 hover:bg-red-700 active:bg-red-800'
                 }`}
               >
                 {isSubmitting

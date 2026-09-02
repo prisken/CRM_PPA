@@ -65,7 +65,7 @@ function SectionCard({
               }}
               aria-expanded={!isCollapsed}
               aria-controls={contentId}
-              className="-mx-1 flex min-w-0 flex-1 items-start gap-2 rounded-lg px-1 py-0.5 text-left hover:bg-gray-50"
+              className="-mx-1 flex min-w-0 flex-1 items-start gap-2 rounded-lg px-1 py-0.5 text-left hover:bg-gray-50 active:bg-gray-100"
             >
               <span
                 aria-hidden="true"

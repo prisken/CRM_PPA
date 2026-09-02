@@ -475,14 +475,14 @@ function ReviewTab({ clientId }: { clientId: string }) {
         <a
           href={`/clients/${clientId}/reports/pulse?lang=${lang}`}
           target="_blank"
-          className="rounded-md bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700"
+          className="rounded-md bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 active:bg-blue-800"
         >
           {line('Monthly Pulse', '每月脈搏')}
         </a>
         <a
           href={`/clients/${clientId}/reports/review?lang=${lang}`}
           target="_blank"
-          className="rounded-md bg-gray-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-gray-700"
+          className="rounded-md bg-gray-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-gray-700 active:bg-gray-800"
         >
           {line('Quarterly Review', '季度覆核')}
         </a>

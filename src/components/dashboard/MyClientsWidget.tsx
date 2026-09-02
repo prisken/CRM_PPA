@@ -24,7 +24,7 @@ const ClientTableRow = memo(function ClientTableRow({
   client: AssignedClientRow;
 }) {
   return (
-    <tr className="border-b border-gray-100 transition-colors hover:bg-blue-50">
+    <tr className="border-b border-gray-100 transition-colors hover:bg-blue-50 active:bg-blue-100">
       <td className="min-w-0 px-2 py-2">
         <AppLink
           href={`/clients/${client.clientId}`}

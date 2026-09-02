@@ -368,7 +368,7 @@ export default function RecommendationsWidget({
                 type="button"
                 onClick={applyAnswers}
                 disabled={(answeredCount === 0 && skipped.size === 0) || saving}
-                className="rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+                className="rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700 active:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {saving ? 'Applying…' : answeredCount > 0 ? `Apply answers → pick traits` : 'Continue without answers'}
               </button>
@@ -382,7 +382,7 @@ export default function RecommendationsWidget({
                   key={t}
                   type="button"
                   onClick={() => toggleTrait(t)}
-                  className="inline-flex items-center gap-1 rounded-full bg-blue-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-blue-700"
+                  className="inline-flex items-center gap-1 rounded-full bg-blue-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-blue-700 active:bg-blue-800"
                 >
                   {traitLabel(t)} ×
                 </button>
@@ -425,7 +425,7 @@ export default function RecommendationsWidget({
                     <button
                       type="button"
                       onClick={() => toggleGroup(group)}
-                      className="flex w-full items-center justify-between rounded px-2 py-1.5 text-left hover:bg-gray-50"
+                      className="flex w-full items-center justify-between rounded px-2 py-1.5 text-left hover:bg-gray-50 active:bg-gray-100"
                     >
                       <span className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">
                         {group}
@@ -469,7 +469,7 @@ export default function RecommendationsWidget({
               type="button"
               onClick={runRecommendations}
               disabled={!hasTraits || loadingRecs}
-              className="rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+              className="rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700 active:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {loadingRecs ? 'Scoring…' : hasTraits ? 'Get top 5 recommendations' : 'Pick traits first'}
             </button>
@@ -516,7 +516,7 @@ export default function RecommendationsWidget({
                           className={`rounded border px-2 py-1 text-xs font-medium ${
                             inShortlist
                               ? 'cursor-default border-green-300 bg-green-50 text-green-700'
-                              : 'border-blue-300 bg-white text-blue-700 hover:bg-blue-50'
+                              : 'border-blue-300 bg-white text-blue-700 hover:bg-blue-50 active:bg-blue-100'
                           }`}
                         >
                           {inShortlist ? '✓ Shortlisted' : '+ Add to shortlist'}
@@ -645,7 +645,7 @@ function ComparisonPanel({
                     className={`rounded border px-1.5 py-0.5 text-[10px] font-medium ${
                       inList
                         ? 'cursor-default border-green-300 bg-green-50 text-green-700'
-                        : 'border-blue-300 bg-white text-blue-700 hover:bg-blue-50'
+                        : 'border-blue-300 bg-white text-blue-700 hover:bg-blue-50 active:bg-blue-100'
                     }`}
                   >
                     {inList ? '✓ Added' : '+ Add'}

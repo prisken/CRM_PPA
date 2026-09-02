@@ -436,7 +436,7 @@ function AddImportantDateFromCalendarModalInner({
                               setOwnerQuery(client.name);
                               setOwnerError(null);
                             }}
-                            className={`flex w-full flex-col px-3 py-2 text-left text-sm hover:bg-gray-50 disabled:opacity-60 ${
+                            className={`flex w-full flex-col px-3 py-2 text-left text-sm hover:bg-gray-50 active:bg-gray-100 disabled:opacity-60 ${
                               ownerId === client.clientId ? 'bg-blue-50' : ''
                             }`}
                           >
@@ -603,7 +603,7 @@ function AddImportantDateFromCalendarModalInner({
                 type="button"
                 onClick={onClose}
                 disabled={isSubmitting}
-                className="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
+                className="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 active:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 Cancel
               </button>
@@ -613,7 +613,7 @@ function AddImportantDateFromCalendarModalInner({
                   isSubmitting ||
                   (!isSuperAdmin && relationshipOwners.length === 0)
                 }
-                className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+                className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 active:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {isSubmitting ? 'Saving…' : 'Create'}
               </button>

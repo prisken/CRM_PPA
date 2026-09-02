@@ -25,7 +25,7 @@ const PipelineClientCard = memo(function PipelineClientCard({
   return (
     <Link
       href={`/clients/${client.client_id}`}
-      className="block cursor-pointer rounded-lg border border-gray-200 bg-white p-3 shadow-sm transition hover:border-blue-400 hover:bg-blue-50 hover:shadow-md"
+      className="block cursor-pointer rounded-lg border border-gray-200 bg-white p-3 shadow-sm transition hover:border-blue-400 hover:bg-blue-50 active:bg-blue-100 hover:shadow-md"
     >
       <p className="text-sm font-medium text-gray-900">{client.name}</p>
       {client.company && (
@@ -223,14 +223,14 @@ export default function MasterPipelineView({
         <div className="flex min-w-0 flex-wrap gap-2 sm:gap-3">
           <Link
             href="/admin/leads"
-            className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-medium text-blue-800 hover:bg-blue-100"
+            className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-medium text-blue-800 hover:bg-blue-100 active:bg-blue-200"
           >
             Lead Command Center
           </Link>
           <button
             type="button"
             onClick={onAddClick}
-            className="rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700"
+            className="rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700 active:bg-blue-800"
           >
             + Add Lead / Client
           </button>

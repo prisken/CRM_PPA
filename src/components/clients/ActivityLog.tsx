@@ -201,7 +201,7 @@ function ActivityLogItem({
                   setError(null);
                   setIsEditing(true);
                 }}
-                className="rounded border border-gray-300 px-2 py-0.5 text-xs font-medium text-gray-700 hover:bg-white"
+                className="rounded border border-gray-300 px-2 py-0.5 text-xs font-medium text-gray-700 hover:bg-white active:bg-gray-100"
               >
                 Edit
               </button>
@@ -209,7 +209,7 @@ function ActivityLogItem({
                 type="button"
                 onClick={handleDelete}
                 disabled={isDeleting}
-                className="rounded border border-red-200 px-2 py-0.5 text-xs font-medium text-red-600 hover:bg-red-50 disabled:opacity-60"
+                className="rounded border border-red-200 px-2 py-0.5 text-xs font-medium text-red-600 hover:bg-red-50 active:bg-red-100 disabled:opacity-60"
               >
                 {isDeleting ? 'Deleting...' : 'Delete'}
               </button>
@@ -232,7 +232,7 @@ function ActivityLogItem({
               type="button"
               onClick={handleSaveEdit}
               disabled={isSaving}
-              className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-60"
+              className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 active:bg-blue-800 disabled:opacity-60"
             >
               {isSaving ? 'Saving...' : 'Save'}
             </button>
@@ -244,7 +244,7 @@ function ActivityLogItem({
                 setError(null);
               }}
               disabled={isSaving}
-              className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-white disabled:opacity-60"
+              className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-white active:bg-gray-100 disabled:opacity-60"
             >
               Cancel
             </button>
@@ -377,7 +377,7 @@ export default function ActivityLog({
             <button
               type="submit"
               disabled={isSubmitting}
-              className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-60 sm:ml-auto"
+              className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 active:bg-blue-800 disabled:opacity-60 sm:ml-auto"
             >
               {isSubmitting ? 'Logging...' : 'Log Interaction'}
             </button>
@@ -394,7 +394,7 @@ export default function ActivityLog({
             className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
               activeFilter === option.value
                 ? 'bg-blue-600 text-white'
-                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200 active:bg-gray-300'
             }`}
           >
             {option.label}

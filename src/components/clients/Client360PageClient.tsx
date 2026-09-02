@@ -434,21 +434,21 @@ function Client360PageClientInner({
               </AppLink>
               {isSuperAdmin && (
                 <details className="relative">
-                  <summary className="cursor-pointer list-none rounded-lg border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 [&::-webkit-details-marker]:hidden">
+                  <summary className="cursor-pointer list-none rounded-lg border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 active:bg-gray-100 [&::-webkit-details-marker]:hidden">
                     More actions
                   </summary>
                   <div className="absolute right-0 z-10 mt-1 min-w-[10rem] rounded-lg border border-gray-200 bg-white py-1 shadow-lg">
                     <button
                       type="button"
                       onClick={handleOpenMergePicker}
-                      className="block w-full px-3 py-2 text-left text-sm text-violet-800 hover:bg-violet-50"
+                      className="block w-full px-3 py-2 text-left text-sm text-violet-800 hover:bg-violet-50 active:bg-violet-100"
                     >
                       Merge clients
                     </button>
                     <button
                       type="button"
                       onClick={handleOpenDeletionModal}
-                      className="block w-full px-3 py-2 text-left text-sm text-red-700 hover:bg-red-50"
+                      className="block w-full px-3 py-2 text-left text-sm text-red-700 hover:bg-red-50 active:bg-red-100"
                     >
                       Archive client
                     </button>
@@ -487,7 +487,7 @@ function Client360PageClientInner({
                       setIsAdvanceModalOpen(true);
                     }}
                     disabled={isUpdatingStage}
-                    className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+                    className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700 active:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     Move to Next Stage
                   </button>

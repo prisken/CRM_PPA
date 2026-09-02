@@ -191,27 +191,27 @@ export default function SuperAdminDashboardPage() {
     <>
       <Link
         href="/admin/leads"
-        className="whitespace-nowrap rounded-lg border border-blue-200 bg-blue-50 px-2.5 py-1.5 text-xs font-semibold text-blue-800 hover:bg-blue-100 sm:px-3 sm:text-sm"
+        className="whitespace-nowrap rounded-lg border border-blue-200 bg-blue-50 px-2.5 py-1.5 text-xs font-semibold text-blue-800 hover:bg-blue-100 active:bg-blue-200 sm:px-3 sm:text-sm"
       >
         Lead Command Center
       </Link>
       <button
         type="button"
         onClick={handleOpenAddClient}
-        className="whitespace-nowrap rounded-lg bg-blue-600 px-2.5 py-1.5 text-xs font-medium text-white hover:bg-blue-700 sm:px-3 sm:text-sm"
+        className="whitespace-nowrap rounded-lg bg-blue-600 px-2.5 py-1.5 text-xs font-medium text-white hover:bg-blue-700 active:bg-blue-800 sm:px-3 sm:text-sm"
       >
         Add Lead / Client
       </button>
       <Link
         href="/dashboard/settings"
-        className="whitespace-nowrap rounded-lg border border-gray-300 px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 sm:px-3 sm:text-sm"
+        className="whitespace-nowrap rounded-lg border border-gray-300 px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 active:bg-gray-100 sm:px-3 sm:text-sm"
       >
         Settings
       </Link>
       <button
         type="button"
         onClick={handleSignOut}
-        className="whitespace-nowrap rounded-lg bg-gray-900 px-2.5 py-1.5 text-xs font-medium text-white hover:bg-gray-800 sm:px-3 sm:text-sm"
+        className="whitespace-nowrap rounded-lg bg-gray-900 px-2.5 py-1.5 text-xs font-medium text-white hover:bg-gray-800 active:bg-gray-900 sm:px-3 sm:text-sm"
       >
         Sign Out
       </button>

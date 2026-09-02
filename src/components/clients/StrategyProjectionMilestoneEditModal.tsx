@@ -705,7 +705,7 @@ function StrategyProjectionMilestoneEditModalForm({
 
                     return (
                       <li key={step.id}>
-                        <label className="flex cursor-pointer gap-2.5 rounded-lg border border-gray-200 bg-white px-2.5 py-2 hover:bg-gray-50">
+                        <label className="flex cursor-pointer gap-2.5 rounded-lg border border-gray-200 bg-white px-2.5 py-2 hover:bg-gray-50 active:bg-gray-100">
                           <input
                             type="checkbox"
                             className="mt-1 h-4 w-4 rounded border-gray-300 text-blue-600 focus-visible:ring-blue-500"
@@ -758,7 +758,7 @@ function StrategyProjectionMilestoneEditModalForm({
 
                     return (
                       <li key={expense.id}>
-                        <label className="flex cursor-pointer gap-2.5 rounded-lg border border-gray-200 bg-white px-2.5 py-2 hover:bg-gray-50">
+                        <label className="flex cursor-pointer gap-2.5 rounded-lg border border-gray-200 bg-white px-2.5 py-2 hover:bg-gray-50 active:bg-gray-100">
                           <input
                             type="checkbox"
                             className="mt-1 h-4 w-4 rounded border-gray-300 text-blue-600 focus-visible:ring-blue-500"
@@ -805,7 +805,7 @@ function StrategyProjectionMilestoneEditModalForm({
                   type="button"
                   onClick={applySourceSuggestions}
                   disabled={!hasSourceSuggestion}
-                  className="rounded-lg border border-blue-200 bg-blue-50 px-2.5 py-1.5 text-xs font-medium text-blue-800 hover:bg-blue-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-1 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="rounded-lg border border-blue-200 bg-blue-50 px-2.5 py-1.5 text-xs font-medium text-blue-800 hover:bg-blue-100 active:bg-blue-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-1 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   Use suggested values
                 </button>
@@ -1248,14 +1248,14 @@ function StrategyProjectionMilestoneEditModalForm({
                 type="button"
                 onClick={onClose}
                 disabled={isSubmitting}
-                className="rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-1 disabled:opacity-60"
+                className="rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 active:bg-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-1 disabled:opacity-60"
               >
                 Cancel
               </button>
               <button
                 type="submit"
                 disabled={isSubmitting}
-                className="rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-1 disabled:opacity-60"
+                className="rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700 active:bg-blue-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-1 disabled:opacity-60"
               >
                 {isSubmitting
                   ? 'Saving…'

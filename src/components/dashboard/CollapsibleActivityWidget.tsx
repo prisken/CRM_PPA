@@ -222,7 +222,7 @@ export default function CollapsibleActivityWidget({
                 {({ open }) => (
                   <>
                     <DisclosureButton
-                      className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left hover:bg-gray-50"
+                      className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left hover:bg-gray-50 active:bg-gray-100"
                       onClick={() => {
                         if (!open) {
                           void markClientActivitiesAsRead(group.clientId);
@@ -249,7 +249,7 @@ export default function CollapsibleActivityWidget({
                           <li key={activity.activityId}>
                             <Link
                               href={`/clients/${group.clientId}#activity-notes`}
-                              className="flex items-start gap-2 rounded-md px-2 py-1.5 transition hover:bg-white"
+                              className="flex items-start gap-2 rounded-md px-2 py-1.5 transition hover:bg-white active:bg-gray-100"
                             >
                               {activity.isUnread ? <UnreadIndicator /> : null}
                               <div className="min-w-0">

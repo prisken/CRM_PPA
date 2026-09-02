@@ -231,7 +231,7 @@ function DuplicateGroupSection({
             <button
               type="button"
               onClick={() => onMerge(group)}
-              className="rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700"
+              className="rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700 active:bg-blue-800"
             >
               Merge
             </button>
@@ -239,7 +239,7 @@ function DuplicateGroupSection({
           <button
             type="button"
             onClick={handleOpenAllClients}
-            className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-white"
+            className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-white active:bg-gray-100"
           >
             Open all
           </button>

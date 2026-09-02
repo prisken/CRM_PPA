@@ -35,7 +35,7 @@ export default function AuthRequiredMessage({
           type="button"
           onClick={handleBackToSignIn}
           disabled={isRedirecting}
-          className="inline-block rounded-md bg-blue-600 px-4 py-2 font-semibold text-white transition hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 disabled:cursor-not-allowed disabled:opacity-60"
+          className="inline-block rounded-md bg-blue-600 px-4 py-2 font-semibold text-white transition hover:bg-blue-700 active:bg-blue-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 disabled:cursor-not-allowed disabled:opacity-60"
         >
           {isRedirecting ? 'Redirecting...' : 'Back to Sign In'}
         </button>

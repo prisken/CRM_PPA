@@ -133,7 +133,7 @@ function StrategyErrorState({
         <button
           type="button"
           onClick={onRetry}
-          className="rounded-lg border border-red-200 bg-white px-3 py-1.5 text-xs font-medium text-red-700 hover:bg-red-50"
+          className="rounded-lg border border-red-200 bg-white px-3 py-1.5 text-xs font-medium text-red-700 hover:bg-red-50 active:bg-red-100"
         >
           Try again
         </button>
@@ -483,7 +483,7 @@ export default memo(function ClientStrategyBuilderWidget({
                 type="button"
                 onClick={openCreateModal}
                 aria-label="Create new strategy plan"
-                className="shrink-0 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-1"
+                className="shrink-0 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 active:bg-blue-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-1"
               >
                 + New Strategy
               </button>
@@ -506,7 +506,7 @@ export default memo(function ClientStrategyBuilderWidget({
                     type="button"
                     onClick={openCreateModal}
                     aria-label="Create strategy plan"
-                    className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-1"
+                    className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 active:bg-blue-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-1"
                   >
                     Create strategy plan
                   </button>

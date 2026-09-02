@@ -224,7 +224,7 @@ export default function UserManagementModal({
               type="button"
               onClick={onClose}
               disabled={isSubmitting}
-              className="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-60"
+              className="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 active:bg-gray-100 disabled:opacity-60"
             >
               Cancel
             </button>
@@ -233,7 +233,7 @@ export default function UserManagementModal({
                 type="button"
                 onClick={handleDeactivate}
                 disabled={!canDeactivate}
-                className="rounded-lg bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-60"
+                className="rounded-lg bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-700 active:bg-amber-800 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {isSubmitting ? 'Deactivating...' : 'Deactivate User'}
               </button>
@@ -242,7 +242,7 @@ export default function UserManagementModal({
                 type="button"
                 onClick={handlePermanentDelete}
                 disabled={!canDelete}
-                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
+                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 active:bg-red-800 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {isSubmitting ? 'Deleting...' : 'Permanently Delete'}
               </button>

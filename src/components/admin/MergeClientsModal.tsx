@@ -766,7 +766,7 @@ function MergeClientsModal(props: MergeClientsModalProps) {
                 {optionsForField.map((option) => (
                   <label
                     key={`${field.key}-${option.source}`}
-                    className="flex cursor-pointer items-start gap-2 rounded-lg border border-gray-200 p-3 hover:bg-gray-50"
+                    className="flex cursor-pointer items-start gap-2 rounded-lg border border-gray-200 p-3 hover:bg-gray-50 active:bg-gray-100"
                   >
                     <input
                       type="radio"
@@ -1183,7 +1183,7 @@ function MergeClientsModal(props: MergeClientsModalProps) {
                 type="button"
                 onClick={onClose}
                 disabled={isSubmitting}
-                className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-60"
+                className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 active:bg-gray-100 disabled:opacity-60"
               >
                 Cancel
               </button>
@@ -1195,7 +1195,7 @@ function MergeClientsModal(props: MergeClientsModalProps) {
                     setWizardStep((current) => (current - 1) as WizardStep)
                   }
                   disabled={isSubmitting}
-                  className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-60"
+                  className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 active:bg-gray-100 disabled:opacity-60"
                 >
                   Back
                 </button>
@@ -1216,7 +1216,7 @@ function MergeClientsModal(props: MergeClientsModalProps) {
                     (wizardStep === 1 && !canAdvanceStep1) ||
                     (wizardStep === 2 && !canAdvanceStep2)
                   }
-                  className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+                  className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 active:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   Continue
                 </button>
@@ -1225,7 +1225,7 @@ function MergeClientsModal(props: MergeClientsModalProps) {
                   type="submit"
                   form="merge-clients-form"
                   disabled={isManualMulti ? !canSubmitManualMulti : !canSubmitPairwise}
-                  className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+                  className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 active:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   {isSubmitting ? 'Merging...' : 'Merge clients'}
                 </button>

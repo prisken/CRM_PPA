@@ -483,7 +483,7 @@ export default function ImportantDatesCalendarWidget({
               type="button"
               onClick={() => setIsAddModalOpen(true)}
               disabled={loading && !hasLoadedOnce}
-              className="mt-2 rounded-md border border-gray-300 px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-60"
+              className="mt-2 rounded-md border border-gray-300 px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50 active:bg-gray-100 disabled:opacity-60"
             >
               + Add Important Date
             </button>
@@ -495,7 +495,7 @@ export default function ImportantDatesCalendarWidget({
             type="button"
             onClick={goToPreviousMonth}
             disabled={loading}
-            className="rounded-md border border-gray-300 p-1.5 text-gray-600 hover:bg-gray-50 disabled:opacity-60"
+            className="rounded-md border border-gray-300 p-1.5 text-gray-600 hover:bg-gray-50 active:bg-gray-100 disabled:opacity-60"
             aria-label="Previous month"
           >
             <ChevronLeft className="h-4 w-4" />
@@ -521,7 +521,7 @@ export default function ImportantDatesCalendarWidget({
             type="button"
             onClick={goToNextMonth}
             disabled={loading}
-            className="rounded-md border border-gray-300 p-1.5 text-gray-600 hover:bg-gray-50 disabled:opacity-60"
+            className="rounded-md border border-gray-300 p-1.5 text-gray-600 hover:bg-gray-50 active:bg-gray-100 disabled:opacity-60"
             aria-label="Next month"
           >
             <ChevronRight className="h-4 w-4" />
@@ -606,7 +606,7 @@ export default function ImportantDatesCalendarWidget({
             <button
               type="button"
               onClick={clearFilters}
-              className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
+              className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 active:bg-gray-100"
             >
               Clear filters
             </button>
@@ -629,7 +629,7 @@ export default function ImportantDatesCalendarWidget({
             type="button"
             onClick={() => setRetryToken((value) => value + 1)}
             disabled={loading}
-            className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-md border border-red-200 bg-white px-3 py-1.5 text-xs font-medium text-red-700 hover:bg-red-50 disabled:opacity-60"
+            className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-md border border-red-200 bg-white px-3 py-1.5 text-xs font-medium text-red-700 hover:bg-red-50 active:bg-red-100 disabled:opacity-60"
           >
             {loading ? (
               <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />

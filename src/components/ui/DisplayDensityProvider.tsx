@@ -106,7 +106,7 @@ export const DisplayDensityToggle = memo(function DisplayDensityToggle({
         className={`rounded-md px-2.5 py-1 text-xs font-medium transition ${
           density === 'compact'
             ? 'bg-gray-900 text-white'
-            : 'text-gray-700 hover:bg-gray-50'
+            : 'text-gray-700 hover:bg-gray-50 active:bg-gray-100'
         }`}
       >
         Compact
@@ -118,7 +118,7 @@ export const DisplayDensityToggle = memo(function DisplayDensityToggle({
         className={`rounded-md px-2.5 py-1 text-xs font-medium transition ${
           density === 'comfortable'
             ? 'bg-gray-900 text-white'
-            : 'text-gray-700 hover:bg-gray-50'
+            : 'text-gray-700 hover:bg-gray-50 active:bg-gray-100'
         }`}
       >
         Comfortable

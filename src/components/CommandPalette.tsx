@@ -108,7 +108,7 @@ function SearchResultRow({
         onClick={onSelect}
         onMouseEnter={onHover}
         className={`flex w-full flex-col gap-2 rounded-lg px-3 py-3 text-left transition sm:px-4 ${
-          isActive ? 'bg-blue-50 ring-1 ring-blue-200' : 'hover:bg-gray-50'
+          isActive ? 'bg-blue-50 ring-1 ring-blue-200' : 'hover:bg-gray-50 active:bg-gray-100'
         }`}
       >
         <div className="flex items-start justify-between gap-3">

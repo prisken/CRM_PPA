@@ -185,7 +185,7 @@ export default function StrategyAndTasks({
               type="button"
               onClick={handleSaveStrategy}
               disabled={isSavingStrategy}
-              className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-60"
+              className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 active:bg-blue-800 disabled:opacity-60"
             >
               {isSavingStrategy ? 'Saving...' : 'Save Strategy'}
             </button>
@@ -232,7 +232,7 @@ export default function StrategyAndTasks({
             <button
               type="button"
               onClick={openCreateTaskModal}
-              className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700"
+              className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 active:bg-blue-800"
             >
               + Create Task
             </button>
@@ -298,7 +298,7 @@ export default function StrategyAndTasks({
                         <button
                           type="button"
                           onClick={() => openEditTaskModal(task)}
-                          className="rounded border border-gray-300 px-2 py-1 text-xs font-medium text-gray-700 hover:bg-white"
+                          className="rounded border border-gray-300 px-2 py-1 text-xs font-medium text-gray-700 hover:bg-white active:bg-gray-100"
                         >
                           Edit
                         </button>
@@ -306,7 +306,7 @@ export default function StrategyAndTasks({
                           type="button"
                           onClick={() => handleDeleteTask(task.id)}
                           disabled={isDeleting}
-                          className="rounded border border-red-200 px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-50 disabled:opacity-60"
+                          className="rounded border border-red-200 px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-50 active:bg-red-100 disabled:opacity-60"
                         >
                           {isDeleting ? 'Deleting...' : 'Delete'}
                         </button>

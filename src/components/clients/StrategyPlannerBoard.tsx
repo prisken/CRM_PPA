@@ -787,7 +787,7 @@ function AdjacentConnectorStack({
       className={focusableControlClass(
         hasConnections
           ? 'rounded-sm text-[10px] font-medium text-violet-700 underline-offset-2 hover:text-violet-900 hover:underline'
-          : 'rounded-md border border-dashed border-violet-300 bg-violet-50/80 px-2 py-1 text-[11px] font-medium text-violet-800 hover:border-violet-400 hover:bg-violet-50'
+          : 'rounded-md border border-dashed border-violet-300 bg-violet-50/80 px-2 py-1 text-[11px] font-medium text-violet-800 hover:border-violet-400 hover:bg-violet-50 active:bg-violet-100'
       )}
     >
       {hasConnections ? '+ Add another' : 'Add connection'}
@@ -1263,7 +1263,7 @@ function StrategyPlannerBoard({
             onClick={onAddStep}
             aria-label="Add strategy step"
             className={focusableControlClass(
-              'rounded-md bg-blue-600 px-2 py-1 text-[11px] font-medium text-white hover:bg-blue-700'
+              'rounded-md bg-blue-600 px-2 py-1 text-[11px] font-medium text-white hover:bg-blue-700 active:bg-blue-800'
             )}
           >
             + Step
@@ -1282,7 +1282,7 @@ function StrategyPlannerBoard({
             }
             title={connectionDisabledReason}
             className={focusableControlClass(
-              'rounded-md border border-gray-300 bg-white px-2 py-1 text-[11px] font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60'
+              'rounded-md border border-gray-300 bg-white px-2 py-1 text-[11px] font-medium text-gray-700 hover:bg-gray-50 active:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-60'
             )}
           >
             + Connection
@@ -1294,7 +1294,7 @@ function StrategyPlannerBoard({
             onClick={onAddExpense}
             aria-label="Add strategy expense"
             className={focusableControlClass(
-              'rounded-md border border-gray-300 bg-white px-2 py-1 text-[11px] font-medium text-gray-700 hover:bg-gray-50'
+              'rounded-md border border-gray-300 bg-white px-2 py-1 text-[11px] font-medium text-gray-700 hover:bg-gray-50 active:bg-gray-100'
             )}
           >
             + Expense
@@ -1415,7 +1415,7 @@ function StrategyPlannerBoard({
                     onClick={onAddStep}
                     aria-label="Add first strategy step"
                     className={focusableControlClass(
-                      'rounded-md bg-blue-600 px-2.5 py-1 text-[11px] font-medium text-white hover:bg-blue-700'
+                      'rounded-md bg-blue-600 px-2.5 py-1 text-[11px] font-medium text-white hover:bg-blue-700 active:bg-blue-800'
                     )}
                   >
                     Add first step

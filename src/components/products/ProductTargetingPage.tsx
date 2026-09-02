@@ -196,7 +196,7 @@ export default function ProductTargetingPage() {
                       <Link
                         key={m.client_id}
                         href={`/clients/${m.client_id}`}
-                        className="block rounded-md border border-gray-200 bg-gray-50 p-3 transition-colors hover:border-blue-300 hover:bg-blue-50/40"
+                        className="block rounded-md border border-gray-200 bg-gray-50 p-3 transition-colors hover:border-blue-300 hover:bg-blue-50 active:bg-blue-100/40"
                       >
                         <div className="flex items-center justify-between gap-2">
                           <div className="min-w-0">

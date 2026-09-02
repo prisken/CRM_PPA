@@ -181,14 +181,14 @@ export default memo(function ClientDetailsWidget({
                     type="button"
                     onClick={saveNextStep}
                     disabled={savingNext}
-                    className="rounded-md bg-blue-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-60"
+                    className="rounded-md bg-blue-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-blue-700 active:bg-blue-800 disabled:opacity-60"
                   >
                     {savingNext ? 'Saving…' : 'Save'}
                   </button>
                   <button
                     type="button"
                     onClick={() => setEditingNext(false)}
-                    className="rounded-md border border-gray-300 px-2.5 py-1 text-xs text-gray-600 hover:bg-gray-50"
+                    className="rounded-md border border-gray-300 px-2.5 py-1 text-xs text-gray-600 hover:bg-gray-50 active:bg-gray-100"
                   >
                     Cancel
                   </button>
@@ -230,7 +230,7 @@ export default memo(function ClientDetailsWidget({
             <button
               type="button"
               onClick={() => setIsEditModalOpen(true)}
-              className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
+              className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 active:bg-gray-100"
             >
               Edit
             </button>

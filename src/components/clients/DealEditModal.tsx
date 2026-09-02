@@ -923,7 +923,7 @@ function DealEditModalForm({
                     <button
                       type="button"
                       onClick={handleApplyTemplateClick}
-                      className="rounded-lg border border-blue-200 bg-white px-3 py-1.5 text-xs font-medium text-blue-700 hover:bg-blue-50"
+                      className="rounded-lg border border-blue-200 bg-white px-3 py-1.5 text-xs font-medium text-blue-700 hover:bg-blue-50 active:bg-blue-100"
                     >
                       Apply {DEAL_TYPE_LABELS[dealType]} template
                     </button>
@@ -931,7 +931,7 @@ function DealEditModalForm({
                       <button
                         type="button"
                         onClick={handleSplitDoctorPool}
-                        className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
+                        className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 active:bg-gray-100"
                       >
                         Split doctor pool evenly
                       </button>
@@ -941,7 +941,7 @@ function DealEditModalForm({
                         key={button.role}
                         type="button"
                         onClick={() => addParticipantRow(button.role)}
-                        className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
+                        className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 active:bg-gray-100"
                       >
                         {button.label}
                       </button>
@@ -966,14 +966,14 @@ function DealEditModalForm({
                       <button
                         type="button"
                         onClick={executeApplyTemplate}
-                        className="rounded-lg bg-amber-700 px-3 py-1.5 text-xs font-medium text-white hover:bg-amber-800"
+                        className="rounded-lg bg-amber-700 px-3 py-1.5 text-xs font-medium text-white hover:bg-amber-800 active:bg-amber-900"
                       >
                         Continue
                       </button>
                       <button
                         type="button"
                         onClick={() => setTemplateApplyConfirmVisible(false)}
-                        className="rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-medium text-amber-900 hover:bg-amber-100"
+                        className="rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-medium text-amber-900 hover:bg-amber-100 active:bg-amber-200"
                       >
                         Cancel
                       </button>
@@ -1031,14 +1031,14 @@ function DealEditModalForm({
                 type="button"
                 onClick={onClose}
                 disabled={isSubmitting}
-                className="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-60"
+                className="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 active:bg-gray-100 disabled:opacity-60"
               >
                 Cancel
               </button>
               <button
                 type="submit"
                 disabled={submitDisabled}
-                className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-60"
+                className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 active:bg-blue-800 disabled:opacity-60"
               >
                 {isSubmitting ? 'Saving...' : isEditing ? 'Save Deal' : 'Add Deal'}
               </button>
@@ -1250,7 +1250,7 @@ function ParticipantRowEditor({
         <button
           type="button"
           onClick={onRemove}
-          className="rounded px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-50"
+          className="rounded px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-50 active:bg-red-100"
         >
           Remove
         </button>

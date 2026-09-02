@@ -154,7 +154,7 @@ function ContactField({
         <button
           type="button"
           onClick={() => onCopy(list[0], label)}
-          className="shrink-0 rounded-md border border-gray-200 px-2 py-1 text-xs font-medium text-gray-600 hover:bg-gray-50"
+          className="shrink-0 rounded-md border border-gray-200 px-2 py-1 text-xs font-medium text-gray-600 hover:bg-gray-50 active:bg-gray-100"
         >
           Copy
         </button>
@@ -387,7 +387,7 @@ function LeadPreviewDrawer({
           <button
             type="button"
             onClick={onClose}
-            className="rounded-md border border-gray-300 px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50"
+            className="rounded-md border border-gray-300 px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50 active:bg-gray-100"
           >
             Close
           </button>
@@ -410,7 +410,7 @@ function LeadPreviewDrawer({
               <button
                 type="button"
                 onClick={() => setReloadKey((key) => key + 1)}
-                className="rounded-md border border-red-300 bg-white px-3 py-1.5 text-xs font-medium text-red-700 hover:bg-red-50"
+                className="rounded-md border border-red-300 bg-white px-3 py-1.5 text-xs font-medium text-red-700 hover:bg-red-50 active:bg-red-100"
               >
                 Retry
               </button>
@@ -490,7 +490,7 @@ function LeadPreviewDrawer({
                   <div className="flex flex-wrap gap-2 border-t border-gray-100 pt-3">
                     <Link
                       href={`/clients/${lead.clientId}`}
-                      className="inline-flex rounded-md bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700"
+                      className="inline-flex rounded-md bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 active:bg-blue-800"
                     >
                       Open Client 360
                     </Link>
@@ -498,7 +498,7 @@ function LeadPreviewDrawer({
                       <button
                         type="button"
                         onClick={() => onAddNote(lead)}
-                        className="rounded-md border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
+                        className="rounded-md border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 active:bg-gray-100"
                       >
                         Add quick note
                       </button>
@@ -594,7 +594,7 @@ function LeadPreviewDrawer({
                   <button
                     type="submit"
                     disabled={isSavingFollowUp}
-                    className="rounded-md bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+                    className="rounded-md bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 active:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     {isSavingFollowUp ? 'Saving...' : 'Save follow-up'}
                   </button>

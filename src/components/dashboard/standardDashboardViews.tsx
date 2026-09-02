@@ -388,7 +388,7 @@ export function DashboardReturnablesView() {
         </p>
         <Link
           href="/my-statements"
-          className="mt-3 inline-flex rounded-lg border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+          className="mt-3 inline-flex rounded-lg border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 active:bg-gray-100"
         >
           Open Returnable Statements
         </Link>

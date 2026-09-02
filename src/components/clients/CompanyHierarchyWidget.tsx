@@ -352,7 +352,7 @@ export default memo(function CompanyHierarchyWidget({
                 <button
                   type="submit"
                   disabled={isSubmitting || isRefreshing}
-                  className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+                  className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 active:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   {isSubmitting
                     ? 'Adding...'
@@ -368,7 +368,7 @@ export default memo(function CompanyHierarchyWidget({
                     setFullName('');
                     setRoleInCompany('');
                   }}
-                  className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
+                  className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 active:bg-gray-100"
                 >
                   Cancel
                 </button>

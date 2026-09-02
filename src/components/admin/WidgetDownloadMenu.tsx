@@ -28,7 +28,7 @@ export default function WidgetDownloadMenu({ links }: { links: DownloadLink[] })
       <button
         type="button"
         onClick={() => setOpen((prev) => !prev)}
-        className="rounded-lg p-1.5 text-gray-500 transition hover:bg-gray-100 hover:text-gray-700"
+        className="rounded-lg p-1.5 text-gray-500 transition hover:bg-gray-100 active:bg-gray-200 hover:text-gray-700"
         aria-label="Download options"
       >
         <MoreVertical className="h-5 w-5" />
@@ -41,7 +41,7 @@ export default function WidgetDownloadMenu({ links }: { links: DownloadLink[] })
               key={link.href}
               href={link.href}
               download
-              className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+              className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 active:bg-gray-100"
               onClick={() => setOpen(false)}
             >
               {link.label}

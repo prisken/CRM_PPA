@@ -77,7 +77,7 @@ function AssignmentRow({
         <button
           type="button"
           onClick={() => onRemove(user.assignment_id)}
-          className="shrink-0 rounded p-0.5 text-gray-400 hover:bg-gray-200 hover:text-red-600"
+          className="shrink-0 rounded p-0.5 text-gray-400 hover:bg-gray-200 active:bg-gray-300 hover:text-red-600"
           aria-label={`Remove ${user.name}`}
         >
           <X className="h-3.5 w-3.5" />
@@ -222,7 +222,7 @@ export default memo(function AssignedTeamWidget({
               setError(null);
               setIsModalOpen(true);
             }}
-            className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700"
+            className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 active:bg-blue-800"
           >
             + Assign
           </button>
@@ -337,7 +337,7 @@ export default memo(function AssignedTeamWidget({
               <button
                 type="button"
                 onClick={() => setIsModalOpen(false)}
-                className="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                className="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 active:bg-gray-100"
               >
                 Cancel
               </button>
@@ -345,7 +345,7 @@ export default memo(function AssignedTeamWidget({
                 type="button"
                 onClick={handleAssign}
                 disabled={isAssignDisabled}
-                className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+                className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 active:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {isSubmitting ? 'Assigning...' : 'Assign'}
               </button>

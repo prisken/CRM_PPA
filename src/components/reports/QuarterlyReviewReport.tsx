@@ -74,13 +74,13 @@ export default function QuarterlyReviewReport({ clientId, lang }: ReviewProps) {
       <div className="mx-auto mb-4 flex max-w-3xl items-center justify-between">
         <button
           onClick={() => router.back()}
-          className="rounded-lg border border-gray-400 bg-white px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50"
+          className="rounded-lg border border-gray-400 bg-white px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50 active:bg-gray-100"
         >
           ← Back
         </button>
         <button
           onClick={() => window.print()}
-          className="rounded-lg bg-blue-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-blue-700"
+          className="rounded-lg bg-blue-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-blue-700 active:bg-blue-800"
         >
           {line('Download PDF', '下載 PDF')}
         </button>
