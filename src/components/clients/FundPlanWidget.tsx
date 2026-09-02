@@ -35,6 +35,7 @@ type Profile = {
   expected1Y: number;
   minYield?: number | null;
   createdAt: string;
+  planJson?: any;
   recommendations: Rec[];
 };
 
@@ -47,6 +48,82 @@ const CHIP = {
   STRETCH: 'bg-amber-100 text-amber-800',
   MISMATCH: 'bg-red-100 text-red-800',
 } as const;
+
+function BPlanSetsView({
+  profile,
+  returnsMap,
+  acceptingId,
+  onAccept,
+}: {
+  profile: Profile;
+  returnsMap: Record<string, any>;
+  acceptingId: string | null;
+  onAccept: (profileId: string, rec: Rec, accepted: boolean) => void;
+}) {
+  const recByCode: Record<string, Rec> = {};
+  for (const r of profile.recommendations) recByCode[r.fundCode] = r;
+  const fmtR = (d: any) => {
+    if (!d) return null;
+    const w = d.windows || {};
+    const bits = [];
+    if (d.since_pick_pct != null) bits.push(`since pick ${d.since_pick_pct > 0 ? '+' : ''}${d.since_pick_pct.toFixed(1)}%`);
+    for (const [k, v] of Object.entries(w)) {
+      if (v != null) bits.push(`${k} ${(v as number) > 0 ? '+' : ''}${(v as number).toFixed(1)}%`);
+    }
+    return bits.length ? bits.join(' · ') : null;
+  };
+  const sets: any[] = (profile.planJson as any)?.sets || [];
+  return (
+    <div className="mt-3 space-y-2">
+      {sets.map((set) => (
+        <div key={set.set} className="rounded-lg border border-gray-200 p-2.5">
+          <div className="mb-1.5 flex items-baseline gap-2">
+            <span className="text-xs font-bold text-gray-800">Set {set.set}</span>
+            <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-semibold text-blue-700">
+              {set.bucket}
+            </span>
+            <span className="ml-auto text-[11px] text-gray-400">sums to 100%</span>
+          </div>
+          {set.members.map((m: any, i: number) => {
+            const rec = recByCode[m.code];
+            const r = returnsMap[m.code];
+            const perf = rec?.accepted === true ? fmtR(r) : null;
+            return (
+              <div key={`${m.code}-${i}`} className="flex flex-wrap items-center gap-2 border-t border-gray-100 py-1.5 first:border-0">
+                <span className="min-w-0 flex-1">
+                  <span className="block text-sm font-medium text-gray-900">
+                    {m.code} <span className="font-normal text-gray-500">· {m.weight_pct}%</span>
+                    {m.promised_pct != null ? (
+                      <span className="ml-1 text-green-700">· div {m.promised_pct.toFixed(1)}%</span>
+                    ) : null}
+                  </span>
+                  <span className="block text-xs text-gray-500">
+                    {m.bucket === 'stabiliser' ? 'stabilising slice leg' : `record bucket ${m.bucket}`}
+                    {m.note ? ` · ${m.note}` : ''}
+                    {perf ? <span className="ml-1 font-medium text-gray-700">| {perf}</span> : null}
+                  </span>
+                </span>
+                {rec ? (
+                  rec.accepted === true ? (
+                    <button type="button" onClick={() => onAccept(profile.id, rec, false)} disabled={acceptingId === rec.id}
+                      className="rounded-md bg-green-100 px-2.5 py-1 text-xs font-medium text-green-800 hover:bg-green-200">
+                      ✓ Accepted
+                    </button>
+                  ) : (
+                    <button type="button" onClick={() => onAccept(profile.id, rec, true)} disabled={acceptingId === rec.id}
+                      className="rounded-md border border-gray-300 px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50">
+                      Accept
+                    </button>
+                  )
+                ) : null}
+              </div>
+            );
+          })}
+        </div>
+      ))}
+    </div>
+  );
+}
 
 export default function FundPlanWidget({ clientId }: { clientId: string }) {
   const [profiles, setProfiles] = useState<Profile[]>([]);
@@ -93,6 +170,8 @@ export default function FundPlanWidget({ clientId }: { clientId: string }) {
   useEffect(() => {
     void load();
   }, [load]);
+
+
 
   const generate = async () => {
     if (strategy === 'b') {
@@ -147,6 +226,32 @@ export default function FundPlanWidget({ clientId }: { clientId: string }) {
   };
 
   const latest = profiles[0];
+
+  // actual returns (since pick + 1M/3M/1Y) for accepted funds
+  const [returnsMap, setReturnsMap] = useState<Record<string, any>>({});
+  useEffect(() => {
+    let dead = false;
+    if (!latest) return;
+    const accepted = latest.recommendations.filter((r) => r.accepted === true);
+    if (accepted.length === 0) return;
+    const pick = (latest.createdAt || '').slice(0, 10);
+    Promise.all(
+      accepted.map((r) =>
+        authenticatedFetch(`/api/fund-returns/${r.fundCode}?pick=${pick}`)
+          .then((res) => (res.ok ? res.json() : null))
+          .then((d) => {
+            if (!dead && d && !d.error) {
+              setReturnsMap((m) => ({ ...m, [r.fundCode]: d }));
+            }
+          })
+          .catch(() => {})
+      )
+    );
+    return () => {
+      dead = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [latest]);
   const older = profiles.slice(1);
 
   return (
