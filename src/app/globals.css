@@ -164,3 +164,16 @@ label {
 .pt-safe {
   padding-top: env(safe-area-inset-top);
 }
+
+/* Form fields get a thumb-height floor on touch devices (UI pass §3.5/§6.7). */
+@media (pointer: coarse) {
+  input:not([type='checkbox']):not([type='radio']):not([type='range']):not(
+      [type='button']
+    ):not([type='submit']):not([type='reset']):not([type='image']):not(
+      [type='file']
+    ):not([type='hidden']):not([type='color']),
+  select,
+  textarea {
+    min-height: 44px;
+  }
+}
