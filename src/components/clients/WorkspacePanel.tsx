@@ -44,11 +44,17 @@ type WorkspacePanelProps = {
   };
 };
 
+// Phase 2 (revamp brief): the client workspace answers one question per tab.
+//   Overview — what's happening + what's next (strategy & open tasks)
+//   Plan     — the structured strategy plan
+//   Timeline — every touchpoint: interactions + important dates
+//   Review   — prepare the meeting: product discussion + (future) review pack
+// Stable ids are kept so the workspace API and #hash deep-links keep working.
 const BASE_TABS = [
-  { id: 'strategy-tasks', label: 'Strategy & Tasks' },
-  { id: 'strategy-planner', label: 'Strategy Planner' },
-  { id: 'activity-notes', label: 'Activity & Notes' },
-  { id: 'product-recs', label: 'Product Recommendations' },
+  { id: 'strategy-tasks', label: 'Overview' },
+  { id: 'strategy-planner', label: 'Plan' },
+  { id: 'activity-notes', label: 'Timeline' },
+  { id: 'product-recs', label: 'Review' },
 ] as const;
 
 type TabId = (typeof BASE_TABS)[number]['id'];
@@ -116,6 +122,9 @@ export default function WorkspacePanel({
   const [strategyTasksData, setStrategyTasksData] =
     useState<StrategyTasksData | null>(null);
   const [activityLog, setActivityLog] = useState<ActivityLogEntry[]>([]);
+  const [upcomingDates, setUpcomingDates] = useState<
+    Array<{ id: string; label: string; scheduledAt: string; hasTime?: boolean }>
+  >([]);
   const [loadingTab, setLoadingTab] = useState<TabId | null>('strategy-tasks');
   const [error, setError] = useState<string | null>(null);
   const [strategyTasksReloadKey, setStrategyTasksReloadKey] = useState(0);
@@ -188,6 +197,20 @@ export default function WorkspacePanel({
       setActivityLog(cache.activityNotes);
       setLoadingTab(null);
       return;
+    }
+
+    if (resolvedTab === 'activity-notes') {
+      authenticatedFetch(`/api/clients/${clientId}/important-dates`)
+        .then((r) => r.ok ? r.json() : null)
+        .then((d) => {
+          const list = Array.isArray(d) ? d : (d?.dates ?? []);
+          setUpcomingDates(list.filter((x: { scheduledAt: string }) =>
+            new Date(x.scheduledAt).getTime() >= Date.now() - 86400000
+          ).sort((a: { scheduledAt: string }, b: { scheduledAt: string }) =>
+            new Date(a.scheduledAt).getTime() - new Date(b.scheduledAt).getTime()
+          ).slice(0, 6));
+        })
+        .catch(() => {});
     }
 
     let cancelled = false;
@@ -367,7 +390,13 @@ export default function WorkspacePanel({
           loadingTab === resolvedTab ? (
             <div className="h-48 animate-pulse rounded-lg bg-gray-100" />
           ) : resolvedTab === 'product-recs' ? (
-            <div className="p-1">
+            <div className="space-y-3">
+              <div className="rounded-lg border border-blue-100 bg-blue-50/60 p-3 text-xs text-blue-900">
+                <span className="font-semibold">Review — meeting prep.</span>{' '}
+                Use the product discussion below to shortlist options before a
+                review. The full quarterly review pack lands with the reporting
+                build.
+              </div>
               <RecommendationsWidget clientId={clientId} />
             </div>
           ) : resolvedTab === 'strategy-tasks' ? (
@@ -380,13 +409,34 @@ export default function WorkspacePanel({
               onUpdated={reloadStrategyTasksTab}
             />
           ) : (
-            <ActivityLog
-              clientId={clientId}
-              activityLog={activityLog}
-              currentUser={activityLogCurrentUser}
-              canPostNote={canPostNote}
-              onNotePosted={reloadActivityTab}
-            />
+            <div className="space-y-4">
+              {upcomingDates.length > 0 && (
+                <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
+                  <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-gray-500">
+                    Upcoming dates
+                  </p>
+                  <ul className="space-y-1">
+                    {upcomingDates.map((d) => (
+                      <li key={d.id} className="flex items-center justify-between text-sm">
+                        <span className="text-gray-700">{d.label}</span>
+                        <span className="text-xs text-gray-500">
+                          {new Date(d.scheduledAt).toLocaleDateString(undefined, {
+                            month: 'short', day: 'numeric',
+                          })}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              <ActivityLog
+                clientId={clientId}
+                activityLog={activityLog}
+                currentUser={activityLogCurrentUser}
+                canPostNote={canPostNote}
+                onNotePosted={reloadActivityTab}
+              />
+            </div>
           )
         ) : null}
       </div>
