@@ -174,11 +174,6 @@ export default function FundPlanWidget({ clientId }: { clientId: string }) {
   const [error, setError] = useState<string | null>(null);
 
   const [strategy, setStrategy] = useState<'a' | 'b'>('a');
-  const [risk, setRisk] = useState('-25');
-  const [exp, setExp] = useState('8');
-  const [minYield, setMinYield] = useState('4');
-  const [generating, setGenerating] = useState(false);
-  const [genError, setGenError] = useState<string | null>(null);
   const [acceptingId, setAcceptingId] = useState<string | null>(null);
   const [openReasons, setOpenReasons] = useState<Set<string>>(new Set());
 
@@ -216,58 +211,6 @@ export default function FundPlanWidget({ clientId }: { clientId: string }) {
 
 
 
-  const generate = async () => {
-    if (strategy === 'a' || strategy === 'b') {
-      setGenError('Use the allocation builder below (Plan A) or the chase builder (Plan B) instead — weight inputs replace the old one-click generate.');
-      return;
-    }
-    setGenerating(true);
-    setGenError(null);
-    try {
-      const body: Record<string, unknown> = {
-        strategy,
-        risk_max_dd_pct: Number(risk),
-        expected_1y_pct: Number(exp),
-        min_yield_pct: Number(minYield),
-      };
-      const res = await authenticatedFetch(
-        `/api/clients/${clientId}/fund-profiles`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(body),
-        }
-      );
-      if (!res.ok) {
-        const err = await res.json().catch(() => null);
-        throw new Error(err?.detail || err?.error || `HTTP ${res.status}`);
-      }
-      await load();
-    } catch (e) {
-      setGenError(e instanceof Error ? e.message : 'generation failed');
-    } finally {
-      setGenerating(false);
-    }
-  };
-
-  const setAccepted = async (profileId: string, rec: Rec, accepted: boolean) => {
-    setAcceptingId(rec.id);
-    try {
-      const res = await authenticatedFetch(
-        `/api/clients/${clientId}/fund-profiles/${profileId}/recommendations/${rec.id}`,
-        {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ accepted }),
-        }
-      );
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      await load();
-    } finally {
-      setAcceptingId(null);
-    }
-  };
-
   const latest = profiles[0];
 
   // actual returns (since pick + 1M/3M/1Y) for accepted funds
@@ -295,6 +238,24 @@ export default function FundPlanWidget({ clientId }: { clientId: string }) {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [latest]);
+
+  const setAccepted = async (profileId: string, rec: Rec, accepted: boolean) => {
+    setAcceptingId(rec.id);
+    try {
+      const res = await authenticatedFetch(
+        `/api/clients/${clientId}/fund-profiles/${profileId}/recommendations/${rec.id}`,
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ accepted }),
+        }
+      );
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      await load();
+    } finally {
+      setAcceptingId(null);
+    }
+  };
   const older = profiles.slice(1);
 
   return (
@@ -311,87 +272,37 @@ export default function FundPlanWidget({ clientId }: { clientId: string }) {
         </div>
       </div>
 
-      {/* Generate panel */}
-      <div className="mt-3 rounded-lg border border-blue-100 bg-blue-50/50 p-3">
-        <div className="flex flex-wrap items-end gap-3">
-          <div>
-            <label className="mb-1 block text-xs font-medium text-gray-600">
-              Strategy
-            </label>
-            <div className="flex overflow-hidden rounded-lg border border-gray-300 bg-white text-sm">
-              {(['a', 'b'] as const).map((s) => (
-                <button
-                  key={s}
-                  type="button"
-                  onClick={() => setStrategy(s)}
-                  className={`px-3 py-2 font-medium ${
-                    strategy === s
-                      ? 'bg-blue-600 text-white'
-                      : 'text-gray-700 hover:bg-gray-50'
-                  }`}
-                >
-                  {s === 'a' ? 'A · Growth' : 'B · Dividend'}
-                </button>
-              ))}
-            </div>
+      {/* Step 0: choose the plan */}
+      <div className="mt-3 rounded-lg border border-blue-100 bg-blue-50/40 p-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <span className="text-xs font-semibold uppercase tracking-wide text-gray-500">Plan</span>
+          <div className="flex overflow-hidden rounded-lg border border-gray-300 bg-white text-sm">
+            {(['a', 'b'] as const).map((s) => (
+              <button
+                key={s}
+                type="button"
+                onClick={() => setStrategy(s)}
+                className={`px-4 py-2 font-medium ${
+                  strategy === s ? 'bg-blue-600 text-white' : 'text-gray-700 hover:bg-gray-50'
+                }`}
+              >
+                {s === 'a' ? 'A · Growth' : 'B · Dividend'}
+              </button>
+            ))}
           </div>
-          <div>
-            <label className="mb-1 block text-xs font-medium text-gray-600">
-              Risk tolerance (max DD %)
-            </label>
-            <input
-              type="number"
-              step="0.5"
-              value={risk}
-              onChange={(e) => setRisk(e.target.value)}
-              className={`${INPUT} w-28`}
-            />
-          </div>
-          <div>
-            <label className="mb-1 block text-xs font-medium text-gray-600">
-              Expected 1Y (%)
-            </label>
-            <input
-              type="number"
-              step="0.5"
-              value={exp}
-              onChange={(e) => setExp(e.target.value)}
-              className={`${INPUT} w-24`}
-            />
-          </div>
-          {strategy === 'b' ? (
-            <div>
-              <label className="mb-1 block text-xs font-medium text-gray-600">
-                Min yield (%)
-              </label>
-              <input
-                type="number"
-                step="0.5"
-                value={minYield}
-                onChange={(e) => setMinYield(e.target.value)}
-                className={`${INPUT} w-24`}
-              />
-            </div>
-          ) : null}
-          <button
-            type="button"
-            onClick={generate}
-            disabled={generating}
-            className={BTN}
-          >
-            {generating ? 'Generating…' : 'Generate fund strategy'}
-          </button>
+          <span className="text-[11px] text-gray-400">
+            {strategy === 'a'
+              ? 'growth allocation — tick funds, add %, total must reach 100%'
+              : 'dividend chase — build sets (each sums to 100%)'}
+          </span>
         </div>
-        {genError ? (
-          <p className="mt-2 text-xs text-red-600">{genError}</p>
-        ) : null}
       </div>
 
       {strategy === 'a' ? (
         <FundAllocationBuilder clientId={clientId} onSaved={load} />
-      ) : strategy === 'b' ? (
+      ) : (
         <FundChaseBuilder clientId={clientId} onSaved={load} />
-      ) : null}
+      )}
 
       {error ? <p className="mt-3 text-sm text-red-600">{error}</p> : null}
       {loading ? (
