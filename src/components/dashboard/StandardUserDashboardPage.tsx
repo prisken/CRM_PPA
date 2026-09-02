@@ -12,7 +12,8 @@
  */
 
 import dynamic from 'next/dynamic';
-import Link from 'next/link';
+import AppLink from '@/components/ui/app-link';
+import { signalNavStart } from '@/components/ui/app-link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import AuthRequiredMessage from '@/components/auth/AuthRequiredMessage';
@@ -201,6 +202,7 @@ export default function StandardUserDashboardPage({
   const handleCloseAddLead = useCallback(() => setShowAddLead(false), []);
 
   const handleSignOut = useCallback(async () => {
+    signalNavStart();
     await supabase.auth.signOut();
     localStorage.removeItem('token');
     router.push('/login');
@@ -259,21 +261,21 @@ export default function StandardUserDashboardPage({
         <button
           type="button"
           onClick={handleOpenAddLead}
-          className="whitespace-nowrap rounded-lg bg-blue-600 px-2.5 py-1.5 text-xs font-medium text-white hover:bg-blue-700 sm:px-3 sm:text-sm"
+          className="whitespace-nowrap rounded-lg bg-blue-600 px-2.5 py-1.5 text-xs font-medium text-white transition-colors hover:bg-blue-700 active:bg-blue-800 sm:px-3 sm:text-sm"
         >
           Add Lead
         </button>
       ) : null}
-      <Link
+      <AppLink
         href="/dashboard/settings"
-        className="whitespace-nowrap rounded-lg border border-gray-300 px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 sm:px-3 sm:text-sm"
+        className="whitespace-nowrap rounded-lg border border-gray-300 px-2.5 py-1.5 text-xs font-medium text-gray-700 transition-colors hover:bg-gray-50 active:bg-gray-100 sm:px-3 sm:text-sm"
       >
         Settings
-      </Link>
+      </AppLink>
       <button
         type="button"
         onClick={handleSignOut}
-        className="whitespace-nowrap rounded-lg bg-gray-900 px-2.5 py-1.5 text-xs font-medium text-white hover:bg-gray-800 sm:px-3 sm:text-sm"
+        className="whitespace-nowrap rounded-lg bg-gray-900 px-2.5 py-1.5 text-xs font-medium text-white transition-colors hover:bg-gray-800 active:bg-gray-950 sm:px-3 sm:text-sm"
       >
         Sign Out
       </button>

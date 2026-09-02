@@ -8,7 +8,7 @@
  * Full widget modules must NOT be imported here; open them via `?view=` only.
  */
 
-import Link from 'next/link';
+import AppLink from '@/components/ui/app-link';
 import {
   standardDashboardHref,
   type StandardDashboardView,
@@ -94,33 +94,33 @@ export default function DashboardHomeView({
             <button
               type="button"
               onClick={onAddLead}
-              className="rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700"
+              className="rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 active:bg-blue-800"
             >
               Add Lead
             </button>
           ) : null}
           {showReturnables ? (
-            <Link
+            <AppLink
               href="/my-statements"
-              className="rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+              className="rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 active:bg-gray-100"
             >
               Returnable Statements
-            </Link>
+            </AppLink>
           ) : null}
           {showAdmin ? (
-            <Link
+            <AppLink
               href="/admin"
-              className="rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+              className="rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 active:bg-gray-100"
             >
               Admin Dashboard
-            </Link>
+            </AppLink>
           ) : null}
-          <Link
+          <AppLink
             href="/dashboard/settings"
-            className="rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+            className="rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 active:bg-gray-100"
           >
             Account Settings
-          </Link>
+          </AppLink>
         </div>
       </section>
 
@@ -142,14 +142,14 @@ export default function DashboardHomeView({
       <section aria-label="Workspace shortcuts">
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {links.map((link) => (
-            <Link
+            <AppLink
               key={link.view}
               href={standardDashboardHref(link.view)}
-              className="min-w-0 rounded-xl border border-gray-200 bg-white p-4 shadow-sm transition hover:border-blue-200 hover:bg-blue-50/40 active:bg-blue-50"
+              className="min-w-0 select-none rounded-xl border border-gray-200 bg-white p-4 shadow-sm transition-[transform,background-color,border-color] duration-150 ease-out hover:border-blue-200 hover:bg-blue-50/40 active:scale-[0.98] active:bg-blue-50 motion-reduce:transform-none"
             >
               <p className="text-sm font-semibold text-gray-900">{link.label}</p>
               <p className="mt-1 text-xs leading-snug text-gray-600">{link.description}</p>
-            </Link>
+            </AppLink>
           ))}
         </div>
       </section>

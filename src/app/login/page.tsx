@@ -3,6 +3,8 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Logo from '@/components/Logo';
+import AppLink, { signalNavStart } from '@/components/ui/app-link';
+import Spinner from '@/components/ui/Spinner';
 import { supabase } from '@/lib/supabaseClient';
 
 export default function LoginPage() {
@@ -68,6 +70,7 @@ export default function LoginPage() {
         localStorage.removeItem('token');
       }
 
+      signalNavStart();
       router.push('/dashboard');
     } catch (err) {
       console.error(err);
@@ -121,9 +124,17 @@ export default function LoginPage() {
           <button
             type="submit"
             disabled={isLoading}
-            className="w-full rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+            aria-busy={isLoading}
+            className="flex min-h-12 w-full select-none items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-blue-700 active:scale-[0.99] active:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-70 motion-reduce:transform-none"
           >
-            {isLoading ? 'Signing in...' : 'Sign in'}
+            {isLoading ? (
+              <>
+                <Spinner className="h-4 w-4" />
+                Signing in…
+              </>
+            ) : (
+              'Sign in'
+            )}
           </button>
         </form>
 
@@ -133,9 +144,12 @@ export default function LoginPage() {
 
         <p className="mt-6 text-center text-sm text-gray-500">
           Don&apos;t have an account?{' '}
-          <a href="/signup" className="font-medium text-blue-600 hover:underline">
+          <AppLink
+            href="/signup"
+            className="rounded font-medium text-blue-600 hover:underline active:text-blue-800"
+          >
             Sign up
-          </a>
+          </AppLink>
         </p>
       </div>
     </main>

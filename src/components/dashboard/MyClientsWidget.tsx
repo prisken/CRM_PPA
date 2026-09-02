@@ -1,6 +1,6 @@
 'use client';
 
-import Link from 'next/link';
+import AppLink from '@/components/ui/app-link';
 import { memo, useMemo, useState } from 'react';
 import CompactPill from '@/components/ui/CompactPill';
 import { useDisplayDensity } from '@/components/ui/DisplayDensityProvider';
@@ -22,15 +22,15 @@ const ClientTableRow = memo(function ClientTableRow({
   client: AssignedClientRow;
 }) {
   return (
-    <tr className="border-b border-gray-100 transition hover:bg-blue-50">
+    <tr className="border-b border-gray-100 transition-colors hover:bg-blue-50">
       <td className="min-w-0 px-2 py-2">
-        <Link
+        <AppLink
           href={`/clients/${client.clientId}`}
-          className="block truncate font-medium text-blue-600 hover:underline"
+          className="-m-1 block truncate rounded p-1 font-medium text-blue-600 hover:underline active:bg-blue-100"
           title={client.clientName}
         >
           {client.clientName}
-        </Link>
+        </AppLink>
       </td>
       <td className="max-w-[10rem] px-2 py-2 text-gray-700" title={client.myRole}>
         {client.myRole}
