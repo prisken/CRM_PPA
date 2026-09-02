@@ -6,6 +6,7 @@ import dynamic from 'next/dynamic';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import ActivityLog, { type ActivityLogEntry } from '@/components/clients/ActivityLog';
 import RecommendationsWidget from '@/components/clients/RecommendationsWidget';
+import FundPlanWidget from '@/components/clients/FundPlanWidget';
 import StrategyAndTasks, {
   type StrategyCurrentUser,
   type StrategyTask,
@@ -514,6 +515,7 @@ function ReviewTab({ clientId }: { clientId: string }) {
         </div>
       )}
 
+      <FundPlanWidget clientId={clientId} />
       <RecommendationsWidget clientId={clientId} />
     </div>
   );
