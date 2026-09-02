@@ -10,6 +10,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { authenticatedFetch } from '@/lib/authenticatedFetch';
 import FundChaseBuilder from '@/components/clients/FundChaseBuilder';
+import FundAllocationBuilder from '@/components/clients/FundAllocationBuilder';
 
 type Rec = {
   id: string;
@@ -72,7 +73,43 @@ function BPlanSetsView({
     }
     return bits.length ? bits.join(' · ') : null;
   };
-  const sets: any[] = (profile.planJson as any)?.sets || [];
+  const pj: any = profile.planJson;
+  const sets: any[] = pj?.sets || [];
+  if (pj?.kind === 'a') {
+    const members: any[] = pj?.allocation || [];
+    return (
+      <div className="mt-3 space-y-1.5">
+        {members.map((m: any, i: number) => {
+          const rec = recByCode[m.code];
+          const r = returnsMap[m.code];
+          const perf = rec?.accepted === true ? fmtR(r) : null;
+          return (
+            <div key={`${m.code}-${i}`} className="flex flex-wrap items-center gap-2 rounded-lg border border-gray-200 px-3 py-2">
+              <span className="min-w-0 flex-1">
+                <span className="block text-sm font-medium text-gray-900">
+                  {m.code} <span className="font-normal text-gray-500">· {m.weight_pct}%</span>
+                </span>
+                <span className="block text-xs text-gray-500">
+                  {m.expected_1y != null ? `exp 1Y ${m.expected_1y > 0 ? '+' : ''}${m.expected_1y.toFixed(1)}% · ` : ''}
+                  {m.max_dd_pct != null ? `maxDD ${m.max_dd_pct.toFixed(0)}%` : ''}
+                  {perf ? <span className="ml-1 font-medium text-gray-700">| {perf}</span> : null}
+                </span>
+              </span>
+              {rec ? (
+                rec.accepted === true ? (
+                  <button type="button" onClick={() => onAccept(profile.id, rec, false)} disabled={acceptingId === rec.id}
+                    className="rounded-md bg-green-100 px-2.5 py-1 text-xs font-medium text-green-800 hover:bg-green-200">✓ Accepted</button>
+                ) : (
+                  <button type="button" onClick={() => onAccept(profile.id, rec, true)} disabled={acceptingId === rec.id}
+                    className="rounded-md border border-gray-300 px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50">Accept</button>
+                )
+              ) : null}
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
   return (
     <div className="mt-3 space-y-2">
       {sets.map((set) => (
@@ -174,8 +211,8 @@ export default function FundPlanWidget({ clientId }: { clientId: string }) {
 
 
   const generate = async () => {
-    if (strategy === 'b') {
-      setGenError('Plan B uses the chase builder below — fill the sets and press Save chase plan.');
+    if (strategy === 'a' || strategy === 'b') {
+      setGenError('Use the allocation builder below (Plan A) or the chase builder (Plan B) instead — weight inputs replace the old one-click generate.');
       return;
     }
     setGenerating(true);
@@ -344,7 +381,9 @@ export default function FundPlanWidget({ clientId }: { clientId: string }) {
         ) : null}
       </div>
 
-      {strategy === 'b' ? (
+      {strategy === 'a' ? (
+        <FundAllocationBuilder clientId={clientId} onSaved={load} />
+      ) : strategy === 'b' ? (
         <FundChaseBuilder clientId={clientId} onSaved={load} />
       ) : null}
 

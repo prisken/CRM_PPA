@@ -36,11 +36,16 @@ export async function POST(
   if (!body || typeof body !== 'object') {
     return NextResponse.json({ error: 'invalid body' }, { status: 400 });
   }
+  const strategy = body.strategy === 'a' ? 'a' : 'b';
   const risk = Number(body.risk_max_dd_pct ?? -20);
   const exp = Number(body.expected_1y_pct ?? 5);
   const minYield = Number(body.min_yield_pct ?? 4);
   const sets: SetShape[] = Array.isArray(body.sets) ? body.sets : [];
-  if (sets.length < 1 || sets.length > 3) {
+  if (strategy === 'a') {
+    if (sets.length !== 1) {
+      return NextResponse.json({ error: 'plan A: exactly one allocation set (sums to 100%)' }, { status: 400 });
+    }
+  } else if (sets.length < 1 || sets.length > 3) {
     return NextResponse.json({ error: 'sets: 1..3 chase sets required' }, { status: 400 });
   }
 
@@ -50,14 +55,18 @@ export async function POST(
   let menu: Record<string, any> = {};
   if (fundsUrl) {
     try {
-      const res = await fetch(`${fundsUrl}/api/plan-b/menu`, {
+      const res = await fetch(`${fundsUrl}/api/plan-${strategy === 'a' ? 'a' : 'b'}/menu`, {
         headers: fundsSecret ? { 'X-Funds-Secret': fundsSecret } : {},
         cache: 'no-store',
         signal: AbortSignal.timeout(20000),
       });
       if (res.ok) {
         const d = await res.json();
-        for (const m of d.chase || []) menu[m.code] = m;
+        if (strategy === 'a') {
+          for (const m of d.candidates || []) menu[m.code] = m;
+        } else {
+          for (const m of d.chase || []) menu[m.code] = m;
+        }
       }
     } catch {
       /* menu is best-effort; structural rules still enforced below */
@@ -71,9 +80,9 @@ export async function POST(
 
   for (let i = 0; i < sets.length; i++) {
     const set = sets[i];
-    const bucket = String(set.bucket ?? '');
+    const bucket = String(set.bucket ?? (strategy === 'a' ? 'allocation' : ''));
     const members: Member[] = Array.isArray(set.members) ? set.members : [];
-    if (!BUCKETS.includes(bucket as any) && bucket !== 'flex') {
+    if (strategy === 'b' && !BUCKETS.includes(bucket as any) && bucket !== 'flex') {
       return NextResponse.json({ error: `set ${i + 1}: bad bucket` }, { status: 400 });
     }
     const sum = members.reduce((a, m) => a + Number(m.weight_pct || 0), 0);
@@ -93,20 +102,23 @@ export async function POST(
         return NextResponse.json(
           { error: `${code} appears in more than one set` }, { status: 400 });
       }
-      const meta = menu[code];
+      const meta = menu[code] || {};
       const mb = meta?.bucket ?? null;
-      if (mb && seenBuckets.has(mb)) {
+      if (strategy === 'b' && mb && seenBuckets.has(mb)) {
         return NextResponse.json(
           { error: `${code}: two funds in the same record-day bucket (${mb}) in set ${i + 1}` },
           { status: 400 });
       }
       if (mb) seenBuckets.add(mb);
       seenFunds.add(code);
-      setMembers.push({ code, weight_pct: w, promised_pct: meta?.promised_pct ?? null,
-                        bucket: mb, note: meta?.note ?? null });
+      const extra = strategy === 'a'
+        ? { expected_1y: meta?.expected_1y ?? null, max_dd_pct: meta?.max_dd_pct ?? null, score: meta?.score ?? null }
+        : { promised_pct: meta?.promised_pct ?? null, bucket: mb, note: meta?.note ?? null };
+      setMembers.push({ code, weight_pct: w, bucket: mb ?? (strategy === 'a' ? 'allocation' : null), ...extra });
       recRows.push({
-        profileId: 'PLACEHOLDER', fundCode: code, rank: ++rank, score: 0,
-        verdict: 'chase', tag: bucket, snapshot: { weight_pct: w, promised_pct: meta?.promised_pct ?? null } as Prisma.InputJsonValue,
+        profileId: 'PLACEHOLDER', fundCode: code, rank: ++rank, score: Number(meta?.score ?? 0),
+        verdict: strategy === 'a' ? 'allocation' : 'chase', tag: bucket,
+        snapshot: { weight_pct: w, ...extra } as Prisma.InputJsonValue,
       });
     }
     if (setMembers.length === 0) {
@@ -118,11 +130,13 @@ export async function POST(
   const profile = await prisma.clientFundProfile.create({
     data: {
       clientId: id,
-      strategy: 'b',
+      strategy,
       riskMaxDD: risk,
       expected1Y: exp,
       minYield,
-      planJson: { chase_frequency: sets.length, sets: planSets } as Prisma.InputJsonValue,
+      planJson: (strategy === 'a'
+        ? { kind: 'a', allocation: planSets[0]?.members ?? [] }
+        : { kind: 'b', chase_frequency: sets.length, sets: planSets }) as Prisma.InputJsonValue,
     },
   });
 
