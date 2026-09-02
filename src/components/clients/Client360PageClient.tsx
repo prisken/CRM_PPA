@@ -248,7 +248,10 @@ function Client360PageClientInner({
     }
   }
 
-  async function handleConfirmAdvance() {
+  async function handleConfirmAdvance(
+    nextAction?: string | null,
+    nextFollowUpAt?: string | null
+  ) {
     if (!client) {
       return;
     }
@@ -256,6 +259,30 @@ function Client360PageClientInner({
     const nextStatus = getNextPipelineStage(client.status);
     if (!nextStatus) {
       return;
+    }
+
+    // Phase 3: persist the reminder (next step + when) so Today always knows
+    // what's next for this client — enforced at every stage advance.
+    if (nextAction || nextFollowUpAt) {
+      try {
+        const token = localStorage.getItem('token');
+        await fetch(`/api/clients/${clientId}/follow-up`, {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          credentials: 'same-origin',
+          body: JSON.stringify({
+            nextAction: nextAction || null,
+            nextFollowUpAt: nextFollowUpAt
+              ? new Date(nextFollowUpAt).toISOString()
+              : null,
+          }),
+        });
+      } catch {
+        // Reminder persistence is best-effort — stage change still proceeds.
+      }
     }
 
     await handleStageChange(nextStatus);
@@ -514,6 +541,9 @@ function Client360PageClientInner({
             employeeCount={client.employeeCount}
             expectations={client.expectations}
             importantDates={client.importantDates}
+            nextAction={client.nextAction}
+            nextFollowUpAt={client.nextFollowUpAt}
+            priority={client.priority}
             isSuperAdmin={isSuperAdmin}
             isRelationshipSpecialist={isRelationshipSpecialist}
           />

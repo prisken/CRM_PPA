@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import { formatClientStage } from '@/lib/clientStages';
 
 type PipelineStageAdvanceModalProps = {
@@ -10,7 +11,7 @@ type PipelineStageAdvanceModalProps = {
   isSubmitting: boolean;
   error: string | null;
   onClose: () => void;
-  onConfirm: () => void;
+  onConfirm: (nextAction: string | null, nextFollowUpAt: string | null) => void;
 };
 
 export default function PipelineStageAdvanceModal({
@@ -23,6 +24,8 @@ export default function PipelineStageAdvanceModal({
   onClose,
   onConfirm,
 }: PipelineStageAdvanceModalProps) {
+  const [nextAction, setNextAction] = useState('');
+  const [nextFollowUpAt, setNextFollowUpAt] = useState('');
   if (!isOpen) {
     return null;
   }
@@ -38,8 +41,23 @@ export default function PipelineStageAdvanceModal({
           <span className="font-medium">{formatClientStage(nextStatus)}</span>.
         </p>
 
-        <div className="mt-5">
-          <p className="text-sm font-medium text-gray-700">Before you continue, confirm:</p>
+        <div className="mt-5 space-y-3">
+          <p className="text-sm font-medium text-gray-700">What's the next step?</p>
+          <input
+            type="text"
+            value={nextAction}
+            onChange={(e) => setNextAction(e.target.value)}
+            placeholder="e.g. Send illustration, book needs-analysis, follow up on quote…"
+            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-blue-500"
+          />
+          <p className="text-sm font-medium text-gray-700">When?</p>
+          <input
+            type="date"
+            value={nextFollowUpAt}
+            onChange={(e) => setNextFollowUpAt(e.target.value)}
+            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-blue-500"
+          />
+          <p className="pt-2 text-sm font-medium text-gray-700">Before you continue, confirm:</p>
           <ul className="mt-3 space-y-2">
             {checklist.map((item) => (
               <li key={item} className="flex items-start gap-2 text-sm text-gray-700">
@@ -68,11 +86,16 @@ export default function PipelineStageAdvanceModal({
           </button>
           <button
             type="button"
-            onClick={onConfirm}
+            onClick={() =>
+              onConfirm(
+                nextAction.trim() || null,
+                nextFollowUpAt || null
+              )
+            }
             disabled={isSubmitting}
             className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            {isSubmitting ? 'Updating...' : 'Confirm'}
+            {isSubmitting ? 'Updating...' : 'Confirm & set reminder'}
           </button>
         </div>
         </div>

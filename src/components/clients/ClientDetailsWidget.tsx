@@ -1,6 +1,7 @@
 'use client';
 
-import { memo, useState } from 'react';
+import { memo, useCallback, useState } from 'react';
+import { authenticatedFetch } from '@/lib/authenticatedFetch';
 import ClientDetailsEditModal, {
   type ClientDetailsSavedPayload,
 } from '@/components/clients/ClientDetailsEditModal';
@@ -25,6 +26,10 @@ export type ImportantDate = {
 };
 
 type ClientDetailsWidgetProps = {
+  nextAction?: string | null;
+  nextFollowUpAt?: string | null;
+  priority?: string | null;
+
   clientId: string;
   /** When true (or status is lead-like), label UI as Lead Details. */
   isLead?: boolean;
@@ -104,12 +109,42 @@ export default memo(function ClientDetailsWidget({
   employeeCount,
   expectations,
   importantDates,
+  nextAction,
+  nextFollowUpAt,
+  priority,
   isSuperAdmin = false,
   isRelationshipSpecialist = false,
 }: ClientDetailsWidgetProps) {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [editingNext, setEditingNext] = useState(false);
+  const [nextActionDraft, setNextActionDraft] = useState(nextAction ?? '');
+  const [nextFollowUpDraft, setNextFollowUpDraft] = useState(
+    nextFollowUpAt ? nextFollowUpAt.slice(0, 10) : ''
+  );
+  const [savingNext, setSavingNext] = useState(false);
   const { density } = useDisplayDensity();
   const { refreshClient360Slices } = useClient360Refresh();
+
+  const saveNextStep = useCallback(async () => {
+    setSavingNext(true);
+    try {
+      const res = await authenticatedFetch(`/api/clients/${clientId}/follow-up`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          nextAction: nextActionDraft.trim() || null,
+          nextFollowUpAt: nextFollowUpDraft || null,
+        }),
+      });
+      if (res.ok) {
+        setEditingNext(false);
+        refreshClient360Slices(['core', 'importantDates']);
+      }
+    } finally {
+      setSavingNext(false);
+    }
+  }, [clientId, nextActionDraft, nextFollowUpDraft, refreshClient360Slices]);
+
   const widgetPaddingClass = getWidgetPaddingClass(density);
   const canEditDetails = isSuperAdmin || isRelationshipSpecialist;
   const entityLabel = isLead ? 'Lead' : 'Client';
@@ -123,6 +158,70 @@ export default memo(function ClientDetailsWidget({
       <div
         className={`rounded-xl border border-gray-200 bg-white shadow-sm ${widgetPaddingClass}`}
       >
+        {(nextAction || nextFollowUpAt || editingNext) && (
+          <div className="mb-3 rounded-lg border border-blue-100 bg-blue-50/60 px-3 py-2">
+            {editingNext ? (
+              <div className="space-y-2">
+                <input
+                  type="text"
+                  value={nextActionDraft}
+                  onChange={(e) => setNextActionDraft(e.target.value)}
+                  placeholder="Next step…"
+                  className="w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm outline-none focus:border-blue-500"
+                  autoFocus
+                />
+                <input
+                  type="date"
+                  value={nextFollowUpDraft}
+                  onChange={(e) => setNextFollowUpDraft(e.target.value)}
+                  className="w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm outline-none focus:border-blue-500"
+                />
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={saveNextStep}
+                    disabled={savingNext}
+                    className="rounded-md bg-blue-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-60"
+                  >
+                    {savingNext ? 'Saving…' : 'Save'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setEditingNext(false)}
+                    className="rounded-md border border-gray-300 px-2.5 py-1 text-xs text-gray-600 hover:bg-gray-50"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <>
+                {nextAction ? (
+                  <p className="text-sm font-medium text-blue-900">{nextAction}</p>
+                ) : null}
+                {nextFollowUpAt ? (
+                  <p className="mt-0.5 text-xs text-blue-700">
+                    Follow up by{' '}
+                    {new Date(nextFollowUpAt).toLocaleDateString(undefined, {
+                      month: 'short', day: 'numeric', year: 'numeric',
+                    })}
+                  </p>
+                ) : null}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setNextActionDraft(nextAction ?? '');
+                    setNextFollowUpDraft(nextFollowUpAt ? nextFollowUpAt.slice(0, 10) : '');
+                    setEditingNext(true);
+                  }}
+                  className="mt-1 text-[11px] font-medium text-blue-600 hover:underline"
+                >
+                  Update next step
+                </button>
+              </>
+            )}
+          </div>
+        )}
         <div className="mb-2.5 flex items-center justify-between gap-3">
           <h3 className="text-sm font-semibold text-gray-900">
             {entityLabel} Details

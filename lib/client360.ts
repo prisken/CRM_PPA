@@ -175,6 +175,11 @@ export function buildClient360CoreResponse(
     equity: client.equity !== null && client.equity !== undefined ? Number(client.equity) : 0,
     status: client.status,
     pendingNotifications: client.pendingNotifications,
+    priority: client.priority ?? null,
+    nextAction: client.nextAction ?? null,
+    nextFollowUpAt: client.nextFollowUpAt
+      ? client.nextFollowUpAt.toISOString()
+      : null,
     createdAt: client.createdAt.toISOString(),
     lastModified: client.lastModified.toISOString(),
     assignedUsers,
@@ -510,6 +515,9 @@ const client360CoreScalarSelect = {
   equity: true,
   status: true,
   pendingNotifications: true,
+  priority: true,
+  nextAction: true,
+  nextFollowUpAt: true,
   createdAt: true,
   lastModified: true,
   strategyText: true,
