@@ -9,6 +9,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { authenticatedFetch } from '@/lib/authenticatedFetch';
+import FundChaseBuilder from '@/components/clients/FundChaseBuilder';
 
 type Rec = {
   id: string;
@@ -94,6 +95,10 @@ export default function FundPlanWidget({ clientId }: { clientId: string }) {
   }, [load]);
 
   const generate = async () => {
+    if (strategy === 'b') {
+      setGenError('Plan B uses the chase builder below — fill the sets and press Save chase plan.');
+      return;
+    }
     setGenerating(true);
     setGenError(null);
     try {
@@ -101,8 +106,8 @@ export default function FundPlanWidget({ clientId }: { clientId: string }) {
         strategy,
         risk_max_dd_pct: Number(risk),
         expected_1y_pct: Number(exp),
+        min_yield_pct: Number(minYield),
       };
-      if (strategy === 'b') body.min_yield_pct = Number(minYield);
       const res = await authenticatedFetch(
         `/api/clients/${clientId}/fund-profiles`,
         {
@@ -233,6 +238,10 @@ export default function FundPlanWidget({ clientId }: { clientId: string }) {
           <p className="mt-2 text-xs text-red-600">{genError}</p>
         ) : null}
       </div>
+
+      {strategy === 'b' ? (
+        <FundChaseBuilder clientId={clientId} onSaved={load} />
+      ) : null}
 
       {error ? <p className="mt-3 text-sm text-red-600">{error}</p> : null}
       {loading ? (
