@@ -234,6 +234,7 @@ model Client {
 
   // Relations
   clientAssignments ClientAssignment[]
+  clientReports     ClientReport[]
   interactions      Interaction[]
   deals             Deal[]
   notifications     Notification[]
@@ -778,6 +779,24 @@ model ClientStrategyProjectionMilestoneExpense {
  * Durable async work queue (returnable recalculation first; other types later).
  * Claim with status PENDING + runAfter <= now; processor marks RUNNING then SUCCEEDED/FAILED.
  */
+/// Client-facing report generations (Monthly Pulse / Quarterly Review).
+/// Stores a snapshot of what was shown at send time so history survives edits.
+model ClientReport {
+  id         String    @id @default(cuid())
+  clientId   String    @map("client_id")
+  kind       String    // 'PULSE' | 'REVIEW'
+  lang       String    @default("en") // 'en' | 'zh' | 'both'
+  status     String    @default("DRAFT") // DRAFT | SENT
+  snapshot   Json?     @db.JsonB
+  sentAt     DateTime? @map("sent_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  client     Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@index([clientId, kind])
+  @@index([clientId, status])
+  @@map("client_reports")
+}
+
 model BackgroundJob {
   id          String              @id @default(cuid())
   type        String

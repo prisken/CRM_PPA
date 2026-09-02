@@ -390,15 +390,7 @@ export default function WorkspacePanel({
           loadingTab === resolvedTab ? (
             <div className="h-48 animate-pulse rounded-lg bg-gray-100" />
           ) : resolvedTab === 'product-recs' ? (
-            <div className="space-y-3">
-              <div className="rounded-lg border border-blue-100 bg-blue-50/60 p-3 text-xs text-blue-900">
-                <span className="font-semibold">Review — meeting prep.</span>{' '}
-                Use the product discussion below to shortlist options before a
-                review. The full quarterly review pack lands with the reporting
-                build.
-              </div>
-              <RecommendationsWidget clientId={clientId} />
-            </div>
+            <ReviewTab clientId={clientId} />
           ) : resolvedTab === 'strategy-tasks' ? (
             <StrategyAndTasks
               clientId={clientId}
@@ -441,5 +433,79 @@ export default function WorkspacePanel({
         ) : null}
       </div>
     </section>
+  );
+}
+
+
+/** Review tab — generate client reports + product discussion. */
+function ReviewTab({ clientId }: { clientId: string }) {
+  const [reports, setReports] = useState<
+    Array<{ id: string; kind: string; lang: string; status: string; createdAt: string }>
+  >([]);
+  const [lang, setLang] = useState<'en' | 'zh' | 'both'>('en');
+
+  useEffect(() => {
+    authenticatedFetch(`/api/clients/${clientId}/reports`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => { if (d?.reports) setReports(d.reports); })
+      .catch(() => {});
+  }, [clientId]);
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-lg border border-blue-100 bg-blue-50/60 p-3 text-xs text-blue-900">
+        <span className="font-semibold">Review — meeting prep.</span>{' '}
+        Generate a client report below, or use the product discussion to
+        shortlist options. The full quarterly pack lands with the reporting build.
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 p-3">
+        <span className="text-sm font-semibold text-gray-800">Monthly Pulse</span>
+        <select
+          value={lang}
+          onChange={(e) => setLang(e.target.value as 'en' | 'zh' | 'both')}
+          className="rounded-md border border-gray-300 bg-white px-2 py-1 text-xs"
+        >
+          <option value="en">English</option>
+          <option value="zh">中文</option>
+          <option value="both">Bilingual</option>
+        </select>
+        <a
+          href={`/clients/${clientId}/reports/pulse?lang=${lang}`}
+          target="_blank"
+          className="rounded-md bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700"
+        >
+          Generate & download PDF
+        </a>
+      </div>
+
+      {reports.length > 0 && (
+        <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
+          <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-gray-500">
+            Report history
+          </p>
+          <ul className="space-y-1">
+            {reports.slice(0, 8).map((r) => (
+              <li key={r.id} className="flex items-center justify-between text-xs text-gray-600">
+                <span>
+                  {r.kind === 'PULSE' ? 'Monthly Pulse' : 'Review'} · {r.lang}
+                </span>
+                <span>
+                  {new Date(r.createdAt).toLocaleDateString(undefined, {
+                    month: 'short', day: 'numeric', year: 'numeric',
+                  })}
+                  {' · '}
+                  <span className={r.status === 'SENT' ? 'font-semibold text-green-600' : 'text-gray-400'}>
+                    {r.status}
+                  </span>
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      <RecommendationsWidget clientId={clientId} />
+    </div>
   );
 }
