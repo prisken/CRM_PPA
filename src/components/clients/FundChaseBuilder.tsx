@@ -44,9 +44,11 @@ export default function FundChaseBuilder({
 
   useEffect(() => {
     authenticatedFetch(`/api/clients/${clientId}/fund-profiles/menu`)
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
+      .then((r) =>
+        r.ok ? r.json() : r.json().then((e) => Promise.reject(new Error(e?.error || `HTTP ${r.status}`)))
+      )
       .then(setMenu)
-      .catch(() => setErr('could not load chase menu (funds engine unreachable?)'));
+      .catch((e) => setErr(`chase menu unavailable: ${e?.message || e}`));
   }, [clientId]);
 
   useEffect(() => {
@@ -231,6 +233,20 @@ export default function FundChaseBuilder({
         );
       })}
 
+      {(() => {
+        if (!menu || rows.slice(0, freq).length === 0) return null;
+        let num = 0, den = 0;
+        for (const r of rows.slice(0, freq)) {
+          const c = menu.chase.find((x) => x.code === r.chase);
+          if (c && c.promised_pct != null) { num += (r.hasSlice ? r.chaseW : 100) * c.promised_pct; den += (r.hasSlice ? r.chaseW : 100); }
+        }
+        if (!den) return null;
+        return (
+          <p className="text-xs text-gray-600">
+            Portfolio promised dividend ≈ <span className="font-semibold text-green-700">{(num / den).toFixed(1)}%</span> weighted across the chase legs
+          </p>
+        );
+      })()}
       {err ? <p className="text-xs text-red-600">{err}</p> : null}
       <div className="flex items-center gap-3">
         <button type="button" onClick={save} disabled={saving || !menu || !allOk} className="rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50">

@@ -77,8 +77,14 @@ function BPlanSetsView({
   const sets: any[] = pj?.sets || [];
   if (pj?.kind === 'a') {
     const members: any[] = pj?.allocation || [];
+    let eN=0,eD=0,dN=0,dD=0;
+    for (const m of members) {
+      if (m.expected_1y != null){eN+=m.weight_pct*m.expected_1y;eD+=m.weight_pct;}
+      if (m.max_dd_pct != null){dN+=m.weight_pct*m.max_dd_pct;dD+=m.weight_pct;}
+    }
     return (
       <div className="mt-3 space-y-1.5">
+        {eD ? <p className="text-xs text-gray-600">Portfolio expected 1Y ≈ <span className="font-semibold text-gray-900">{(eN/eD)>0?'+':''}{(eN/eD).toFixed(1)}%</span>{dD ? <> · weighted max DD ≈ <span className="font-semibold text-gray-900">{(dN/dD).toFixed(0)}%</span></> : null}</p> : null}
         {members.map((m: any, i: number) => {
           const rec = recByCode[m.code];
           const r = returnsMap[m.code];

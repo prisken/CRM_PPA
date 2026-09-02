@@ -141,6 +141,30 @@ export default function FundAllocationBuilder({
         <p className="text-xs text-gray-400">Add funds and size each one — total must reach 100%.</p>
       )}
 
+      {(() => {
+        if (!rows.length) return null;
+        let eNum = 0, eDen = 0, dNum = 0, dDen = 0;
+        for (const r of rows) {
+          const m = meta(r.code);
+          if (m?.expected_1y != null) { eNum += r.weight * m.expected_1y; eDen += r.weight; }
+          if (m?.max_dd_pct != null) { dNum += r.weight * m.max_dd_pct; dDen += r.weight; }
+        }
+        return (
+          <p className="text-xs text-gray-600">
+            Portfolio expected 1Y ≈{' '}
+            <span className="font-semibold text-gray-900">
+              {eDen ? `${(eNum / eDen) > 0 ? '+' : ''}${(eNum / eDen).toFixed(1)}%` : 'n/a'}
+            </span>
+            {dDen ? (
+              <>
+                {' '}· weighted max DD ≈{' '}
+                <span className="font-semibold text-gray-900">{(dNum / dDen).toFixed(0)}%</span>
+              </>
+            ) : null}
+            {' '}<span className="text-[10px] text-gray-400">(funds without data excluded)</span>
+          </p>
+        );
+      })()}
       {err ? <p className="text-xs text-red-600">{err}</p> : null}
       <button type="button" onClick={save} disabled={saving || !ok}
         className="rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50">
