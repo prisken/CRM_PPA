@@ -188,7 +188,12 @@ export default function FundAllocationBuilder({
                   {c.ret_3m_pct != null ? ` · 3M ${fmtP(c.ret_3m_pct)}` : ''}
                   {c.max_dd_pct != null ? ` · maxDD ${c.max_dd_pct.toFixed(0)}%` : ''}
                 </span>
-                {c.reason ? <span className="mt-0.5 block text-[11px] leading-snug text-gray-500">{c.reason}</span> : null}
+                {c.reason ? (
+                  <details className="mt-0.5 text-[11px] leading-snug text-gray-500">
+                    <summary className="cursor-pointer font-medium text-blue-600 hover:underline">▸ Why this fund</summary>
+                    <span className="mt-0.5 block">{c.reason}</span>
+                  </details>
+                ) : null}
               </span>
               <input
                 type="number"

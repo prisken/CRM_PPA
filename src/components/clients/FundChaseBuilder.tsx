@@ -215,7 +215,12 @@ export default function FundChaseBuilder({ clientId, onSaved }: { clientId: stri
             <li key={c.code} className={`flex flex-wrap items-center gap-2 rounded-lg border px-2.5 py-2 ${assignmentsOf(c.code).length ? 'border-green-200 bg-green-50/50' : 'border-gray-200'}`}>
               <span className="min-w-0 flex-1 text-sm text-gray-800">
                 <span className="font-medium">{c.code}</span>{rowMetaLine(c)}
-                {c.reason ? <span className="mt-0.5 block text-[11px] leading-snug text-gray-500">{c.reason}</span> : null}
+                {c.reason ? (
+                  <details className="mt-0.5 text-[11px] leading-snug text-gray-500">
+                    <summary className="cursor-pointer font-medium text-blue-600 hover:underline">▸ Why this fund</summary>
+                    <span className="mt-0.5 block">{c.reason}</span>
+                  </details>
+                ) : null}
               </span>
               {assignmentChips(c.code, 'dividend')}
               {showAdd(c, 'dividend') ? <RowAdd freq={freq} defTab={activeTab} onAdd={(t, w) => addToTab(c.code, w, t - 1, 'dividend')} /> : null}
@@ -250,8 +255,12 @@ export default function FundChaseBuilder({ clientId, onSaved }: { clientId: stri
               <span className="min-w-0 flex-1 text-sm text-gray-800">
                 <span className="font-medium">{c.code}</span>
                 <span className="text-xs text-gray-500"> · stabilising</span>{rowMetaLine(c)}
-                {c.reason ? <span className="mt-0.5 block text-[11px] leading-snug text-gray-500">{c.reason}</span> : null}
-                {c.reason ? <span className="mt-0.5 block text-[11px] leading-snug text-gray-500">{c.reason}</span> : null}
+                {c.reason ? (
+                  <details className="mt-0.5 text-[11px] leading-snug text-gray-500">
+                    <summary className="cursor-pointer font-medium text-blue-600 hover:underline">▸ Why this fund</summary>
+                    <span className="mt-0.5 block">{c.reason}</span>
+                  </details>
+                ) : null}
               </span>
               {assignmentChips(c.code, 'stabiliser')}
               {showAdd(c, 'stabiliser') ? <RowAdd freq={freq} defTab={activeTab} onAdd={(t, w) => addToTab(c.code, w, t - 1, 'stabiliser')} /> : null}
