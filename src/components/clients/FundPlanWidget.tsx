@@ -40,6 +40,14 @@ type Profile = {
   recommendations: Rec[];
 };
 
+type Announcement = {
+  headline?: string | null;
+  bullets?: string[] | null;
+  impact_on_recs?: string | null;
+  as_of?: string | null;
+  band?: 'risk-on' | 'neutral' | 'risk-off' | null;
+};
+
 const INPUT =
   'w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20';
 const BTN =
@@ -298,6 +306,41 @@ export default function FundPlanWidget({ clientId }: { clientId: string }) {
     };
   }, [curatedA, clientId, latest]);
 
+  /* Client-facing market box: engine announcement (headline, bullets, impact),
+     fetched once per client from the plan-a menu payload. Coloured by mood band. */
+  const [announcement, setAnnouncement] = useState<Announcement | null>(null);
+  useEffect(() => {
+    let dead = false;
+    authenticatedFetch(`/api/clients/${clientId}/fund-profiles/menu?kind=a`)
+      .then((res) =>
+        res.ok ? res.json() : Promise.reject(new Error(`HTTP ${res.status}`))
+      )
+      .then((d) => {
+        if (!dead) setAnnouncement(d?.announcement ?? null);
+      })
+      .catch(() => {
+        if (!dead) setAnnouncement(null);
+      });
+    return () => {
+      dead = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clientId]);
+
+  const ann = announcement;
+  const annBand =
+    ann?.band === 'risk-on'
+      ? 'risk-on'
+      : ann?.band === 'risk-off'
+        ? 'risk-off'
+        : 'neutral';
+  const annStyle =
+    annBand === 'risk-on'
+      ? 'border-green-200 bg-green-50'
+      : annBand === 'risk-off'
+        ? 'border-red-200 bg-red-50'
+        : 'border-amber-200 bg-amber-50';
+
   const setAccepted = async (profileId: string, rec: Rec, accepted: boolean) => {
     setAcceptingId(rec.id);
     try {
@@ -504,6 +547,40 @@ export default function FundPlanWidget({ clientId }: { clientId: string }) {
           </p>
         </div>
       </div>
+
+      {/* Market announcement (live engine box) */}
+      {ann && ann.headline ? (
+        <div
+          className={`mt-3 rounded-lg border px-3 py-2.5 text-xs ${annStyle}`}
+        >
+          <div className="flex items-baseline justify-between gap-2">
+            <p className="text-sm font-bold text-gray-900">{ann.headline}</p>
+            {ann.as_of ? (
+              <span className="shrink-0 text-[10px] text-gray-400">
+                as of{' '}
+                {new Date(ann.as_of).toLocaleString('en-GB', {
+                  day: '2-digit',
+                  month: 'short',
+                  hour: '2-digit',
+                  minute: '2-digit',
+                })}
+              </span>
+            ) : null}
+          </div>
+          {Array.isArray(ann.bullets) && ann.bullets.length > 0 ? (
+            <ul className="mt-1 list-disc space-y-0.5 pl-4 text-gray-700">
+              {ann.bullets.slice(0, 4).map((b) => (
+                <li key={b}>{b}</li>
+              ))}
+            </ul>
+          ) : null}
+          {ann.impact_on_recs ? (
+            <p className="mt-1.5 rounded bg-white/70 px-2 py-1 font-medium text-gray-900">
+              {ann.impact_on_recs}
+            </p>
+          ) : null}
+        </div>
+      ) : null}
 
       {/* Step 0: choose the plan */}
       <div className="mt-3 rounded-lg border border-blue-100 bg-blue-50/40 p-3">

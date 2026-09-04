@@ -24,6 +24,21 @@ type Candidate = {
   reason?: string | null;
 };
 
+/** Quality gate (mirrors the engine client-plan risk chips): a fund is locked
+ *  when its outlook is negative (expected 1Y < 0) or its max drawdown falls
+ *  beyond the builder's fixed tolerance band (-25% client tolerance, engine
+ *  MISMATCH floor = tolerance - 5pp = -30%). Locked funds cannot be ticked. */
+const RISK_TOL_A = -25;
+function gateReason(c: Candidate): string | null {
+  if (c.expected_1y != null && c.expected_1y < 0) {
+    return `negative expected 1Y (${c.expected_1y.toFixed(1)}%)`;
+  }
+  if (c.max_dd_pct != null && c.max_dd_pct < RISK_TOL_A - 5) {
+    return `max drawdown ${c.max_dd_pct.toFixed(0)}% is beyond the ${RISK_TOL_A}% tolerance`;
+  }
+  return null;
+}
+
 const fmtP = (x: number | null | undefined, sign = true) =>
   x == null ? '—' : `${sign && x > 0 ? '+' : ''}${x.toFixed(1)}%`;
 
@@ -56,7 +71,19 @@ export default function FundAllocationBuilder({
         throw new Error(e?.error || `HTTP ${res.status}`);
       }
       const d = await res.json();
-      setMenu(Array.isArray(d.candidates) ? d.candidates : []);
+      const cands: Candidate[] = Array.isArray(d.candidates) ? d.candidates : [];
+      setMenu(cands);
+      // prune stale selections: a fund that now trips the quality gate is dropped
+      setSelectedCodes((prev) => {
+        const valid = new Set(cands.filter((c) => !gateReason(c)).map((c) => c.code));
+        const next = new Set([...prev].filter((code) => valid.has(code)));
+        return next.size === prev.size ? prev : next;
+      });
+      setWeights((w) => {
+        const next = { ...w };
+        for (const c of cands) if (gateReason(c)) delete next[c.code];
+        return next;
+      });
       setStage('ready');
     } catch (e) {
       setErr(`could not generate funds: ${e instanceof Error ? e.message : e}`);
@@ -165,23 +192,44 @@ export default function FundAllocationBuilder({
         </button>
       </div>
 
+      {menu.some((c) => gateReason(c)) ? (
+        <p className="text-[11px] text-gray-500">
+          🔒 {menu.filter((c) => gateReason(c)).length} fund(s) locked by the quality gate
+          (negative expected 1Y or drawdown beyond the {RISK_TOL_A}% tolerance).
+        </p>
+      ) : null}
+
       <ul className="max-h-80 space-y-1.5 overflow-y-auto pr-1">
         {menu.map((c) => {
+          const gate = gateReason(c);
           const w = weights[c.code] ?? 0;
           const inSel = selectedCodes.has(c.code);
           return (
             <li
               key={c.code}
-              className={`flex items-center gap-2 rounded-lg border px-2.5 py-2 ${inSel ? 'border-green-200 bg-green-50/60' : 'border-gray-200'}`}
+              className={`flex items-center gap-2 rounded-lg border px-2.5 py-2 ${
+                gate
+                  ? 'border-gray-200 bg-gray-50 opacity-70'
+                  : inSel
+                    ? 'border-green-200 bg-green-50/60'
+                    : 'border-gray-200'
+              }`}
             >
               <input
                 type="checkbox"
                 checked={inSel}
+                disabled={!!gate}
                 onChange={() => toggle(c.code)}
-                className="h-4 w-4 accent-blue-600"
+                className="h-4 w-4 accent-blue-600 disabled:opacity-40"
+                title={gate ? `Locked: ${gate}` : undefined}
               />
               <span className="min-w-0 flex-1 text-sm text-gray-800">
                 <span className="font-medium">{c.code}</span>
+                {gate ? (
+                  <span className="ml-1.5 rounded bg-red-50 px-1.5 py-0.5 text-[10px] font-semibold text-red-700">
+                    Quality gate · {gate}
+                  </span>
+                ) : null}
                 <span className="text-xs text-gray-500">
                   {c.expected_1y != null ? ` · 1Y ${fmtP(c.expected_1y)}` : ''}
                   {c.ret_1m_pct != null ? ` · 1M ${fmtP(c.ret_1m_pct)}` : ''}
@@ -200,7 +248,7 @@ export default function FundAllocationBuilder({
                 min={0.5}
                 max={100}
                 placeholder="%"
-                disabled={!inSel}
+                disabled={!inSel || !!gate}
                 value={inSel ? (w || '') : ''}
                 onChange={(e) => setWeight(c.code, Number(e.target.value))}
                 className={`w-20 rounded-lg border border-gray-300 px-2 py-1.5 text-right text-sm text-gray-900 outline-none focus:border-blue-500 disabled:bg-gray-50 disabled:text-gray-400`}

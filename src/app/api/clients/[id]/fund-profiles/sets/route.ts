@@ -104,6 +104,24 @@ export async function POST(
       }
       const meta = menu[code] || {};
       const mb = meta?.bucket ?? null;
+      if (strategy === 'a' && meta) {
+        // Quality gate (mirror of the builder rule): no negative-outlook funds,
+        // no drawdowns beyond the engine MISMATCH floor (tolerance - 5pp).
+        const gExp = meta.expected_1y;
+        const gDd = meta.max_dd_pct;
+        if (gExp != null && gExp < 0) {
+          return NextResponse.json(
+            { error: `${code} fails the quality gate — negative expected 1Y (${gExp.toFixed(1)}%)` },
+            { status: 400 }
+          );
+        }
+        if (gDd != null && gDd < risk - 5) {
+          return NextResponse.json(
+            { error: `${code} fails the quality gate — max drawdown ${gDd.toFixed(0)}% is beyond the ${risk}% tolerance` },
+            { status: 400 }
+          );
+        }
+      }
       if (strategy === 'b' && mb && seenBuckets.has(mb)) {
         return NextResponse.json(
           { error: `${code}: two funds in the same record-day bucket (${mb}) in set ${i + 1}` },
