@@ -50,6 +50,27 @@ const CHIP = {
   MISMATCH: 'bg-red-100 text-red-800',
 } as const;
 
+type MenuPick = {
+  code: string;
+  name?: string | null;
+  score?: number | null;
+  expected_1y?: number | null;
+  max_dd_pct?: number | null;
+  reason?: string | null;
+};
+
+/** Same risk classification as the funds engine client-plan: dd >= tolerance is
+ *  FIT, within 5pp below is STRETCH, anything worse is a MISMATCH (excluded). */
+function rankChip(
+  dd: number | null | undefined,
+  tol: number
+): 'FIT' | 'STRETCH' | 'MISMATCH' {
+  if (dd == null) return 'FIT';
+  if (dd >= tol) return 'FIT';
+  if (dd >= tol - 5) return 'STRETCH';
+  return 'MISMATCH';
+}
+
 function BPlanSetsView({
   profile,
   returnsMap,
@@ -239,6 +260,44 @@ export default function FundPlanWidget({ clientId }: { clientId: string }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [latest]);
 
+  /* A saved allocation (plan_json kind 'a') is the advisor's manual snapshot —
+     NOT the engine ranking. When the latest Plan A record is one of those, this
+     area should headline the engine's ACTUAL top-ranked list instead: fetch the
+     live Plan A menu and render it ranked; the saved allocation shows below it
+     clearly labelled as advisor picks. */
+  const curatedA =
+    !!latest &&
+    latest.strategy === 'a' &&
+    !!latest.planJson &&
+    latest.planJson?.kind === 'a';
+  const [live, setLive] = useState<{
+    profileId: string | null;
+    picks: MenuPick[] | null;
+    failed: boolean;
+  } | null>(null);
+  useEffect(() => {
+    if (!curatedA || !latest) return;
+    let dead = false;
+    authenticatedFetch(`/api/clients/${clientId}/fund-profiles/menu?kind=a`)
+      .then((res) =>
+        res.ok ? res.json() : Promise.reject(new Error(`HTTP ${res.status}`))
+      )
+      .then((d) => {
+        if (dead) return;
+        setLive({
+          profileId: latest.id,
+          picks: Array.isArray(d.candidates) ? (d.candidates as MenuPick[]) : [],
+          failed: false,
+        });
+      })
+      .catch(() => {
+        if (!dead) setLive({ profileId: latest.id, picks: null, failed: true });
+      });
+    return () => {
+      dead = true;
+    };
+  }, [curatedA, clientId, latest]);
+
   const setAccepted = async (profileId: string, rec: Rec, accepted: boolean) => {
     setAcceptingId(rec.id);
     try {
@@ -257,6 +316,180 @@ export default function FundPlanWidget({ clientId }: { clientId: string }) {
     }
   };
   const older = profiles.slice(1);
+
+  const renderEngineTop = () => {
+    if (!latest) return null;
+    const fresh = live && live.profileId === latest.id;
+    if (!fresh) {
+      return <div className="mt-3 h-20 animate-pulse rounded-lg bg-gray-100" />;
+    }
+    if (live!.failed || !live!.picks || live!.picks.length === 0) {
+      return (
+        <p className="mt-3 text-xs text-amber-700">
+          Live engine ranking unavailable right now — showing the saved allocation
+          below.
+        </p>
+      );
+    }
+    const tol = latest.riskMaxDD;
+    const rows = live!.picks!
+      .map((p) => ({ p, chip: rankChip(p.max_dd_pct ?? null, tol) }))
+      .filter((r) => r.chip !== 'MISMATCH')
+      .slice(0, 8);
+    const excluded = live!.picks!.filter(
+      (p) => rankChip(p.max_dd_pct ?? null, tol) === 'MISMATCH'
+    ).length;
+    if (rows.length === 0) {
+      return (
+        <p className="mt-3 text-xs text-gray-500">
+          No engine growth pick fits the {tol}% drawdown tolerance of this client
+          right now.
+        </p>
+      );
+    }
+    return (
+      <div className="mt-3">
+        <div className="mb-1.5 flex items-baseline gap-2">
+          <span className="text-xs font-semibold text-gray-800">
+            Actual engine ranking
+          </span>
+          <span className="text-[11px] text-gray-400">
+            live Plan A list by composite score — refreshed daily
+            {excluded > 0
+              ? ` · ${excluded} excluded (beyond ${tol}% DD tolerance)`
+              : ''}
+          </span>
+        </div>
+        <ul className="divide-y divide-gray-100 rounded-lg border border-gray-200">
+          {rows.map(({ p, chip }, i) => {
+            const whyKey = `live-${p.code}`;
+            const title = p.name ? `${p.code} · ${p.name}` : p.code;
+            return (
+              <li key={whyKey} className="px-3 py-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="w-6 text-xs font-semibold text-gray-400">
+                    #{i + 1}
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-medium text-gray-900">
+                      {title}
+                    </span>
+                    <span className="block text-xs text-gray-500">
+                      score {p.score != null ? p.score.toFixed(2) : '—'}
+                      {p.expected_1y != null
+                        ? ` · exp 1Y ${p.expected_1y > 0 ? '+' : ''}${p.expected_1y.toFixed(1)}%`
+                        : ''}
+                      {p.max_dd_pct != null
+                        ? ` · max DD ${p.max_dd_pct.toFixed(0)}%`
+                        : ''}
+                      {chip === 'STRETCH' && p.max_dd_pct != null
+                        ? ` — beyond the ${tol}% client tolerance`
+                        : ''}
+                    </span>
+                    {p.reason ? (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => toggleReason(whyKey)}
+                          className="mt-1 inline-flex items-center gap-1 text-xs font-medium text-blue-600 hover:text-blue-700 hover:underline"
+                        >
+                          {openReasons.has(whyKey) ? '▾ Hide why' : '▸ Why this fund'}
+                        </button>
+                        {openReasons.has(whyKey) ? (
+                          <span className="mt-1 block text-xs leading-snug text-gray-500">
+                            {p.reason}
+                          </span>
+                        ) : null}
+                      </>
+                    ) : null}
+                  </span>
+                  <span
+                    className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                      CHIP[chip] ?? 'bg-gray-100 text-gray-600'
+                    }`}
+                  >
+                    {chip}
+                  </span>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      </div>
+    );
+  };
+
+  const renderSavedAllocation = () => {
+    if (!latest) return null;
+    const alloc = latest.planJson?.allocation as
+      | Array<{
+          code: string;
+          weight_pct: number;
+          expected_1y?: number | null;
+          max_dd_pct?: number | null;
+        }>
+      | undefined;
+    if (!Array.isArray(alloc) || alloc.length === 0) return null;
+    const recBy: Record<string, Rec> = {};
+    for (const r of latest.recommendations) recBy[r.fundCode] = r;
+    return (
+      <div className="mt-3 rounded-lg border border-blue-100 bg-blue-50/30 p-2.5">
+        <p className="text-xs font-semibold text-gray-800">
+          Saved allocation{' '}
+          <span className="font-normal text-gray-400">
+            — advisor picks, not an engine ranking
+          </span>
+        </p>
+        <ul className="mt-1.5 divide-y divide-gray-100">
+          {alloc.map((m, i) => {
+            const rec = recBy[m.code];
+            return (
+              <li
+                key={`${m.code}-${i}`}
+                className="flex flex-wrap items-center gap-2 py-1.5 first:pt-0.5"
+              >
+                <span className="min-w-0 flex-1">
+                  <span className="block text-sm text-gray-900">
+                    <span className="font-medium">{m.code}</span>
+                    <span className="text-gray-500"> · {m.weight_pct}%</span>
+                  </span>
+                  <span className="block text-xs text-gray-500">
+                    {m.expected_1y != null
+                      ? `exp 1Y ${m.expected_1y > 0 ? '+' : ''}${m.expected_1y.toFixed(1)}%`
+                      : ''}
+                    {m.max_dd_pct != null
+                      ? ` · max DD ${m.max_dd_pct.toFixed(0)}%`
+                      : ''}
+                  </span>
+                </span>
+                {rec ? (
+                  rec.accepted === true ? (
+                    <button
+                      type="button"
+                      onClick={() => setAccepted(latest.id, rec, false)}
+                      disabled={acceptingId === rec.id}
+                      className="rounded-md bg-green-100 px-2.5 py-1 text-xs font-medium text-green-800 hover:bg-green-200"
+                    >
+                      ✓ Accepted
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setAccepted(latest.id, rec, true)}
+                      disabled={acceptingId === rec.id}
+                      className="rounded-md border border-gray-300 px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50"
+                    >
+                      Accept
+                    </button>
+                  )
+                ) : null}
+              </li>
+            );
+          })}
+        </ul>
+      </div>
+    );
+  };
 
   return (
     <section className="mt-4 rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
@@ -333,7 +566,13 @@ export default function FundPlanWidget({ clientId }: { clientId: string }) {
             </span>
           </div>
           <div className="mt-3">
-            {(() => {
+            {curatedA ? (
+              <>
+                {renderEngineTop()}
+                {renderSavedAllocation()}
+              </>
+            ) : (
+              (() => {
               const groups: Record<string, Rec[]> = {};
               for (const r of latest.recommendations) {
                 const k = r.tag || 'growth';
@@ -444,7 +683,8 @@ export default function FundPlanWidget({ clientId }: { clientId: string }) {
                   </ul>
                 </div>
               ));
-            })()}
+              })()
+            )}
           </div>
         </div>
       ) : (
